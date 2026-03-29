@@ -2,7 +2,7 @@
 
 A system-wide AI autocomplete for Windows. Keystroke runs in the background, watches what you type in any application, and suggests completions powered by your choice of AI engine — Google Gemini, Anthropic Claude, or OpenAI GPT.
 
-![.NET 8](https://img.shields.io/badge/.NET-8.0-purple) ![Windows](https://img.shields.io/badge/platform-Windows-blue) ![Gemini](https://img.shields.io/badge/AI-Gemini%202.5-orange) ![Claude](https://img.shields.io/badge/AI-Claude-blueviolet) ![GPT](https://img.shields.io/badge/AI-GPT--4o-green)
+![.NET 8](https://img.shields.io/badge/.NET-8.0-purple) ![Windows](https://img.shields.io/badge/platform-Windows-blue) ![Gemini](https://img.shields.io/badge/AI-Gemini%202.5-orange) ![Claude](https://img.shields.io/badge/AI-Claude-blueviolet) ![GPT](https://img.shields.io/badge/AI-GPT--5.4-green)
 
 ## How it works
 
