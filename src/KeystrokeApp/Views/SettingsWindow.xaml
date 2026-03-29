@@ -1,0 +1,222 @@
+<Window x:Class="KeystrokeApp.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Keystroke Settings"
+        Height="720" Width="520"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanMinimize"
+        Background="#1A1A2E">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="BgCard" Color="#16213E"/>
+        <SolidColorBrush x:Key="BgInput" Color="#0F3460"/>
+        <SolidColorBrush x:Key="Accent" Color="#E94560"/>
+        <SolidColorBrush x:Key="AccentHover" Color="#FF6B81"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#EAEAEA"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#A0A0B0"/>
+        <SolidColorBrush x:Key="Border" Color="#2A2A4A"/>
+
+        <Style TargetType="Slider">
+            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+            <Setter Property="Background" Value="{StaticResource BgInput}"/>
+            <Setter Property="Height" Value="24"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource BgInput}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource BgInput}"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#1A1A2E"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+
+        <Style x:Key="CardButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Accent}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource AccentHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="⌨️ Keystroke" FontSize="22" FontWeight="Bold" 
+                       Foreground="{StaticResource TextPrimary}" FontFamily="Segoe UI"/>
+            <TextBlock Text="Settings" FontSize="13" 
+                       Foreground="{StaticResource TextSecondary}" Margin="0,2,0,0"/>
+        </StackPanel>
+
+        <!-- Scrollable Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <!-- PREDICTION ENGINE -->
+                <Border Background="{StaticResource BgCard}" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="PREDICTION ENGINE" FontSize="11" FontWeight="Bold" 
+                                   Foreground="{StaticResource Accent}" Margin="0,0,0,12" FontFamily="Segoe UI"/>
+
+                        <TextBlock Text="Engine" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="EngineCombo" Margin="0,0,0,12" SelectionChanged="Setting_Changed">
+                            <ComboBoxItem Content="Gemini"/>
+                            <ComboBoxItem Content="Dummy (testing)"/>
+                        </ComboBox>
+
+                        <TextBlock Text="API Key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,4"/>
+                        <TextBox x:Name="ApiKeyBox" Margin="0,0,0,12" TextChanged="Setting_Changed"/>
+
+                        <TextBlock Text="Model" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="ModelCombo" IsEditable="True" Margin="0,0,0,0"
+                                  SelectionChanged="Setting_Changed">
+                            <ComboBoxItem Content="gemini-2.5-flash"/>
+                            <ComboBoxItem Content="gemini-2.5-pro"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- COMPLETION STYLE -->
+                <Border Background="{StaticResource BgCard}" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="COMPLETION STYLE" FontSize="11" FontWeight="Bold"
+                                   Foreground="{StaticResource Accent}" Margin="0,0,0,12" FontFamily="Segoe UI"/>
+
+                        <TextBlock Text="Length" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="LengthCombo" Margin="0,0,0,16" SelectionChanged="Setting_Changed">
+                            <ComboBoxItem Content="Brief (3-5 words)" Tag="brief"/>
+                            <ComboBoxItem Content="Standard (8-15 words)" Tag="standard"/>
+                            <ComboBoxItem Content="Extended (15-30 words)" Tag="extended"/>
+                            <ComboBoxItem Content="Unlimited (30-50 words)" Tag="unlimited"/>
+                        </ComboBox>
+
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Creativity (Temperature)" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                            <TextBlock x:Name="TempLabel" Text="0.5" Foreground="{StaticResource TextPrimary}"
+                                       FontSize="12" HorizontalAlignment="Right" FontFamily="Segoe UI Semibold"/>
+                        </Grid>
+                        <Slider x:Name="TempSlider" Minimum="0" Maximum="1.0" Value="0.5"
+                                ValueChanged="TempSlider_Changed" Margin="0,0,0,16"/>
+
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Min Characters Before Prediction" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                            <TextBlock x:Name="MinCharsLabel" Text="3" Foreground="{StaticResource TextPrimary}"
+                                       FontSize="12" HorizontalAlignment="Right" FontFamily="Segoe UI Semibold"/>
+                        </Grid>
+                        <Slider x:Name="MinCharsSlider" Minimum="1" Maximum="10" Value="3"
+                                IsSnapToTickEnabled="True" TickFrequency="1"
+                                ValueChanged="MinCharsSlider_Changed" Margin="0,0,0,16"/>
+
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Debounce Delay (word boundary)" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                            <TextBlock x:Name="DebounceLabel" Text="300ms" Foreground="{StaticResource TextPrimary}"
+                                       FontSize="12" HorizontalAlignment="Right" FontFamily="Segoe UI Semibold"/>
+                        </Grid>
+                        <Slider x:Name="DebounceSlider" Minimum="100" Maximum="1500" Value="300"
+                                ValueChanged="DebounceSlider_Changed" Margin="0,0,0,16"/>
+
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Fast Debounce (mid-word)" Foreground="{StaticResource TextSecondary}" FontSize="12"/>
+                            <TextBlock x:Name="FastDebounceLabel" Text="100ms" Foreground="{StaticResource TextPrimary}"
+                                       FontSize="12" HorizontalAlignment="Right" FontFamily="Segoe UI Semibold"/>
+                        </Grid>
+                        <Slider x:Name="FastDebounceSlider" Minimum="50" Maximum="500" Value="100"
+                                ValueChanged="FastDebounceSlider_Changed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- CONTEXT & OCR -->
+                <Border Background="{StaticResource BgCard}" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="CONTEXT &amp; OCR" FontSize="11" FontWeight="Bold"
+                                   Foreground="{StaticResource Accent}" Margin="0,0,0,12" FontFamily="Segoe UI"/>
+
+                        <CheckBox x:Name="OcrEnabledCheck" Content="Enable screen reading (OCR)"
+                                  Foreground="{StaticResource TextPrimary}" FontSize="13" FontFamily="Segoe UI"
+                                  Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged" Margin="0,0,0,8"/>
+                        <TextBlock Text="Captures text visible on screen to give predictions more context. Uses Windows built-in OCR (GPU-accelerated)."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="20,0,0,8"/>
+
+                        <CheckBox x:Name="AppDetectionCheck" Content="App-aware predictions"
+                                  Foreground="{StaticResource TextPrimary}" FontSize="13" FontFamily="Segoe UI"
+                                  IsChecked="True" IsEnabled="False" Margin="0,0,0,4"/>
+                        <TextBlock Text="Detects the active application and adjusts tone (casual in chat, professional in email, etc.). Always on."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="20,0,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- SYSTEM PROMPT -->
+                <Border Background="{StaticResource BgCard}" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="SYSTEM PROMPT" FontSize="11" FontWeight="Bold" 
+                                       Foreground="{StaticResource Accent}" FontFamily="Segoe UI"/>
+                            <Button Grid.Column="1" Content="Reset to Default" FontSize="11" Padding="10,4"
+                                    Style="{StaticResource CardButton}" Click="ResetPrompt_Click"/>
+                        </Grid>
+                        <TextBox x:Name="PromptBox" AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" Height="130"
+                                 FontFamily="Consolas" FontSize="12" TextChanged="Setting_Changed"/>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Changes are saved automatically" 
+                       Foreground="{StaticResource TextSecondary}" FontSize="11" 
+                       VerticalAlignment="Center" FontFamily="Segoe UI"/>
+            <Button Grid.Column="1" Content="Done" Padding="24,8" 
+                    Style="{StaticResource CardButton}" Click="Done_Click"/>
+        </Grid>
+    </Grid>
+</Window>
