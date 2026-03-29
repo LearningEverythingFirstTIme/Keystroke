@@ -40,7 +40,6 @@ public static partial class PiiFilter
 
     private static readonly (Regex Pattern, string Replacement)[] Filters =
     [
-        (CreditCardRegex(),    "[CREDIT_CARD]"),
         (SsnRegex(),           "[SSN]"),
         (ApiKeyRegex(),        "[API_KEY]"),
         (PasswordFieldRegex(), "[PASSWORD_FIELD]"),
@@ -58,7 +57,14 @@ public static partial class PiiFilter
         if (string.IsNullOrEmpty(text))
             return text;
 
-        var result = text;
+        // Credit cards need special handling — verify with Luhn check to avoid
+        // false positives on order IDs, tracking numbers, etc.
+        var result = CreditCardRegex().Replace(text, match =>
+        {
+            var digitsOnly = new string(match.Value.Where(char.IsDigit).ToArray());
+            return PassesLuhnCheck(digitsOnly) ? "[CREDIT_CARD]" : match.Value;
+        });
+
         foreach (var (pattern, replacement) in Filters)
         {
             result = pattern.Replace(result, replacement);

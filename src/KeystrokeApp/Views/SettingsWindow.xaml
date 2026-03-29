@@ -336,8 +336,8 @@
                                 
                                 <ComboBox x:Name="EngineCombo" Margin="0,0,0,12" SelectionChanged="EngineCombo_Changed">
                                     <ComboBoxItem Content="🚀 Gemini (Recommended)"/>
-                                    <ComboBoxItem Content="⚡ GPT-5.4 mini"/>
-                                    <ComboBoxItem Content="✨ Claude Haiku"/>
+                                    <ComboBoxItem Content="⚡ GPT-5"/>
+                                    <ComboBoxItem Content="✨ Claude"/>
                                     <ComboBoxItem Content="🧪 Dummy (Testing)"/>
                                 </ComboBox>
 
@@ -404,12 +404,38 @@
                                     </Grid>
                                 </Grid>
 
-                                <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}" 
-                                           Margin="0,12,0,4"/>
-                                <ComboBox x:Name="ModelCombo" SelectionChanged="Setting_Changed">
-                                    <ComboBoxItem Content="gemini-2.5-flash (Fast)"/>
-                                    <ComboBoxItem Content="gemini-2.5-pro (Smart)"/>
-                                </ComboBox>
+                                <!-- Gemini Model -->
+                                <StackPanel x:Name="GeminiModelPanel">
+                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                               Margin="0,12,0,4"/>
+                                    <ComboBox x:Name="GeminiModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="gemini-3.1-flash-lite-preview (Fastest)" Tag="gemini-3.1-flash-lite-preview"/>
+                                        <ComboBoxItem Content="gemini-3-flash-preview (Fast)" Tag="gemini-3-flash-preview"/>
+                                        <ComboBoxItem Content="gemini-2.5-flash (Stable)" Tag="gemini-2.5-flash"/>
+                                        <ComboBoxItem Content="gemini-2.5-pro (Smart)" Tag="gemini-2.5-pro"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <!-- GPT-5 Model -->
+                                <StackPanel x:Name="Gpt5ModelPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                               Margin="0,12,0,4"/>
+                                    <ComboBox x:Name="Gpt5ModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="gpt-5.4-nano (Fastest)" Tag="gpt-5.4-nano"/>
+                                        <ComboBoxItem Content="gpt-5.4-mini (Balanced)" Tag="gpt-5.4-mini"/>
+                                        <ComboBoxItem Content="gpt-5.4 (Smart)" Tag="gpt-5.4"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <!-- Claude Model -->
+                                <StackPanel x:Name="ClaudeModelPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                               Margin="0,12,0,4"/>
+                                    <ComboBox x:Name="ClaudeModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="claude-haiku-4-5 (Fast)" Tag="claude-haiku-4-5-20251001"/>
+                                        <ComboBoxItem Content="claude-sonnet-4-5 (Smart)" Tag="claude-sonnet-4-5-20250214"/>
+                                    </ComboBox>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 

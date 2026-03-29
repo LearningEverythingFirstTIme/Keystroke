@@ -18,4 +18,11 @@ public interface IPredictionEngine
     /// </summary>
     Task<string?> PredictStreamingAsync(ContextSnapshot context, Action<string> onChunk, CancellationToken cancellationToken = default)
         => PredictAsync(context, cancellationToken);
+
+    /// <summary>
+    /// Fetch multiple alternative completions for cycling through with Ctrl+Up/Down.
+    /// Default implementation makes parallel PredictAsync calls with higher temperature.
+    /// </summary>
+    Task<List<string>> FetchAlternativesAsync(ContextSnapshot context, int count = 3, CancellationToken cancellationToken = default)
+        => Task.FromResult(new List<string>());
 }

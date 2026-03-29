@@ -86,12 +86,12 @@ public class OcrService : IDisposable
             bitmap.Save(ms, ImageFormat.Bmp);
             ms.Seek(0, SeekOrigin.Begin);
 
-            var stream = new InMemoryRandomAccessStream();
+            using var stream = new InMemoryRandomAccessStream();
             await ms.CopyToAsync(stream.AsStreamForWrite());
             stream.Seek(0);
 
             var decoder = await BitmapDecoder.CreateAsync(stream);
-            var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
+            using var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
                 BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
 
             // Run OCR
@@ -110,10 +110,6 @@ public class OcrService : IDisposable
                 _cachedText = text;
                 Log($"Captured {text.Length} chars from OCR");
             }
-
-            // Clean up WinRT objects
-            softwareBitmap.Dispose();
-            stream.Dispose();
         }
         catch (Exception ex)
         {

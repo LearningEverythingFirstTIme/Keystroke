@@ -9,13 +9,18 @@ using System.Threading.Tasks;
 
 namespace KeystrokeApp.Services;
 
-public class GeminiPredictionEngine : IPredictionEngine
+public class GeminiPredictionEngine : IPredictionEngine, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _endpoint;
     private readonly string _streamEndpoint;
     private readonly string _logPath;
+
+    // Rate limiting protection
+    private static DateTime _lastRateLimitError = DateTime.MinValue;
+    private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromSeconds(10);
+
     // These can be updated from settings without recreating the engine
     public string SystemPrompt { get; set; } = AppConfig.DefaultSystemPrompt;
     public string LengthInstruction { get; set; } = "Write 15-30 words to complete the full thought.";
@@ -23,7 +28,7 @@ public class GeminiPredictionEngine : IPredictionEngine
     public int MaxOutputTokens { get; set; } = 100;
     public AcceptanceLearningService LearningService { get; set; } = new();
 
-    public GeminiPredictionEngine(string apiKey, string model = "gemini-2.5-flash")
+    public GeminiPredictionEngine(string apiKey, string model = "gemini-3.1-flash-lite-preview")
     {
         _apiKey = apiKey;
         _endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
@@ -39,6 +44,31 @@ public class GeminiPredictionEngine : IPredictionEngine
     {
         try { File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); }
         catch { }
+    }
+
+    private bool IsRateLimited()
+    {
+        var timeSinceLastError = DateTime.UtcNow - _lastRateLimitError;
+        if (timeSinceLastError < RateLimitCooldown)
+        {
+            Log($"Rate limit cooldown active ({timeSinceLastError.TotalSeconds:F1}s remaining), skipping request");
+            return true;
+        }
+        return false;
+    }
+
+    private void CheckRateLimitResponse(HttpResponseMessage response, string errorBody)
+    {
+        if ((int)response.StatusCode == 429 || errorBody.Contains("rate_limit", StringComparison.OrdinalIgnoreCase))
+        {
+            _lastRateLimitError = DateTime.UtcNow;
+            Log($"Rate limit hit! Cooldown: {RateLimitCooldown.TotalSeconds}s");
+        }
+    }
+
+    public void Dispose()
+    {
+        _httpClient.Dispose();
     }
 
     /// <summary>
@@ -70,6 +100,8 @@ public class GeminiPredictionEngine : IPredictionEngine
         var prefix = context.TypedText;
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
             return null;
+
+        if (IsRateLimited()) return null;
 
         try
         {
@@ -110,6 +142,7 @@ public class GeminiPredictionEngine : IPredictionEngine
             {
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Error {response.StatusCode}: {err}");
+                CheckRateLimitResponse(response, err);
                 return null;
             }
 
@@ -142,6 +175,8 @@ public class GeminiPredictionEngine : IPredictionEngine
         var prefix = context.TypedText;
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
             return null;
+
+        if (IsRateLimited()) return null;
 
         try
         {
@@ -184,6 +219,7 @@ public class GeminiPredictionEngine : IPredictionEngine
             {
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Stream error {response.StatusCode}: {err}");
+                CheckRateLimitResponse(response, err);
                 return null;
             }
 
@@ -254,6 +290,8 @@ public class GeminiPredictionEngine : IPredictionEngine
 
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
             return results;
+
+        if (IsRateLimited()) return results;
 
         try
         {

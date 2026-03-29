@@ -21,9 +21,9 @@ public class AppConfig
     public string? AnthropicApiKeyEncrypted { get; set; }
     public string? OpenAiApiKeyEncrypted { get; set; }
     public string PredictionEngine { get; set; } = "gemini";
-    public string GeminiModel { get; set; } = "gemini-2.5-flash";
-    public string ClaudeModel { get; set; } = "claude-3-haiku-20240307";
-    public string Gpt5Model { get; set; } = "gpt-5.4-mini";
+    public string GeminiModel { get; set; } = "gemini-3.1-flash-lite-preview";
+    public string ClaudeModel { get; set; } = "claude-haiku-4-5-20251001";
+    public string Gpt5Model { get; set; } = "gpt-5.4-nano";
 
     // Behavior settings
     public int DebounceMs { get; set; } = 300;

@@ -11,15 +11,19 @@ namespace KeystrokeApp.Services;
 
 /// <summary>
 /// GPT-5 (OpenAI) prediction engine implementation.
-/// Supports GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano models.
+/// Supports GPT-5.4, GPT-5.4 mini, GPT-5.4 nano, and other OpenAI chat models.
 /// </summary>
-public class Gpt5PredictionEngine : IPredictionEngine
+public class Gpt5PredictionEngine : IPredictionEngine, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _endpoint;
     private readonly string _model;
     private readonly string _logPath;
+
+    // Rate limiting protection
+    private static DateTime _lastRateLimitError = DateTime.MinValue;
+    private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromSeconds(10);
 
     // These can be updated from settings without recreating the engine
     public string SystemPrompt { get; set; } = AppConfig.DefaultSystemPrompt;
@@ -28,7 +32,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
     public int MaxOutputTokens { get; set; } = 100;
     public AcceptanceLearningService LearningService { get; set; } = new();
 
-    public Gpt5PredictionEngine(string apiKey, string model = "gpt-5.4-mini")
+    public Gpt5PredictionEngine(string apiKey, string model = "gpt-5.4-nano")
     {
         _apiKey = apiKey;
         _model = model;
@@ -36,8 +40,8 @@ public class Gpt5PredictionEngine : IPredictionEngine
         _logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke", "gpt5.log");
-        _httpClient = new HttpClient 
-        { 
+        _httpClient = new HttpClient
+        {
             Timeout = TimeSpan.FromSeconds(15)
         };
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
@@ -49,21 +53,73 @@ public class Gpt5PredictionEngine : IPredictionEngine
         catch { }
     }
 
+    private bool IsRateLimited()
+    {
+        var timeSinceLastError = DateTime.UtcNow - _lastRateLimitError;
+        if (timeSinceLastError < RateLimitCooldown)
+        {
+            Log($"Rate limit cooldown active ({timeSinceLastError.TotalSeconds:F1}s remaining), skipping request");
+            return true;
+        }
+        return false;
+    }
+
+    private void CheckRateLimitResponse(HttpResponseMessage response, string errorBody)
+    {
+        if ((int)response.StatusCode == 429 || errorBody.Contains("rate_limit", StringComparison.OrdinalIgnoreCase))
+        {
+            _lastRateLimitError = DateTime.UtcNow;
+            Log($"Rate limit hit! Cooldown: {RateLimitCooldown.TotalSeconds}s");
+        }
+    }
+
+    public void Dispose()
+    {
+        _httpClient.Dispose();
+    }
+
+    /// <summary>
+    /// Gets the appropriate temperature for the context.
+    /// Code needs precision (low temp), chat benefits from flexibility (higher temp).
+    /// Falls back to the configured Temperature if no app context.
+    /// </summary>
+    private double GetDynamicTemperature(ContextSnapshot context)
+    {
+        if (!context.HasAppContext)
+            return Temperature;
+
+        var category = AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle);
+
+        return category switch
+        {
+            AppCategory.Category.Code => 0.1,
+            AppCategory.Category.Terminal => 0.1,
+            AppCategory.Category.Email => 0.2,
+            AppCategory.Category.Document => 0.25,
+            AppCategory.Category.Browser => 0.3,
+            AppCategory.Category.Chat => 0.35,
+            _ => Temperature
+        };
+    }
+
     public async Task<string?> PredictAsync(ContextSnapshot context, CancellationToken ct = default)
     {
         var prefix = context.TypedText;
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
             return null;
 
+        if (IsRateLimited()) return null;
+
         try
         {
             var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
+            var dynamicTemp = GetDynamicTemperature(context);
 
             var body = new
             {
                 model = _model,
                 max_tokens = adaptiveTokens,
-                temperature = Temperature,
+                temperature = dynamicTemp,
                 top_p = 0.9,
                 messages = BuildMessages(context)
             };
@@ -74,7 +130,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Request for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={Temperature:F1}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
+            Log($"=== Request for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
             var response = await _httpClient.PostAsync(
                 _endpoint,
@@ -85,6 +141,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
             {
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Error {response.StatusCode}: {err}");
+                CheckRateLimitResponse(response, err);
                 return null;
             }
 
@@ -117,15 +174,18 @@ public class Gpt5PredictionEngine : IPredictionEngine
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
             return null;
 
+        if (IsRateLimited()) return null;
+
         try
         {
             var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
+            var dynamicTemp = GetDynamicTemperature(context);
 
             var body = new
             {
                 model = _model,
                 max_tokens = adaptiveTokens,
-                temperature = Temperature,
+                temperature = dynamicTemp,
                 top_p = 0.9,
                 stream = true,
                 messages = BuildMessages(context)
@@ -136,7 +196,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
             var category = context.HasAppContext
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
-            Log($"=== Stream for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={Temperature:F1}, tokens={adaptiveTokens}] ===");
+            Log($"=== Stream for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, tokens={adaptiveTokens}] ===");
 
             var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
             {
@@ -149,6 +209,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
             {
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Stream error {response.StatusCode}: {err}");
+                CheckRateLimitResponse(response, err);
                 return null;
             }
 
@@ -207,6 +268,80 @@ public class Gpt5PredictionEngine : IPredictionEngine
         }
         catch (OperationCanceledException) { return null; }
         catch (Exception ex) { Log($"Stream exception: {ex.Message}"); return null; }
+    }
+
+    /// <summary>
+    /// Fetch multiple alternative completions by making parallel requests with higher temperature.
+    /// </summary>
+    public async Task<List<string>> FetchAlternativesAsync(ContextSnapshot context, int count = 3, CancellationToken ct = default)
+    {
+        var results = new List<string>();
+        var prefix = context.TypedText;
+
+        if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
+            return results;
+
+        if (IsRateLimited()) return results;
+
+        try
+        {
+            var dynamicTemp = GetDynamicTemperature(context);
+            var altTemp = Math.Min(dynamicTemp + 0.3, 1.5);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
+
+            Log($"=== Alternatives for: \"{prefix}\" (count={count}, temp={altTemp:F1}, tokens={adaptiveTokens}) ===");
+
+            // Make parallel requests for alternatives
+            var tasks = Enumerable.Range(0, count).Select(async _ =>
+            {
+                var body = new
+                {
+                    model = _model,
+                    max_tokens = adaptiveTokens,
+                    temperature = altTemp,
+                    top_p = 0.95,
+                    messages = BuildMessages(context)
+                };
+
+                var json = JsonSerializer.Serialize(body);
+                var response = await _httpClient.PostAsync(
+                    _endpoint,
+                    new StringContent(json, Encoding.UTF8, "application/json"),
+                    ct);
+
+                if (!response.IsSuccessStatusCode) return null;
+
+                var respBody = await response.Content.ReadAsStringAsync(ct);
+                var result = JsonSerializer.Deserialize<Gpt5Response>(respBody);
+                return result?.Choices?[0]?.Message?.Content?.Trim();
+            });
+
+            var completions = await Task.WhenAll(tasks);
+
+            foreach (var text in completions)
+            {
+                if (string.IsNullOrWhiteSpace(text)) continue;
+
+                var processed = text.Trim('"');
+                if (processed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    processed = processed[prefix.Length..];
+
+                if (!prefix.EndsWith(" ") && processed.Length > 0 && !processed.StartsWith(" "))
+                    processed = " " + processed;
+
+                processed = TrimToWholeWords(processed.Trim('"'));
+                processed = RejectDuplicate(prefix, processed!);
+
+                if (!string.IsNullOrWhiteSpace(processed) && !results.Contains(processed))
+                    results.Add(processed);
+            }
+
+            Log($"Got {results.Count} alternatives");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Log($"Alternatives error: {ex.Message}"); }
+
+        return results;
     }
 
     /// <summary>

@@ -8,8 +8,8 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         Focusable="False"
-        IsHitTestVisible="False"
         Background="Transparent"
+        Opacity="0"
         SizeToContent="WidthAndHeight"
         MaxWidth="600"
         ResizeMode="NoResize">
@@ -20,7 +20,15 @@
             Padding="14,10"
             Margin="4"
             BorderBrush="#3A3A5A"
-            BorderThickness="1">
+            BorderThickness="1"
+            Cursor="SizeAll"
+            MouseLeftButtonDown="Border_MouseLeftButtonDown"
+            MouseMove="Border_MouseMove"
+            MouseLeftButtonUp="Border_MouseLeftButtonUp">
+
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="SlideTransform" Y="0"/>
+        </Border.RenderTransform>
         
         <Border.Effect>
             <DropShadowEffect Color="Black" Opacity="0.5" BlurRadius="16" ShadowDepth="3"/>

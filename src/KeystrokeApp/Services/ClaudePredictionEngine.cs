@@ -13,17 +13,17 @@ namespace KeystrokeApp.Services;
 /// Claude (Anthropic) prediction engine implementation.
 /// Uses the Messages API for chat completions.
 /// </summary>
-public class ClaudePredictionEngine : IPredictionEngine
+public class ClaudePredictionEngine : IPredictionEngine, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
+    private readonly string _model;
     private readonly string _endpoint;
     private readonly string _logPath;
 
     // Rate limiting protection
     private static DateTime _lastRateLimitError = DateTime.MinValue;
     private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromSeconds(10);
-    private int _consecutiveRateLimitErrors = 0;
 
     // These can be updated from settings without recreating the engine
     public string SystemPrompt { get; set; } = AppConfig.DefaultSystemPrompt;
@@ -32,9 +32,10 @@ public class ClaudePredictionEngine : IPredictionEngine
     public int MaxOutputTokens { get; set; } = 100;
     public AcceptanceLearningService LearningService { get; set; } = new();
 
-    public ClaudePredictionEngine(string apiKey, string model = "claude-3-haiku-20240307")
+    public ClaudePredictionEngine(string apiKey, string model = "claude-haiku-4-5-20251001")
     {
         _apiKey = apiKey;
+        _model = model;
         _endpoint = "https://api.anthropic.com/v1/messages";
         _logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -45,7 +46,7 @@ public class ClaudePredictionEngine : IPredictionEngine
             DefaultRequestHeaders = 
             {
                 { "x-api-key", apiKey },
-                { "anthropic-version", "2023-06-01" }
+                { "anthropic-version", "2024-10-22" }
             }
         };
     }
@@ -54,6 +55,30 @@ public class ClaudePredictionEngine : IPredictionEngine
     {
         try { File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); }
         catch { }
+    }
+
+    /// <summary>
+    /// Gets the appropriate temperature for the context.
+    /// Code needs precision (low temp), chat benefits from flexibility (higher temp).
+    /// Falls back to the configured Temperature if no app context.
+    /// </summary>
+    private double GetDynamicTemperature(ContextSnapshot context)
+    {
+        if (!context.HasAppContext)
+            return Temperature;
+
+        var category = AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle);
+
+        return category switch
+        {
+            AppCategory.Category.Code => 0.1,
+            AppCategory.Category.Terminal => 0.1,
+            AppCategory.Category.Email => 0.2,
+            AppCategory.Category.Document => 0.25,
+            AppCategory.Category.Browser => 0.3,
+            AppCategory.Category.Chat => 0.35,
+            _ => Temperature
+        };
     }
 
     public async Task<string?> PredictAsync(ContextSnapshot context, CancellationToken ct = default)
@@ -73,13 +98,15 @@ public class ClaudePredictionEngine : IPredictionEngine
         try
         {
             var systemText = BuildSystemInstruction(context);
+            var dynamicTemp = GetDynamicTemperature(context);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
             Log($"Request size estimate: sys={systemText.Length} chars");
 
             var body = new
             {
-                model = "claude-3-haiku-20240307",
-                max_tokens = GetAdaptiveMaxTokens(prefix),
-                temperature = Temperature,
+                model = _model,
+                max_tokens = adaptiveTokens,
+                temperature = dynamicTemp,
                 system = systemText,
                 messages = BuildMessages(context)
             };
@@ -90,7 +117,7 @@ public class ClaudePredictionEngine : IPredictionEngine
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}, rolling={rollingCtxLen}, tokens={GetAdaptiveMaxTokens(prefix)}] ===");
+            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
             var response = await _httpClient.PostAsync(
                 _endpoint,
@@ -106,15 +133,11 @@ public class ClaudePredictionEngine : IPredictionEngine
                 if ((int)response.StatusCode == 429 || err.Contains("rate_limit"))
                 {
                     _lastRateLimitError = DateTime.UtcNow;
-                    _consecutiveRateLimitErrors++;
-                    Log($"Rate limit hit! Cooldown: {RateLimitCooldown.TotalSeconds}s, Consecutive errors: {_consecutiveRateLimitErrors}");
+                    Log($"Rate limit hit! Cooldown: {RateLimitCooldown.TotalSeconds}s");
                 }
-                
+
                 return null;
             }
-            
-            // Reset consecutive errors on success
-            _consecutiveRateLimitErrors = 0;
 
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<ClaudeResponse>(respBody);
@@ -156,12 +179,14 @@ public class ClaudePredictionEngine : IPredictionEngine
         try
         {
             var systemText = BuildSystemInstruction(context);
+            var dynamicTemp = GetDynamicTemperature(context);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
 
             var body = new
             {
-                model = "claude-3-haiku-20240307",
-                max_tokens = GetAdaptiveMaxTokens(prefix),
-                temperature = Temperature,
+                model = _model,
+                max_tokens = adaptiveTokens,
+                temperature = dynamicTemp,
                 system = systemText,
                 stream = true,
                 messages = BuildMessages(context)
@@ -172,7 +197,7 @@ public class ClaudePredictionEngine : IPredictionEngine
             var category = context.HasAppContext
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
-            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}, tokens={GetAdaptiveMaxTokens(prefix)}] ===");
+            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, tokens={adaptiveTokens}] ===");
 
             var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
             {
@@ -190,15 +215,11 @@ public class ClaudePredictionEngine : IPredictionEngine
                 if ((int)response.StatusCode == 429 || err.Contains("rate_limit"))
                 {
                     _lastRateLimitError = DateTime.UtcNow;
-                    _consecutiveRateLimitErrors++;
                     Log($"Rate limit hit in stream! Cooldown: {RateLimitCooldown.TotalSeconds}s");
                 }
-                
+
                 return null;
             }
-            
-            // Reset consecutive errors on success
-            _consecutiveRateLimitErrors = 0;
 
             var fullCompletion = new StringBuilder();
             bool isFirstChunk = true;
@@ -255,6 +276,82 @@ public class ClaudePredictionEngine : IPredictionEngine
         }
         catch (OperationCanceledException) { return null; }
         catch (Exception ex) { Log($"Stream exception: {ex.Message}"); return null; }
+    }
+
+    /// <summary>
+    /// Fetch multiple alternative completions by making parallel requests with higher temperature.
+    /// </summary>
+    public async Task<List<string>> FetchAlternativesAsync(ContextSnapshot context, int count = 3, CancellationToken ct = default)
+    {
+        var results = new List<string>();
+        var prefix = context.TypedText;
+
+        if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
+            return results;
+
+        var timeSinceLastError = DateTime.UtcNow - _lastRateLimitError;
+        if (timeSinceLastError < RateLimitCooldown) return results;
+
+        try
+        {
+            var systemText = BuildSystemInstruction(context);
+            var dynamicTemp = GetDynamicTemperature(context);
+            var altTemp = Math.Min(dynamicTemp + 0.3, 1.5);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
+
+            Log($"=== Alternatives for: \"{prefix}\" (count={count}, temp={altTemp:F1}, tokens={adaptiveTokens}) ===");
+
+            // Make parallel requests for alternatives
+            var tasks = Enumerable.Range(0, count).Select(async _ =>
+            {
+                var body = new
+                {
+                    model = _model,
+                    max_tokens = adaptiveTokens,
+                    temperature = altTemp,
+                    system = systemText,
+                    messages = BuildMessages(context)
+                };
+
+                var json = JsonSerializer.Serialize(body);
+                var response = await _httpClient.PostAsync(
+                    _endpoint,
+                    new StringContent(json, Encoding.UTF8, "application/json"),
+                    ct);
+
+                if (!response.IsSuccessStatusCode) return null;
+
+                var respBody = await response.Content.ReadAsStringAsync(ct);
+                var result = JsonSerializer.Deserialize<ClaudeResponse>(respBody);
+                return result?.Content?[0]?.Text?.Trim();
+            });
+
+            var completions = await Task.WhenAll(tasks);
+
+            foreach (var text in completions)
+            {
+                if (string.IsNullOrWhiteSpace(text)) continue;
+
+                var processed = text.Trim('"');
+                if (processed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    processed = processed[prefix.Length..];
+
+                if (!prefix.EndsWith(" ") && processed.Length > 0 && !processed.StartsWith(" "))
+                    processed = " " + processed;
+
+                processed = TrimToWholeWords(processed.Trim('"'));
+                processed = RejectDuplicate(prefix, processed!);
+
+                if (!string.IsNullOrWhiteSpace(processed) && !results.Contains(processed))
+                    results.Add(processed);
+            }
+
+            Log($"Got {results.Count} alternatives");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Log($"Alternatives error: {ex.Message}"); }
+
+        return results;
     }
 
     /// <summary>
@@ -426,6 +523,11 @@ public class ClaudePredictionEngine : IPredictionEngine
             return trimmed[..lastSpace].TrimEnd();
 
         return trimmed;
+    }
+
+    public void Dispose()
+    {
+        _httpClient.Dispose();
     }
 
     // Response models

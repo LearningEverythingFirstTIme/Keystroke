@@ -38,25 +38,12 @@ public partial class SettingsWindow : Window
         ApiKeyBox.Text = _config.GeminiApiKey ?? "";
         Gpt5ApiKeyBox.Text = _config.OpenAiApiKey ?? "";
         ClaudeApiKeyBox.Text = _config.AnthropicApiKey ?? "";
-        
-        // Set Model selection based on config (match by content start)
-        string modelConfig = _config.GeminiModel.ToLower();
-        bool modelFound = false;
-        for (int i = 0; i < ModelCombo.Items.Count; i++)
-        {
-            if (ModelCombo.Items[i] is ComboBoxItem item && 
-                item.Content?.ToString()?.ToLower().StartsWith(modelConfig) == true)
-            {
-                ModelCombo.SelectedIndex = i;
-                modelFound = true;
-                break;
-            }
-        }
-        if (!modelFound && ModelCombo.Items.Count > 0)
-        {
-            ModelCombo.SelectedIndex = 0; // Default to first
-        }
-        
+
+        // Set model selections based on config (match by Tag)
+        SelectModelByTag(GeminiModelCombo, _config.GeminiModel);
+        SelectModelByTag(Gpt5ModelCombo, _config.Gpt5Model);
+        SelectModelByTag(ClaudeModelCombo, _config.ClaudeModel);
+
         UpdateApiKeyStatus();
 
         // Behavior settings
@@ -217,6 +204,25 @@ public partial class SettingsWindow : Window
         return grid;
     }
 
+    /// <summary>
+    /// Select a ComboBox item by matching its Tag property to the config value.
+    /// Falls back to the first item if no match is found.
+    /// </summary>
+    private static void SelectModelByTag(ComboBox combo, string configValue)
+    {
+        for (int i = 0; i < combo.Items.Count; i++)
+        {
+            if (combo.Items[i] is ComboBoxItem item &&
+                string.Equals(item.Tag?.ToString(), configValue, StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedIndex = i;
+                return;
+            }
+        }
+        if (combo.Items.Count > 0)
+            combo.SelectedIndex = 0;
+    }
+
     private void UpdateApiKeyStatus()
     {
         var hasGeminiKey = !string.IsNullOrWhiteSpace(ApiKeyBox.Text) && ApiKeyBox.Text.Length > 10;
@@ -245,7 +251,9 @@ public partial class SettingsWindow : Window
         GeminiApiKeyPanel.Visibility = selectedEngine == 0 ? Visibility.Visible : Visibility.Collapsed;
         Gpt5ApiKeyPanel.Visibility = selectedEngine == 1 ? Visibility.Visible : Visibility.Collapsed;
         ClaudeApiKeyPanel.Visibility = selectedEngine == 2 ? Visibility.Visible : Visibility.Collapsed;
-        ModelCombo.Visibility = selectedEngine == 0 ? Visibility.Visible : Visibility.Collapsed; // Only show for Gemini for now
+        GeminiModelPanel.Visibility = selectedEngine == 0 ? Visibility.Visible : Visibility.Collapsed;
+        Gpt5ModelPanel.Visibility = selectedEngine == 1 ? Visibility.Visible : Visibility.Collapsed;
+        ClaudeModelPanel.Visibility = selectedEngine == 2 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ShowSaveIndicator()
@@ -272,19 +280,12 @@ public partial class SettingsWindow : Window
         _config.GeminiApiKey = ApiKeyBox.Text;
         _config.OpenAiApiKey = Gpt5ApiKeyBox.Text;
         _config.AnthropicApiKey = ClaudeApiKeyBox.Text;
-        
-        // Extract model name from selected item (remove the "(Fast)" / "(Smart)" suffix)
-        if (ModelCombo.SelectedItem is ComboBoxItem modelItem && modelItem.Content != null)
-        {
-            var content = modelItem.Content.ToString() ?? "";
-            // Extract "gemini-2.5-flash" from "gemini-2.5-flash (Fast)"
-            var modelName = content.Split('(')[0].Trim();
-            _config.GeminiModel = modelName;
-        }
-        else
-        {
-            _config.GeminiModel = "gemini-2.5-flash"; // Default
-        }
+
+        // Save model selections from Tag values
+        _config.GeminiModel = (GeminiModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "gemini-3.1-flash-lite-preview";
+        _config.Gpt5Model = (Gpt5ModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "gpt-5.4-nano";
+        _config.ClaudeModel = (ClaudeModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "claude-haiku-4-5-20251001";
+
         _config.CompletionPreset = (LengthCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "extended";
         _config.Temperature = TempSlider.Value;
         _config.MinBufferLength = (int)MinCharsSlider.Value;

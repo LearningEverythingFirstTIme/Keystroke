@@ -32,6 +32,7 @@ public partial class App : Application
     private AcceptanceLearningService _learningService = new();
     private bool _isEnabled = true;
     private MenuItem? _enabledMenuItem;
+    private readonly object _predictionCtsLock = new();
     private CancellationTokenSource? _predictionCts;
     private string _lastPredictionPrefix = "";
 
@@ -75,6 +76,9 @@ public partial class App : Application
 
             // Prune tracking file if it's grown too large
             _acceptanceTracker.PruneIfNeeded(maxLines: 2000);
+
+            // Prune log files to prevent unbounded growth (keep last ~5000 lines each)
+            PruneLogFiles();
 
             // Initialize prediction engine based on config
             _predictionEngine = CreatePredictionEngine();
@@ -295,7 +299,8 @@ public partial class App : Application
         _config = AppConfig.Load();
         Log("Settings updated from config.");
 
-        // Recreate the engine so the new API key/model takes effect immediately
+        // Dispose the old engine's HttpClient before creating a new one
+        (_predictionEngine as IDisposable)?.Dispose();
         _predictionEngine = CreatePredictionEngine();
         Log($"Prediction engine recreated: {_predictionEngine?.GetType().Name}");
 
@@ -621,9 +626,13 @@ public partial class App : Application
         }
 
         // Cancel any previous prediction request and track what we're predicting for
-        _predictionCts?.Cancel();
-        _predictionCts = new CancellationTokenSource();
-        var ct = _predictionCts.Token;
+        CancellationToken ct;
+        lock (_predictionCtsLock)
+        {
+            _predictionCts?.Cancel();
+            _predictionCts = new CancellationTokenSource();
+            ct = _predictionCts.Token;
+        }
         _lastPredictionPrefix = buffer;
 
         // Build context snapshot — app detection is instant, OCR uses cached result
@@ -715,9 +724,9 @@ public partial class App : Application
     {
         try
         {
-            if (_predictionEngine is not GeminiPredictionEngine gemini) return;
+            if (_predictionEngine == null) return;
 
-            var alternatives = await gemini.FetchAlternativesAsync(context, 3, ct);
+            var alternatives = await _predictionEngine.FetchAlternativesAsync(context, 3, ct);
             if (ct.IsCancellationRequested || alternatives.Count == 0) return;
 
             Dispatcher.BeginInvoke(() =>
@@ -735,8 +744,11 @@ public partial class App : Application
 
     private void CancelPendingPrediction()
     {
-        _predictionCts?.Cancel();
-        _predictionCts = null;
+        lock (_predictionCtsLock)
+        {
+            _predictionCts?.Cancel();
+            _predictionCts = null;
+        }
     }
 
     // ==================== Text Injection ====================
@@ -760,13 +772,40 @@ public partial class App : Application
     {
         if (_testWindow != null)
         {
-            Dispatcher.Invoke(() => _testWindow.Log(message));
+            Dispatcher.BeginInvoke(() => _testWindow?.Log(message));
         }
     }
 
     private void Log(string message)
     {
         File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+    }
+
+    /// <summary>
+    /// Prune all log files at startup to prevent unbounded growth.
+    /// Keeps the most recent lines of each log file.
+    /// </summary>
+    private void PruneLogFiles()
+    {
+        var logDir = Path.GetDirectoryName(_logPath)!;
+        string[] logFiles = ["debug.log", "gemini.log", "claude.log", "gpt5.log", "ocr.log", "learning.log"];
+        const int maxLines = 5000;
+
+        foreach (var fileName in logFiles)
+        {
+            try
+            {
+                var path = Path.Combine(logDir, fileName);
+                if (!File.Exists(path)) continue;
+
+                var lines = File.ReadAllLines(path);
+                if (lines.Length <= maxLines) continue;
+
+                File.WriteAllLines(path, lines[^maxLines..]);
+                Log($"Pruned {fileName}: {lines.Length} → {maxLines} lines");
+            }
+            catch { }
+        }
     }
 
     /// <summary>
@@ -798,12 +837,16 @@ public partial class App : Application
         _ocrTimer?.Dispose();
         _ocrService?.Dispose();
         _hookService?.Dispose();
+        (_predictionEngine as IDisposable)?.Dispose();
         _trayIcon?.Dispose();
         _suggestionPanel?.Close();
         _debounceTimer?.Dispose();
         _fastDebounceTimer?.Dispose();
         base.OnExit(e);
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr handle);
 
     private Icon CreateKeyboardIcon()
     {
@@ -824,6 +867,11 @@ public partial class App : Application
         g.FillRectangle(smallBrush, 8, 18, 16, 3);
 
         var hIcon = bitmap.GetHicon();
-        return Icon.FromHandle(hIcon);
+        // Icon.FromHandle doesn't take ownership — clone it so we can free the GDI handle
+        var tempIcon = Icon.FromHandle(hIcon);
+        var icon = (Icon)tempIcon.Clone();
+        tempIcon.Dispose();
+        DestroyIcon(hIcon);
+        return icon;
     }
 }

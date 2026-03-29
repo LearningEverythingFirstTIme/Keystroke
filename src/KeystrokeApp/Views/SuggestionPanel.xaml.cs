@@ -1,8 +1,10 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using KeystrokeApp.Services;
 
 namespace KeystrokeApp.Views;
@@ -18,6 +20,12 @@ public partial class SuggestionPanel : Window
     // Margin from screen edges to prevent overflow
     private const double ScreenEdgeMargin = 10;
 
+    // Animation durations
+    private static readonly Duration ShowDuration = new(TimeSpan.FromMilliseconds(150));
+    private static readonly Duration HideDuration = new(TimeSpan.FromMilliseconds(100));
+    private static readonly IEasingFunction ShowEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+    private static readonly IEasingFunction HideEase = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+
     private string _currentSuggestion = "";
     private string _currentPrefix = "";
     private double _dpiScaleX = 1.0;
@@ -26,6 +34,16 @@ public partial class SuggestionPanel : Window
     // Multi-suggestion support
     private readonly List<string> _suggestions = new();
     private int _currentIndex;
+
+    // Drag support
+    private bool _isDragging;
+    private bool _isDragged; // true when user has manually positioned the panel
+    private Point _dragStartMouse;
+    private double _dragStartLeft;
+    private double _dragStartTop;
+
+    // Animation state
+    private bool _isAnimatingHide;
 
     public SuggestionPanel()
     {
@@ -47,8 +65,17 @@ public partial class SuggestionPanel : Window
         CompletionText.Text = completion;
         UpdateCounter();
 
-        if (!IsVisible)
+        // Reset drag state — new prediction snaps back to caret
+        _isDragged = false;
+
+        bool wasVisible = IsVisible && !_isAnimatingHide;
+
+        if (!IsVisible || _isAnimatingHide)
+        {
+            _isAnimatingHide = false;
             Show();
+            AnimateShow();
+        }
 
         PositionNearCaret();
     }
@@ -69,8 +96,12 @@ public partial class SuggestionPanel : Window
 
         CompletionText.Text = _currentSuggestion;
 
-        if (!IsVisible)
+        if (!IsVisible || _isAnimatingHide)
+        {
+            _isAnimatingHide = false;
             Show();
+            AnimateShow();
+        }
     }
 
     /// <summary>
@@ -86,8 +117,15 @@ public partial class SuggestionPanel : Window
         CounterText.Visibility = Visibility.Collapsed;
         HintText.Text = "Tab accept · Ctrl+→ word · Esc dismiss";
 
-        if (!IsVisible)
+        // Reset drag state — new prediction snaps back to caret
+        _isDragged = false;
+
+        if (!IsVisible || _isAnimatingHide)
+        {
+            _isAnimatingHide = false;
             Show();
+            AnimateShow();
+        }
 
         PositionNearCaret();
     }
@@ -167,17 +205,98 @@ public partial class SuggestionPanel : Window
         CompletionText.Text = "";
         CounterText.Visibility = Visibility.Collapsed;
         HintText.Text = "Tab accept · Ctrl+→ word · Esc dismiss";
-        if (IsVisible)
-            Hide();
+
+        if (IsVisible && !_isAnimatingHide)
+            AnimateHide();
+        else if (!IsVisible)
+            return; // Already hidden
     }
+
+    #region Animations
+
+    private void AnimateShow()
+    {
+        // Cancel any in-progress hide
+        _isAnimatingHide = false;
+
+        // Fade in
+        var fadeIn = new DoubleAnimation(0, 1, ShowDuration) { EasingFunction = ShowEase };
+        BeginAnimation(OpacityProperty, fadeIn);
+
+        // Slide up from 8px below
+        var slideUp = new DoubleAnimation(8, 0, ShowDuration) { EasingFunction = ShowEase };
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, slideUp);
+    }
+
+    private void AnimateHide()
+    {
+        _isAnimatingHide = true;
+
+        // Fade out
+        var fadeOut = new DoubleAnimation(Opacity, 0, HideDuration) { EasingFunction = HideEase };
+        fadeOut.Completed += (_, _) =>
+        {
+            if (_isAnimatingHide)
+            {
+                _isAnimatingHide = false;
+                _isDragged = false;
+                Hide();
+            }
+        };
+        BeginAnimation(OpacityProperty, fadeOut);
+
+        // Slide down slightly
+        var slideDown = new DoubleAnimation(0, 4, HideDuration) { EasingFunction = HideEase };
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, slideDown);
+    }
+
+    #endregion
+
+    #region Drag Support
+
+    private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _isDragging = true;
+        _dragStartMouse = PointToScreen(e.GetPosition(this));
+        _dragStartLeft = Left;
+        _dragStartTop = Top;
+        SuggestionBorder.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void Border_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isDragging) return;
+
+        var currentMouse = PointToScreen(e.GetPosition(this));
+        Left = _dragStartLeft + (currentMouse.X - _dragStartMouse.X);
+        Top = _dragStartTop + (currentMouse.Y - _dragStartMouse.Y);
+        e.Handled = true;
+    }
+
+    private void Border_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isDragging) return;
+
+        _isDragging = false;
+        _isDragged = true; // User has manually positioned — stop following caret
+        SuggestionBorder.ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
+    #endregion
 
     /// <summary>
     /// Position the panel just below the text caret.
     /// Falls back to below the mouse cursor if caret can't be detected.
     /// Clamps to screen bounds so the panel never goes off-screen.
+    /// Skipped if the user has manually dragged the panel.
     /// </summary>
     private void PositionNearCaret()
     {
+        // If the user dragged the panel, keep their position
+        if (_isDragged) return;
+
         var caret = CursorPositionHelper.GetCaretPosition();
         var workArea = SystemParameters.WorkArea;
 
