@@ -34,6 +34,28 @@ public class AcceptanceTracker
         WriteEntry("ignored", prefix, completion, processName, windowTitle);
     }
 
+    /// <summary>
+    /// If the tracking file exceeds maxLines, rewrites it keeping only the most recent entries.
+    /// Call once at startup — keeps the file from growing unbounded over months of use.
+    /// </summary>
+    public void PruneIfNeeded(int maxLines = 2000)
+    {
+        try
+        {
+            if (!File.Exists(_trackingPath))
+                return;
+
+            var lines = File.ReadAllLines(_trackingPath);
+            if (lines.Length <= maxLines)
+                return;
+
+            // Keep the most recent maxLines entries and rewrite
+            var trimmed = lines[^maxLines..];
+            File.WriteAllLines(_trackingPath, trimmed);
+        }
+        catch { }
+    }
+
     private void WriteEntry(string action, string prefix, string completion, string processName, string windowTitle)
     {
         try

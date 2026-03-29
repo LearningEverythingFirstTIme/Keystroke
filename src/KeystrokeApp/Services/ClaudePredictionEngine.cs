@@ -30,6 +30,7 @@ public class ClaudePredictionEngine : IPredictionEngine
     public string LengthInstruction { get; set; } = "Write 15-30 words to complete the full thought. Never repeat words or phrases you've already used.";
     public double Temperature { get; set; } = 0.1; // Lower for less repetition
     public int MaxOutputTokens { get; set; } = 100;
+    public AcceptanceLearningService LearningService { get; set; } = new();
 
     public ClaudePredictionEngine(string apiKey, string model = "claude-3-haiku-20240307")
     {
@@ -72,23 +73,15 @@ public class ClaudePredictionEngine : IPredictionEngine
         try
         {
             var systemText = BuildSystemInstruction(context);
-            var userPrompt = BuildUserPrompt(context);
-            Log($"Request size estimate: sys={systemText.Length}, user={userPrompt.Length} chars");
+            Log($"Request size estimate: sys={systemText.Length} chars");
 
             var body = new
             {
                 model = "claude-3-haiku-20240307",
-                max_tokens = MaxOutputTokens,
+                max_tokens = GetAdaptiveMaxTokens(prefix),
                 temperature = Temperature,
                 system = systemText,
-                messages = new object[]
-                {
-                    new
-                    {
-                        role = "user",
-                        content = userPrompt
-                    }
-                }
+                messages = BuildMessages(context)
             };
 
             var json = JsonSerializer.Serialize(body);
@@ -97,7 +90,7 @@ public class ClaudePredictionEngine : IPredictionEngine
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}, rolling={rollingCtxLen}] ===");
+            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}, rolling={rollingCtxLen}, tokens={GetAdaptiveMaxTokens(prefix)}] ===");
 
             var response = await _httpClient.PostAsync(
                 _endpoint,
@@ -163,23 +156,15 @@ public class ClaudePredictionEngine : IPredictionEngine
         try
         {
             var systemText = BuildSystemInstruction(context);
-            var userPrompt = BuildUserPrompt(context);
 
             var body = new
             {
                 model = "claude-3-haiku-20240307",
-                max_tokens = MaxOutputTokens,
+                max_tokens = GetAdaptiveMaxTokens(prefix),
                 temperature = Temperature,
                 system = systemText,
                 stream = true,
-                messages = new object[]
-                {
-                    new
-                    {
-                        role = "user",
-                        content = userPrompt
-                    }
-                }
+                messages = BuildMessages(context)
             };
 
             var json = JsonSerializer.Serialize(body);
@@ -187,7 +172,7 @@ public class ClaudePredictionEngine : IPredictionEngine
             var category = context.HasAppContext
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
-            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}] ===");
+            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}, tokens={GetAdaptiveMaxTokens(prefix)}] ===");
 
             var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
             {
@@ -289,9 +274,6 @@ public class ClaudePredictionEngine : IPredictionEngine
             sb.AppendLine($"Application context: {toneHint}");
         }
 
-        // Add few-shot examples from learning service
-        // Note: We could inject AcceptanceLearningService here for consistency
-
         sb.AppendLine();
         sb.AppendLine(LengthInstruction);
 
@@ -347,6 +329,43 @@ public class ClaudePredictionEngine : IPredictionEngine
         sb.Append(context.TypedText);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds the messages array with few-shot conversation turns followed by the real request.
+    /// Placing examples as actual user/assistant turns is more effective than embedding them
+    /// in the system prompt because the model is trained to follow that in-context pattern.
+    /// </summary>
+    private object[] BuildMessages(ContextSnapshot context)
+    {
+        var examples = LearningService.GetExamples(context, 3);
+        var messages = new List<object>();
+
+        foreach (var ex in examples)
+        {
+            var fewShotUser = $"[Application: {ex.Context}]\n\nThe user is currently typing the following text. Predict what comes next:\n\n{ex.Prefix}";
+            messages.Add(new { role = "user", content = fewShotUser });
+            messages.Add(new { role = "assistant", content = ex.Completion });
+        }
+
+        messages.Add(new { role = "user", content = BuildUserPrompt(context) });
+
+        if (examples.Count > 0)
+            Log($"Included {examples.Count} few-shot conversation turns for {context.ProcessName}");
+
+        return messages.ToArray();
+    }
+
+    /// <summary>
+    /// Caps max tokens based on prefix length. Short prefixes are highly ambiguous —
+    /// generating 100 tokens just produces vague output and wastes latency.
+    /// </summary>
+    private int GetAdaptiveMaxTokens(string prefix)
+    {
+        var wordCount = prefix.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        if (wordCount < 4) return Math.Min(25, MaxOutputTokens);
+        if (wordCount < 8) return Math.Min(60, MaxOutputTokens);
+        return MaxOutputTokens;
     }
 
     /// <summary>

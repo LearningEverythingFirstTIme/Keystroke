@@ -71,6 +71,17 @@ public class TypingBuffer
     }
 
     /// <summary>
+    /// Directly set the buffer content without firing any events.
+    /// Used after partial-word acceptance so the buffer stays in sync
+    /// without triggering a new prediction debounce cycle.
+    /// </summary>
+    public void SetText(string text)
+    {
+        _buffer.Clear();
+        _buffer.Append(text);
+    }
+
+    /// <summary>
     /// Check if buffer is empty.
     /// </summary>
     public bool IsEmpty => _buffer.Length == 0;

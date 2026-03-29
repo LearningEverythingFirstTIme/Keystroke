@@ -84,7 +84,7 @@ public partial class SuggestionPanel : Window
         _currentIndex = 0;
         CompletionText.Text = "";
         CounterText.Visibility = Visibility.Collapsed;
-        HintText.Text = "Tab to accept · Esc to dismiss";
+        HintText.Text = "Tab accept · Ctrl+→ word · Esc dismiss";
 
         if (!IsVisible)
             Show();
@@ -149,12 +149,12 @@ public partial class SuggestionPanel : Window
         {
             CounterText.Text = $"{_currentIndex + 1}/{_suggestions.Count}";
             CounterText.Visibility = Visibility.Visible;
-            HintText.Text = "Tab accept · Ctrl+\u2191\u2193 cycle · Esc dismiss";
+            HintText.Text = "Tab accept · Ctrl+→ word · Ctrl+↑↓ cycle · Esc dismiss";
         }
         else
         {
             CounterText.Visibility = Visibility.Collapsed;
-            HintText.Text = "Tab to accept · Esc to dismiss";
+            HintText.Text = "Tab accept · Ctrl+→ word · Esc dismiss";
         }
     }
 
@@ -166,7 +166,7 @@ public partial class SuggestionPanel : Window
         _currentIndex = 0;
         CompletionText.Text = "";
         CounterText.Visibility = Visibility.Collapsed;
-        HintText.Text = "Tab to accept · Esc to dismiss";
+        HintText.Text = "Tab accept · Ctrl+→ word · Esc dismiss";
         if (IsVisible)
             Hide();
     }

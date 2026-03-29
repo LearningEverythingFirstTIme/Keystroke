@@ -20,7 +20,7 @@ public class AcceptanceLearningService
     // Configuration
     private const int MaxExamplesToReturn = 3;
     private const int MaxPrefixLengthForMatching = 50;
-    private const int MinCompletionLength = 10;
+    private const int MinCompletionLength = 25;
 
     private void Log(string msg)
     {
@@ -210,18 +210,18 @@ public class AcceptanceLearningService
 
     /// <summary>
     /// Checks if a past entry is relevant to the current context.
+    /// Allows exact or adjacent category matches (Chat↔Email, Code↔Terminal).
     /// </summary>
     private bool IsRelevant(TrackingEntry entry, ContextSnapshot context)
     {
-        // Must be same app category for relevance
         var currentCategory = AppCategory.GetEffectiveCategory(
             context.ProcessName, context.WindowTitle);
-        
+
         if (!Enum.TryParse<AppCategory.Category>(entry.Category, out var entryCategory))
             return false;
 
-        // Category must match exactly
-        if (entryCategory != currentCategory)
+        // Category must be same or adjacent
+        if (!IsSameOrAdjacentCategory(entryCategory, currentCategory))
             return false;
 
         // Skip very short or very long prefixes
@@ -229,6 +229,24 @@ public class AcceptanceLearningService
             return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Returns true if two categories share enough stylistic overlap to be
+    /// useful as few-shot examples for each other.
+    /// </summary>
+    private static bool IsSameOrAdjacentCategory(AppCategory.Category a, AppCategory.Category b)
+    {
+        if (a == b) return true;
+        // Chat <-> Email: both conversational prose
+        if ((a == AppCategory.Category.Chat && b == AppCategory.Category.Email) ||
+            (a == AppCategory.Category.Email && b == AppCategory.Category.Chat))
+            return true;
+        // Code <-> Terminal: both technical/precise
+        if ((a == AppCategory.Category.Code && b == AppCategory.Category.Terminal) ||
+            (a == AppCategory.Category.Terminal && b == AppCategory.Category.Code))
+            return true;
+        return false;
     }
 
     /// <summary>
@@ -261,16 +279,22 @@ public class AcceptanceLearningService
 
         // Same app (bonus)
         if (string.Equals(entry.App, context.ProcessName, StringComparison.OrdinalIgnoreCase))
-        {
             score += 0.1;
-        }
 
-        // Recency bonus (within last hour)
+        // Exact category match bonus (adjacent-only entries get no bonus but aren't excluded)
+        var currentCategory = AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle);
+        if (Enum.TryParse<AppCategory.Category>(entry.Category, out var entryCategory) &&
+            entryCategory == currentCategory)
+            score += 0.1;
+
+        // Recency — weighted heavily so recent same-session examples dominate
         var age = DateTime.UtcNow - entry.Timestamp;
-        if (age.TotalHours < 1)
-        {
-            score += 0.05;
-        }
+        if (age.TotalMinutes < 10)
+            score += 0.3;   // current session: strong signal
+        else if (age.TotalHours < 1)
+            score += 0.15;  // within the hour
+        else if (age.TotalHours < 24)
+            score += 0.05;  // today: minor boost
 
         return Math.Min(score, 1.0);
     }

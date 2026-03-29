@@ -16,13 +16,12 @@ public class GeminiPredictionEngine : IPredictionEngine
     private readonly string _endpoint;
     private readonly string _streamEndpoint;
     private readonly string _logPath;
-    private readonly AcceptanceLearningService _learningService;
-
     // These can be updated from settings without recreating the engine
     public string SystemPrompt { get; set; } = AppConfig.DefaultSystemPrompt;
     public string LengthInstruction { get; set; } = "Write 15-30 words to complete the full thought.";
     public double Temperature { get; set; } = 0.3;
     public int MaxOutputTokens { get; set; } = 100;
+    public AcceptanceLearningService LearningService { get; set; } = new();
 
     public GeminiPredictionEngine(string apiKey, string model = "gemini-2.5-flash")
     {
@@ -33,7 +32,6 @@ public class GeminiPredictionEngine : IPredictionEngine
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke", "gemini.log");
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        _learningService = new AcceptanceLearningService();
     }
 
     private void Log(string msg)
@@ -74,9 +72,9 @@ public class GeminiPredictionEngine : IPredictionEngine
 
         try
         {
-            var userPrompt = BuildUserPrompt(context);
             var systemText = BuildSystemInstruction(context);
             var dynamicTemp = GetDynamicTemperature(context);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
 
             var body = new
             {
@@ -84,17 +82,10 @@ public class GeminiPredictionEngine : IPredictionEngine
                 {
                     parts = new object[] { new { text = systemText } }
                 },
-                contents = new object[]
-                {
-                    new
-                    {
-                        role = "user",
-                        parts = new object[] { new { text = userPrompt } }
-                    }
-                },
+                contents = BuildContents(context),
                 generationConfig = new
                 {
-                    maxOutputTokens = MaxOutputTokens,
+                    maxOutputTokens = adaptiveTokens,
                     temperature = dynamicTemp,
                     topP = 0.9,
                     thinkingConfig = new { thinkingBudget = 0 }
@@ -107,7 +98,7 @@ public class GeminiPredictionEngine : IPredictionEngine
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, ocr={context.HasScreenContext}, rolling={rollingCtxLen}] ===");
+            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, ocr={context.HasScreenContext}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
             var response = await _httpClient.PostAsync(
                 $"{_endpoint}?key={_apiKey}",
@@ -153,9 +144,9 @@ public class GeminiPredictionEngine : IPredictionEngine
 
         try
         {
-            var userPrompt = BuildUserPrompt(context);
             var systemText = BuildSystemInstruction(context);
             var dynamicTemp = GetDynamicTemperature(context);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
 
             var body = new
             {
@@ -163,17 +154,10 @@ public class GeminiPredictionEngine : IPredictionEngine
                 {
                     parts = new object[] { new { text = systemText } }
                 },
-                contents = new object[]
-                {
-                    new
-                    {
-                        role = "user",
-                        parts = new object[] { new { text = userPrompt } }
-                    }
-                },
+                contents = BuildContents(context),
                 generationConfig = new
                 {
-                    maxOutputTokens = MaxOutputTokens,
+                    maxOutputTokens = adaptiveTokens,
                     temperature = dynamicTemp,
                     topP = 0.9,
                     thinkingConfig = new { thinkingBudget = 0 }
@@ -186,7 +170,7 @@ public class GeminiPredictionEngine : IPredictionEngine
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, rolling={rollingCtxLen}] ===");
+            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
             var request = new HttpRequestMessage(HttpMethod.Post, $"{_streamEndpoint}&key={_apiKey}")
             {
@@ -272,11 +256,11 @@ public class GeminiPredictionEngine : IPredictionEngine
 
         try
         {
-            var userPrompt = BuildUserPrompt(context);
             var systemText = BuildSystemInstruction(context);
             var dynamicTemp = GetDynamicTemperature(context);
             // For alternatives, add variety on top of the base dynamic temperature
             var altTemp = Math.Min(dynamicTemp + 0.3, 1.5);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
 
             var body = new
             {
@@ -284,17 +268,10 @@ public class GeminiPredictionEngine : IPredictionEngine
                 {
                     parts = new object[] { new { text = systemText } }
                 },
-                contents = new object[]
-                {
-                    new
-                    {
-                        role = "user",
-                        parts = new object[] { new { text = userPrompt } }
-                    }
-                },
+                contents = BuildContents(context),
                 generationConfig = new
                 {
-                    maxOutputTokens = MaxOutputTokens,
+                    maxOutputTokens = adaptiveTokens,
                     candidateCount = count,
                     temperature = altTemp,
                     topP = 0.95,
@@ -303,7 +280,7 @@ public class GeminiPredictionEngine : IPredictionEngine
             };
 
             var json = JsonSerializer.Serialize(body);
-            Log($"=== Alternatives for: \"{prefix}\" (count={count}, temp={altTemp:F1}) ===");
+            Log($"=== Alternatives for: \"{prefix}\" (count={count}, temp={altTemp:F1}, tokens={adaptiveTokens}) ===");
 
             var response = await _httpClient.PostAsync(
                 $"{_endpoint}?key={_apiKey}",
@@ -365,27 +342,6 @@ public class GeminiPredictionEngine : IPredictionEngine
             sb.AppendLine($"Application context: {toneHint}");
         }
 
-        // Add few-shot examples from learning service
-        var examples = _learningService.GetExamples(context, 3);
-        if (examples.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("Here are examples of completions the user has accepted in the past. " +
-                "Match this style, tone, and level of detail:");
-            sb.AppendLine();
-            
-            for (int i = 0; i < examples.Count; i++)
-            {
-                var ex = examples[i];
-                sb.AppendLine($"Example {i + 1} ({ex.Context}):");
-                sb.AppendLine($"  User typed: \"{ex.Prefix}\"");
-                sb.AppendLine($"  Accepted completion: \"{ex.Completion}\"");
-                sb.AppendLine();
-            }
-            
-            Log($"Included {examples.Count} few-shot examples in prompt for {context.ProcessName}");
-        }
-
         sb.AppendLine();
         sb.AppendLine(LengthInstruction);
 
@@ -442,6 +398,42 @@ public class GeminiPredictionEngine : IPredictionEngine
         sb.Append(context.TypedText);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds the contents array with few-shot conversation turns followed by the real request.
+    /// Gemini uses "model" for the assistant role in multi-turn contents.
+    /// </summary>
+    private object[] BuildContents(ContextSnapshot context)
+    {
+        var examples = LearningService.GetExamples(context, 3);
+        var contents = new List<object>();
+
+        foreach (var ex in examples)
+        {
+            var fewShotUser = $"[Application: {ex.Context}]\n\nThe user is currently typing the following text. Predict what comes next:\n\n{ex.Prefix}";
+            contents.Add(new { role = "user", parts = new[] { new { text = fewShotUser } } });
+            contents.Add(new { role = "model", parts = new[] { new { text = ex.Completion } } });
+        }
+
+        contents.Add(new { role = "user", parts = new[] { new { text = BuildUserPrompt(context) } } });
+
+        if (examples.Count > 0)
+            Log($"Included {examples.Count} few-shot conversation turns for {context.ProcessName}");
+
+        return contents.ToArray();
+    }
+
+    /// <summary>
+    /// Caps max tokens based on prefix length. Short prefixes are highly ambiguous —
+    /// generating 100 tokens just produces vague output and wastes latency.
+    /// </summary>
+    private int GetAdaptiveMaxTokens(string prefix)
+    {
+        var wordCount = prefix.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        if (wordCount < 4) return Math.Min(25, MaxOutputTokens);
+        if (wordCount < 8) return Math.Min(60, MaxOutputTokens);
+        return MaxOutputTokens;
     }
 
     /// <summary>

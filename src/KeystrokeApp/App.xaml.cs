@@ -55,6 +55,9 @@ public partial class App : Application
             _config = AppConfig.Load();
             Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
 
+            // Prune tracking file if it's grown too large
+            _acceptanceTracker.PruneIfNeeded(maxLines: 2000);
+
             // Initialize prediction engine based on config
             _predictionEngine = CreatePredictionEngine();
             Log($"Prediction engine: {_predictionEngine?.GetType().Name ?? "none"}");
@@ -75,6 +78,7 @@ public partial class App : Application
             _hookService = new KeyboardHookService();
             _hookService.CharacterTyped += OnCharacterTyped;
             _hookService.SpecialKeyPressed += OnSpecialKeyPressed;
+            _hookService.HookDiagnostic += msg => LogToDebug(msg);
             _hookService.Start();
             Log("Keyboard hook started.");
 
@@ -119,7 +123,8 @@ public partial class App : Application
                     SystemPrompt = _config.EffectiveSystemPrompt,
                     LengthInstruction = _config.CompletionLengthInstruction,
                     Temperature = _config.Temperature,
-                    MaxOutputTokens = _config.PresetMaxOutputTokens
+                    MaxOutputTokens = _config.PresetMaxOutputTokens,
+                    LearningService = _learningService
                 },
             "gemini"
                 => throw new InvalidOperationException("Gemini API key not set. Please configure it in Settings."),
@@ -129,7 +134,8 @@ public partial class App : Application
                     SystemPrompt = _config.EffectiveSystemPrompt,
                     LengthInstruction = _config.CompletionLengthInstruction,
                     Temperature = _config.Temperature,
-                    MaxOutputTokens = _config.PresetMaxOutputTokens
+                    MaxOutputTokens = _config.PresetMaxOutputTokens,
+                    LearningService = _learningService
                 },
             "gpt5"
                 => throw new InvalidOperationException("OpenAI API key not set. Please configure it in Settings."),
@@ -139,7 +145,8 @@ public partial class App : Application
                     SystemPrompt = _config.EffectiveSystemPrompt,
                     LengthInstruction = _config.CompletionLengthInstruction,
                     Temperature = _config.Temperature,
-                    MaxOutputTokens = _config.PresetMaxOutputTokens
+                    MaxOutputTokens = _config.PresetMaxOutputTokens,
+                    LearningService = _learningService
                 },
             "claude"
                 => throw new InvalidOperationException("Claude API key not set. Please configure it in Settings."),
@@ -417,16 +424,84 @@ public partial class App : Application
                 args.ShouldSwallow = true;
                 break;
 
+            case KeyboardHookService.SpecialKey.ShiftTab:
+                if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
+                {
+                    var buffer = _typingBuffer.CurrentText;
+                    var completion = _suggestionPanel.GetFullSuggestion().Substring(buffer.Length);
+                    var nextWord = GetNextWord(completion);
+
+                    LogToDebug($"Shift+Tab → Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");
+
+                    InjectText(nextWord);
+
+                    var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
+                    _acceptanceTracker.LogAccepted(buffer, nextWord, procName, winTitle);
+
+                    var newBuffer = buffer + nextWord;
+                    _rollingContext.AppendAccepted(newBuffer, procName, winTitle);
+
+                    // Update buffer silently (no event → no prediction debounce)
+                    _typingBuffer.SetText(newBuffer);
+                    _lastPredictionPrefix = newBuffer;
+                    CancelPendingPrediction();
+
+                    // Show the remaining completion, or hide if nothing left
+                    var remaining = completion[nextWord.Length..];
+                    if (string.IsNullOrWhiteSpace(remaining))
+                    {
+                        _suggestionPanel.HideSuggestion();
+                    }
+                    else
+                    {
+                        _suggestionPanel.ShowSuggestion(newBuffer, remaining);
+                    }
+
+                    args.ShouldSwallow = true;
+                }
+                break;
+
+            case KeyboardHookService.SpecialKey.CtrlRight:
+                if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
+                {
+                    var buffer = _typingBuffer.CurrentText;
+                    var completion = _suggestionPanel.GetFullSuggestion().Substring(buffer.Length);
+                    var nextWord = GetNextWord(completion);
+
+                    LogToDebug($"Ctrl+Right → Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");
+
+                    InjectText(nextWord);
+
+                    var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
+                    _acceptanceTracker.LogAccepted(buffer, nextWord, procName, winTitle);
+
+                    var newBuffer = buffer + nextWord;
+                    _rollingContext.AppendAccepted(newBuffer, procName, winTitle);
+
+                    _typingBuffer.SetText(newBuffer);
+                    _lastPredictionPrefix = newBuffer;
+                    CancelPendingPrediction();
+
+                    var remaining = completion[nextWord.Length..];
+                    if (string.IsNullOrWhiteSpace(remaining))
+                        _suggestionPanel.HideSuggestion();
+                    else
+                        _suggestionPanel.ShowSuggestion(newBuffer, remaining);
+
+                    args.ShouldSwallow = true;
+                }
+                break;
+
             case KeyboardHookService.SpecialKey.Tab:
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     var buffer = _typingBuffer.CurrentText;
                     var fullText = _suggestionPanel.GetFullSuggestion();
-                    
+
                     LogToDebug($"Tab → Buffer: \"{buffer}\" ({buffer.Length} chars)");
                     LogToDebug($"Tab → Buffer ends with space: {buffer.EndsWith(" ")}");
                     LogToDebug($"Tab → Full suggestion: \"{fullText}\" ({fullText.Length} chars)");
-                    
+
                     var completion = fullText.Substring(buffer.Length);
                     LogToDebug($"Tab → Injecting: \"{completion}\" ({completion.Length} chars)");
                     LogToDebug($"Tab → First char code: {(int)completion.FirstOrDefault()}");
@@ -645,36 +720,14 @@ public partial class App : Application
 
     private void InjectText(string text)
     {
-        // Save current clipboard, inject via Ctrl+V, then restore
-        // Clipboard operations must happen on the UI (STA) thread
-        string? previousClipboard = null;
-
-        Dispatcher.Invoke(() =>
-        {
-            try { if (Clipboard.ContainsText()) previousClipboard = Clipboard.GetText(); }
-            catch { }
-
-            Clipboard.SetText(text);
-        });
-
+        // Inject text directly via SendInput (VK_PACKET) — no clipboard involved.
+        // TextEntry sends each character as a Unicode keystroke, which works reliably
+        // across virtually all Windows apps without touching clipboard state.
         Task.Run(async () =>
         {
-            await Task.Delay(30); // Let Tab key release
+            await Task.Delay(30); // Let the accepting key (Tab/Shift+Tab) release first
             var simulator = new WindowsInput.InputSimulator();
-            simulator.Keyboard.ModifiedKeyStroke(
-                WindowsInput.Native.VirtualKeyCode.CONTROL,
-                WindowsInput.Native.VirtualKeyCode.VK_V);
-
-            // Restore previous clipboard after a brief delay
-            if (previousClipboard != null)
-            {
-                await Task.Delay(100);
-                Dispatcher.Invoke(() =>
-                {
-                    try { Clipboard.SetText(previousClipboard); }
-                    catch { }
-                });
-            }
+            simulator.Keyboard.TextEntry(text);
         });
     }
 
@@ -691,6 +744,19 @@ public partial class App : Application
     private void Log(string message)
     {
         File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+    }
+
+    /// <summary>
+    /// Extracts the first word (including leading space) from a completion string.
+    /// e.g. " because I had" → " because"
+    /// If the completion is a single word, returns it in full.
+    /// </summary>
+    private static string GetNextWord(string completion)
+    {
+        if (string.IsNullOrEmpty(completion)) return completion;
+        int start = completion[0] == ' ' ? 1 : 0;
+        int spaceIdx = completion.IndexOf(' ', start);
+        return spaceIdx < 0 ? completion : completion[..spaceIdx];
     }
 
     /// <summary>

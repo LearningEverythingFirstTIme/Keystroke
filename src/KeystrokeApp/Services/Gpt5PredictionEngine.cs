@@ -26,6 +26,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
     public string LengthInstruction { get; set; } = "Write 15-30 words to complete the full thought.";
     public double Temperature { get; set; } = 0.3;
     public int MaxOutputTokens { get; set; } = 100;
+    public AcceptanceLearningService LearningService { get; set; } = new();
 
     public Gpt5PredictionEngine(string apiKey, string model = "gpt-5.4-mini")
     {
@@ -56,28 +57,15 @@ public class Gpt5PredictionEngine : IPredictionEngine
 
         try
         {
-            var systemText = BuildSystemInstruction(context);
-            var userPrompt = BuildUserPrompt(context);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
 
             var body = new
             {
                 model = _model,
-                max_tokens = MaxOutputTokens,
+                max_tokens = adaptiveTokens,
                 temperature = Temperature,
                 top_p = 0.9,
-                messages = new object[]
-                {
-                    new
-                    {
-                        role = "system",
-                        content = systemText
-                    },
-                    new
-                    {
-                        role = "user",
-                        content = userPrompt
-                    }
-                }
+                messages = BuildMessages(context)
             };
 
             var json = JsonSerializer.Serialize(body);
@@ -86,7 +74,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Request for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={Temperature:F1}, rolling={rollingCtxLen}] ===");
+            Log($"=== Request for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={Temperature:F1}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
             var response = await _httpClient.PostAsync(
                 _endpoint,
@@ -131,29 +119,16 @@ public class Gpt5PredictionEngine : IPredictionEngine
 
         try
         {
-            var systemText = BuildSystemInstruction(context);
-            var userPrompt = BuildUserPrompt(context);
+            var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
 
             var body = new
             {
                 model = _model,
-                max_tokens = MaxOutputTokens,
+                max_tokens = adaptiveTokens,
                 temperature = Temperature,
                 top_p = 0.9,
                 stream = true,
-                messages = new object[]
-                {
-                    new
-                    {
-                        role = "system",
-                        content = systemText
-                    },
-                    new
-                    {
-                        role = "user",
-                        content = userPrompt
-                    }
-                }
+                messages = BuildMessages(context)
             };
 
             var json = JsonSerializer.Serialize(body);
@@ -161,7 +136,7 @@ public class Gpt5PredictionEngine : IPredictionEngine
             var category = context.HasAppContext
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
-            Log($"=== Stream for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={Temperature:F1}] ===");
+            Log($"=== Stream for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={Temperature:F1}, tokens={adaptiveTokens}] ===");
 
             var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
             {
@@ -304,6 +279,48 @@ public class Gpt5PredictionEngine : IPredictionEngine
         sb.Append(context.TypedText);
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds the full messages array: system message, then few-shot conversation turns,
+    /// then the real user request. For GPT-5 the system message is the first element.
+    /// </summary>
+    private object[] BuildMessages(ContextSnapshot context)
+    {
+        var systemText = BuildSystemInstruction(context);
+        var examples = LearningService.GetExamples(context, 3);
+        var messages = new List<object>();
+
+        // System message always first
+        messages.Add(new { role = "system", content = systemText });
+
+        // Few-shot pairs as conversation turns
+        foreach (var ex in examples)
+        {
+            var fewShotUser = $"[Application: {ex.Context}]\n\nThe user is currently typing the following text. Predict what comes next:\n\n{ex.Prefix}";
+            messages.Add(new { role = "user", content = fewShotUser });
+            messages.Add(new { role = "assistant", content = ex.Completion });
+        }
+
+        // Actual request
+        messages.Add(new { role = "user", content = BuildUserPrompt(context) });
+
+        if (examples.Count > 0)
+            Log($"Included {examples.Count} few-shot conversation turns for {context.ProcessName}");
+
+        return messages.ToArray();
+    }
+
+    /// <summary>
+    /// Caps max tokens based on prefix length. Short prefixes are highly ambiguous —
+    /// generating 100 tokens just produces vague output and wastes latency.
+    /// </summary>
+    private int GetAdaptiveMaxTokens(string prefix)
+    {
+        var wordCount = prefix.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        if (wordCount < 4) return Math.Min(25, MaxOutputTokens);
+        if (wordCount < 8) return Math.Min(60, MaxOutputTokens);
+        return MaxOutputTokens;
     }
 
     /// <summary>

@@ -44,7 +44,7 @@
                 <TextBlock x:Name="HintText"
                            FontFamily="Segoe UI" FontSize="10"
                            Foreground="#5A5A7A"
-                           Text="Tab to accept · Esc to dismiss"/>
+                           Text="Tab accept · Ctrl+&#x2192; word · Esc dismiss"/>
             </DockPanel>
         </StackPanel>
     </Border>

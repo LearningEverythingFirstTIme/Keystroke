@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
-using System.Windows.Input;
 
 namespace KeystrokeApp.Services;
 
@@ -26,9 +26,20 @@ public class KeyboardHookService : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? lpModuleName);
 
+
     // ==================== Constants ====================
 
     private const int WH_KEYBOARD_LL = 13;
+
+    // Modifier key virtual codes — WH_KEYBOARD_LL reports the specific
+    // left/right variants (0xA0/0xA1 for Shift, 0xA2/0xA3 for Ctrl),
+    // not the generic 0x10/0x11 codes used by WM_KEYDOWN messages.
+    private const int VK_SHIFT     = 0x10;
+    private const int VK_CONTROL   = 0x11;
+    private const int VK_LSHIFT    = 0xA0;
+    private const int VK_RSHIFT    = 0xA1;
+    private const int VK_LCONTROL  = 0xA2;
+    private const int VK_RCONTROL  = 0xA3;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
@@ -73,9 +84,16 @@ public class KeyboardHookService : IDisposable
     /// </summary>
     public event Action<SpecialKeyEventArgs>? SpecialKeyPressed;
 
+    /// <summary>
+    /// Diagnostic event — fired with raw hook state when Tab is pressed.
+    /// Useful for debugging modifier detection.
+    /// </summary>
+    public event Action<string>? HookDiagnostic;
+
     public enum SpecialKey
     {
         Tab,
+        ShiftTab,
         Escape,
         Backspace,
         Enter,
@@ -90,6 +108,7 @@ public class KeyboardHookService : IDisposable
         Delete,
         CtrlUpArrow,
         CtrlDownArrow,
+        CtrlRight,
         CtrlShiftK
     }
 
@@ -197,6 +216,15 @@ public class KeyboardHookService : IDisposable
 
     private bool ProcessKeyDown(int vkCode)
     {
+        // Diagnostic: log raw hook state when Tab is pressed so we can see modifier state
+        if (vkCode == VK_TAB)
+        {
+            var keysHex = string.Join(", ", _keysDown.Select(k => $"0x{k:X2}"));
+            var shiftDown = IsShiftDown();
+            var ctrlDown = IsCtrlDown();
+            HookDiagnostic?.Invoke($"[Hook] Tab pressed | _keysDown=[{keysHex}] | IsShiftDown={shiftDown} | IsCtrlDown={ctrlDown}");
+        }
+
         if (IsSpecialKey(vkCode, out SpecialKey specialKey))
         {
             var args = new SpecialKeyEventArgs(specialKey);
@@ -215,8 +243,8 @@ public class KeyboardHookService : IDisposable
 
     private bool IsSpecialKey(int vkCode, out SpecialKey specialKey)
     {
-        bool ctrlPressed = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
-        bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+        bool ctrlPressed = IsCtrlDown();
+        bool shiftPressed = IsShiftDown();
 
         // Ctrl+Shift+K for global toggle
         if (ctrlPressed && shiftPressed && vkCode == 0x4B) { specialKey = SpecialKey.CtrlShiftK; return true; }
@@ -224,6 +252,12 @@ public class KeyboardHookService : IDisposable
         // Ctrl+Up/Down for cycling suggestions
         if (ctrlPressed && vkCode == VK_UP) { specialKey = SpecialKey.CtrlUpArrow; return true; }
         if (ctrlPressed && vkCode == VK_DOWN) { specialKey = SpecialKey.CtrlDownArrow; return true; }
+
+        // Ctrl+Right for word-by-word acceptance
+        if (ctrlPressed && vkCode == VK_RIGHT) { specialKey = SpecialKey.CtrlRight; return true; }
+
+        // Shift+Tab for word-by-word acceptance (must check before plain Tab)
+        if (shiftPressed && vkCode == VK_TAB) { specialKey = SpecialKey.ShiftTab; return true; }
 
         specialKey = vkCode switch
         {
@@ -253,13 +287,13 @@ public class KeyboardHookService : IDisposable
         if (vkCode is >= 0x41 and <= 0x5A)
         {
             char c = (char)vkCode;
-            bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+            bool shiftPressed = IsShiftDown();
             return shiftPressed ? c : char.ToLower(c);
         }
-        
+
         if (vkCode is >= 0x30 and <= 0x39)
         {
-            bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+            bool shiftPressed = IsShiftDown();
             if (shiftPressed)
             {
                 return vkCode switch
@@ -283,7 +317,7 @@ public class KeyboardHookService : IDisposable
         if (vkCode == 0x20)
             return ' ';
 
-        bool shift = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+        bool shift = IsShiftDown();
         
         return vkCode switch
         {
@@ -301,6 +335,17 @@ public class KeyboardHookService : IDisposable
             _ => null
         };
     }
+
+    // ==================== Modifier Helpers ====================
+
+    // WH_KEYBOARD_LL fires before the OS updates GetKeyState/GetAsyncKeyState,
+    // so we track modifier state ourselves via _keysDown. The hook reports
+    // left/right variants (VK_LSHIFT etc.) rather than the generic codes.
+    private bool IsShiftDown() =>
+        _keysDown.Contains(VK_LSHIFT) || _keysDown.Contains(VK_RSHIFT) || _keysDown.Contains(VK_SHIFT);
+
+    private bool IsCtrlDown() =>
+        _keysDown.Contains(VK_LCONTROL) || _keysDown.Contains(VK_RCONTROL) || _keysDown.Contains(VK_CONTROL);
 
     // ==================== IDisposable ====================
 
