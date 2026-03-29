@@ -64,10 +64,12 @@ public class AcceptanceTracker
             {
                 timestamp = DateTime.UtcNow.ToString("o"),
                 action,
-                prefix,
-                completion,
+                // Scrub PII from tracked data — never store raw sensitive patterns on disk
+                prefix = PiiFilter.Scrub(prefix),
+                completion = PiiFilter.Scrub(completion),
                 app = processName,
-                window = windowTitle,
+                // Strip document names from window titles to reduce privacy exposure
+                window = StripWindowDetail(windowTitle),
                 category = AppCategory.GetEffectiveCategory(processName, windowTitle).ToString()
             };
 
@@ -75,5 +77,22 @@ public class AcceptanceTracker
             File.AppendAllText(_trackingPath, json + "\n");
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Remove document-specific details from window titles.
+    /// e.g., "Budget 2026.xlsx - Excel" becomes "Excel"
+    /// Keeps only the app name portion after the last " - " separator.
+    /// </summary>
+    private static string StripWindowDetail(string windowTitle)
+    {
+        if (string.IsNullOrEmpty(windowTitle))
+            return windowTitle;
+
+        var lastDash = windowTitle.LastIndexOf(" - ", StringComparison.Ordinal);
+        if (lastDash >= 0 && lastDash + 3 < windowTitle.Length)
+            return windowTitle[(lastDash + 3)..];
+
+        return windowTitle;
     }
 }

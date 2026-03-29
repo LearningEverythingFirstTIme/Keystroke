@@ -84,7 +84,7 @@ public partial class SettingsWindow : Window
         // Quality settings - feature toggles (stored in config, add properties as needed)
         OcrEnabledCheck.IsChecked = _config.OcrEnabled;
         RollingContextCheck.IsChecked = true; // Currently always on, could be config option
-        LearningEnabledCheck.IsChecked = true; // Currently always on, could be config option
+        LearningEnabledCheck.IsChecked = _config.LearningEnabled;
 
         // Advanced
         PromptBox.Text = _config.EffectiveSystemPrompt;
@@ -291,6 +291,7 @@ public partial class SettingsWindow : Window
         _config.DebounceMs = (int)DebounceSlider.Value;
         _config.FastDebounceMs = (int)FastDebounceSlider.Value;
         _config.OcrEnabled = OcrEnabledCheck.IsChecked == true;
+        _config.LearningEnabled = LearningEnabledCheck.IsChecked == true;
 
         var promptText = PromptBox.Text.Trim();
         _config.CustomSystemPrompt = (promptText == AppConfig.DefaultSystemPrompt) ? null : promptText;
@@ -313,7 +314,7 @@ public partial class SettingsWindow : Window
         RollingContextCheck.IsChecked = false;
         LearningEnabledCheck.IsChecked = false;
         TempSlider.Value = 0.2;
-        
+
         _loading = false;
         SaveSettings();
     }
@@ -321,14 +322,14 @@ public partial class SettingsWindow : Window
     private void PresetBalanced_Click(object sender, RoutedEventArgs e)
     {
         _loading = true;
-        
+
         LengthCombo.SelectedIndex = 2; // Extended
         MinCharsSlider.Value = 3;
         DebounceSlider.Value = 300;
         FastDebounceSlider.Value = 100;
         OcrEnabledCheck.IsChecked = true;
         RollingContextCheck.IsChecked = true;
-        LearningEnabledCheck.IsChecked = true;
+        LearningEnabledCheck.IsChecked = false;
         TempSlider.Value = 0.3;
         
         _loading = false;
@@ -338,14 +339,14 @@ public partial class SettingsWindow : Window
     private void PresetMaximum_Click(object sender, RoutedEventArgs e)
     {
         _loading = true;
-        
+
         LengthCombo.SelectedIndex = 3; // Unlimited
         MinCharsSlider.Value = 2;
         DebounceSlider.Value = 150;
         FastDebounceSlider.Value = 80;
         OcrEnabledCheck.IsChecked = true;
         RollingContextCheck.IsChecked = true;
-        LearningEnabledCheck.IsChecked = true;
+        LearningEnabledCheck.IsChecked = false;
         TempSlider.Value = 0.4;
         
         _loading = false;

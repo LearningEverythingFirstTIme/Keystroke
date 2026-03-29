@@ -55,6 +55,24 @@ public partial class App : Application
             _config = AppConfig.Load();
             Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
 
+            // First-launch consent — must accept before keystroke monitoring activates
+            if (!_config.ConsentAccepted)
+            {
+                var consent = new Views.ConsentDialog();
+                consent.ShowDialog();
+
+                if (!consent.Accepted)
+                {
+                    Log("User declined consent. Exiting.");
+                    Shutdown();
+                    return;
+                }
+
+                _config.ConsentAccepted = true;
+                _config.Save();
+                Log("User accepted consent.");
+            }
+
             // Prune tracking file if it's grown too large
             _acceptanceTracker.PruneIfNeeded(maxLines: 2000);
 
@@ -368,7 +386,7 @@ public partial class App : Application
                     var oldBuffer = _typingBuffer.CurrentText;
 
                     // Track dismissal if a suggestion was showing
-                    if (_suggestionPanel?.HasSuggestion == true)
+                    if (_config.LearningEnabled && _suggestionPanel?.HasSuggestion == true)
                     {
                         var (pn, wt) = ActiveWindowService.GetActiveWindow();
                         var dismissed = _suggestionPanel.GetFullSuggestion().Substring(oldBuffer.Length);
@@ -436,7 +454,8 @@ public partial class App : Application
                     InjectText(nextWord);
 
                     var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
-                    _acceptanceTracker.LogAccepted(buffer, nextWord, procName, winTitle);
+                    if (_config.LearningEnabled)
+                        _acceptanceTracker.LogAccepted(buffer, nextWord, procName, winTitle);
 
                     var newBuffer = buffer + nextWord;
                     _rollingContext.AppendAccepted(newBuffer, procName, winTitle);
@@ -473,7 +492,8 @@ public partial class App : Application
                     InjectText(nextWord);
 
                     var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
-                    _acceptanceTracker.LogAccepted(buffer, nextWord, procName, winTitle);
+                    if (_config.LearningEnabled)
+                        _acceptanceTracker.LogAccepted(buffer, nextWord, procName, winTitle);
 
                     var newBuffer = buffer + nextWord;
                     _rollingContext.AppendAccepted(newBuffer, procName, winTitle);
@@ -510,7 +530,8 @@ public partial class App : Application
 
                     // Track acceptance
                     var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
-                    _acceptanceTracker.LogAccepted(buffer, completion, procName, winTitle);
+                    if (_config.LearningEnabled)
+                        _acceptanceTracker.LogAccepted(buffer, completion, procName, winTitle);
 
                     // Update rolling context with the full accepted text (buffer + completion)
                     // This provides continuity for the next prediction
@@ -612,8 +633,10 @@ public partial class App : Application
             TypedText = buffer,
             ProcessName = processName,
             WindowTitle = windowTitle,
-            ScreenText = _ocrService?.CachedText,
-            RollingContext = _rollingContext.GetContext(processName, windowTitle)
+            // Scrub PII from data sent to external AI providers.
+            // TypedText is intentionally NOT scrubbed — it's the completion target.
+            ScreenText = PiiFilter.Scrub(_ocrService?.CachedText),
+            RollingContext = PiiFilter.Scrub(_rollingContext.GetContext(processName, windowTitle))
         };
 
         // Run prediction on background using streaming for progressive display

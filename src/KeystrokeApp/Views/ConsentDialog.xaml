@@ -1,0 +1,86 @@
+<Window x:Class="KeystrokeApp.Views.ConsentDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Keystroke — Privacy &amp; Consent"
+        Width="540" Height="520"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#1C2128">
+
+    <Grid Margin="32,24,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Welcome to Keystroke"
+                       FontSize="22" FontWeight="Bold"
+                       Foreground="#F0F6FC"/>
+            <TextBlock Text="Please review how this app works before continuing."
+                       FontSize="13" Foreground="#8B949E" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Scrollable consent text -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
+            <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9" FontSize="13" LineHeight="20">
+                <Bold>Keyboard Monitoring</Bold><LineBreak/>
+                Keystroke uses a system-wide keyboard hook to capture what you type
+                in order to provide AI-powered text completions. Your keystrokes are
+                processed locally and only the current typed text is sent to your
+                chosen AI provider (Google, Anthropic, or OpenAI) for prediction.<LineBreak/>
+                <LineBreak/>
+                <Bold>Screen Context (Optional)</Bold><LineBreak/>
+                When enabled, Keystroke can capture text visible on your screen using
+                OCR to improve prediction relevance. This screen text is sent to your
+                AI provider along with your typed text. You can disable this in Settings.<LineBreak/>
+                <LineBreak/>
+                <Bold>Data Sent to AI Providers</Bold><LineBreak/>
+                Each prediction request sends: your currently typed text, the active
+                application name, and (if enabled) screen context and recent typing
+                history. Sensitive patterns (emails, phone numbers, credit cards, SSNs)
+                are automatically redacted before transmission.<LineBreak/>
+                <LineBreak/>
+                <Bold>Local Data Storage</Bold><LineBreak/>
+                Your API keys are encrypted on disk using Windows DPAPI. If you opt in
+                to the Learning feature in Settings, accepted completions are logged
+                locally (with PII redacted) to improve future suggestions. No data is
+                stored on external servers by Keystroke.<LineBreak/>
+                <LineBreak/>
+                <Bold>Your Control</Bold><LineBreak/>
+                You can pause keystroke monitoring at any time via the system tray icon
+                or Ctrl+Shift+K. You can disable OCR and Learning in Settings. You can
+                clear all local data from Settings at any time.
+            </TextBlock>
+        </ScrollViewer>
+
+        <!-- Checkbox -->
+        <CheckBox x:Name="AgreeCheck" Grid.Row="2" Margin="0,0,0,16"
+                  Foreground="#C9D1D9" FontSize="13"
+                  Checked="AgreeCheck_Changed" Unchecked="AgreeCheck_Changed">
+            <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9">
+                I understand and consent to keyboard monitoring and data processing as described above.
+            </TextBlock>
+        </CheckBox>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="DeclineBtn" Content="Decline &amp; Exit"
+                    Width="120" Height="34" Margin="0,0,12,0"
+                    Click="Decline_Click"
+                    Background="#30363D" Foreground="#C9D1D9"
+                    BorderBrush="#484F58" BorderThickness="1"
+                    Cursor="Hand"/>
+            <Button x:Name="AcceptBtn" Content="Accept &amp; Continue"
+                    Width="150" Height="34"
+                    IsEnabled="False"
+                    Click="Accept_Click"
+                    Background="#238636" Foreground="#FFFFFF"
+                    BorderBrush="#2EA043" BorderThickness="1"
+                    Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>

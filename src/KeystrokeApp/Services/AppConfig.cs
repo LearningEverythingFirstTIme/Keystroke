@@ -1,17 +1,25 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace KeystrokeApp.Services;
 
 /// <summary>
 /// App configuration loaded from config.json.
+/// API keys are stored encrypted on disk using Windows DPAPI and
+/// decrypted transparently when loaded into memory.
 /// </summary>
 public class AppConfig
 {
-    // Engine settings
-    public string? GeminiApiKey { get; set; }
-    public string? AnthropicApiKey { get; set; }
-    public string? OpenAiApiKey { get; set; }
+    // Engine settings — runtime plaintext values (never serialized directly)
+    [JsonIgnore] public string? GeminiApiKey { get; set; }
+    [JsonIgnore] public string? AnthropicApiKey { get; set; }
+    [JsonIgnore] public string? OpenAiApiKey { get; set; }
+
+    // Encrypted on-disk representations (used only for JSON serialization)
+    public string? GeminiApiKeyEncrypted { get; set; }
+    public string? AnthropicApiKeyEncrypted { get; set; }
+    public string? OpenAiApiKeyEncrypted { get; set; }
     public string PredictionEngine { get; set; } = "gemini";
     public string GeminiModel { get; set; } = "gemini-2.5-flash";
     public string ClaudeModel { get; set; } = "claude-3-haiku-20240307";
@@ -29,6 +37,13 @@ public class AppConfig
 
     // Context features
     public bool OcrEnabled { get; set; } = true;
+
+    // Learning: opt-in tracking of accepted/dismissed completions for few-shot learning.
+    // Off by default — user must explicitly enable in settings.
+    public bool LearningEnabled { get; set; } = false;
+
+    // First-launch consent: must be true before the app activates keystroke monitoring.
+    public bool ConsentAccepted { get; set; } = false;
 
     // User-customizable system prompt (empty = use default)
     public string? CustomSystemPrompt { get; set; }
@@ -99,15 +114,85 @@ public class AppConfig
             if (File.Exists(ConfigPath))
             {
                 var json = File.ReadAllText(ConfigPath);
-                return JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+                var config = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+
+                // Decrypt API keys from their on-disk encrypted form
+                config.GeminiApiKey = KeyProtection.Decrypt(config.GeminiApiKeyEncrypted);
+                config.AnthropicApiKey = KeyProtection.Decrypt(config.AnthropicApiKeyEncrypted);
+                config.OpenAiApiKey = KeyProtection.Decrypt(config.OpenAiApiKeyEncrypted);
+
+                // Migrate legacy plaintext keys from old config format.
+                // Old configs stored keys as "GeminiApiKey" etc. directly in JSON.
+                // JsonSerializer will ignore them (marked [JsonIgnore]) but we can
+                // detect them by checking if the raw JSON contains the old field names
+                // while the encrypted fields are empty.
+                MigrateLegacyKeys(json, config);
+
+                return config;
             }
         }
         catch { }
         return new AppConfig();
     }
 
+    /// <summary>
+    /// Detects plaintext API keys from old config format and migrates them
+    /// to the encrypted fields. Saves the config immediately to remove
+    /// plaintext keys from disk.
+    /// </summary>
+    private static void MigrateLegacyKeys(string json, AppConfig config)
+    {
+        bool migrated = false;
+
+        // Parse raw JSON to check for legacy plaintext key fields
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (config.GeminiApiKey == null &&
+                root.TryGetProperty("GeminiApiKey", out var gemKey) &&
+                gemKey.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrEmpty(gemKey.GetString()))
+            {
+                config.GeminiApiKey = gemKey.GetString();
+                migrated = true;
+            }
+
+            if (config.AnthropicApiKey == null &&
+                root.TryGetProperty("AnthropicApiKey", out var antKey) &&
+                antKey.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrEmpty(antKey.GetString()))
+            {
+                config.AnthropicApiKey = antKey.GetString();
+                migrated = true;
+            }
+
+            if (config.OpenAiApiKey == null &&
+                root.TryGetProperty("OpenAiApiKey", out var oaiKey) &&
+                oaiKey.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrEmpty(oaiKey.GetString()))
+            {
+                config.OpenAiApiKey = oaiKey.GetString();
+                migrated = true;
+            }
+        }
+        catch { }
+
+        // Re-save immediately so plaintext keys are replaced with encrypted versions
+        if (migrated)
+        {
+            config.Save();
+        }
+    }
+
     public void Save()
     {
+        // Encrypt API keys before writing to disk
+        GeminiApiKeyEncrypted = KeyProtection.Encrypt(GeminiApiKey);
+        AnthropicApiKeyEncrypted = KeyProtection.Encrypt(AnthropicApiKey);
+        OpenAiApiKeyEncrypted = KeyProtection.Encrypt(OpenAiApiKey);
+
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(ConfigPath, json);

@@ -32,6 +32,7 @@ public class GeminiPredictionEngine : IPredictionEngine
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke", "gemini.log");
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", _apiKey);
     }
 
     private void Log(string msg)
@@ -101,7 +102,7 @@ public class GeminiPredictionEngine : IPredictionEngine
             Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, ocr={context.HasScreenContext}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
             var response = await _httpClient.PostAsync(
-                $"{_endpoint}?key={_apiKey}",
+                _endpoint,
                 new StringContent(json, Encoding.UTF8, "application/json"),
                 ct);
 
@@ -172,7 +173,7 @@ public class GeminiPredictionEngine : IPredictionEngine
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
             Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{_streamEndpoint}&key={_apiKey}")
+            var request = new HttpRequestMessage(HttpMethod.Post, _streamEndpoint)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
@@ -283,7 +284,7 @@ public class GeminiPredictionEngine : IPredictionEngine
             Log($"=== Alternatives for: \"{prefix}\" (count={count}, temp={altTemp:F1}, tokens={adaptiveTokens}) ===");
 
             var response = await _httpClient.PostAsync(
-                $"{_endpoint}?key={_apiKey}",
+                _endpoint,
                 new StringContent(json, Encoding.UTF8, "application/json"),
                 ct);
 
