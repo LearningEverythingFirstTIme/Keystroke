@@ -9,31 +9,44 @@ using System.Threading.Tasks;
 
 namespace KeystrokeApp.Services;
 
-public class GeminiPredictionEngine : IPredictionEngine
+/// <summary>
+/// Claude (Anthropic) prediction engine implementation.
+/// Uses the Messages API for chat completions.
+/// </summary>
+public class ClaudePredictionEngine : IPredictionEngine
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _endpoint;
-    private readonly string _streamEndpoint;
     private readonly string _logPath;
-    private readonly AcceptanceLearningService _learningService;
+
+    // Rate limiting protection
+    private static DateTime _lastRateLimitError = DateTime.MinValue;
+    private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromSeconds(10);
+    private int _consecutiveRateLimitErrors = 0;
 
     // These can be updated from settings without recreating the engine
     public string SystemPrompt { get; set; } = AppConfig.DefaultSystemPrompt;
-    public string LengthInstruction { get; set; } = "Write 15-30 words to complete the full thought.";
-    public double Temperature { get; set; } = 0.3;
+    public string LengthInstruction { get; set; } = "Write 15-30 words to complete the full thought. Never repeat words or phrases you've already used.";
+    public double Temperature { get; set; } = 0.1; // Lower for less repetition
     public int MaxOutputTokens { get; set; } = 100;
 
-    public GeminiPredictionEngine(string apiKey, string model = "gemini-2.5-flash")
+    public ClaudePredictionEngine(string apiKey, string model = "claude-3-haiku-20240307")
     {
         _apiKey = apiKey;
-        _endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
-        _streamEndpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse";
+        _endpoint = "https://api.anthropic.com/v1/messages";
         _logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Keystroke", "gemini.log");
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        _learningService = new AcceptanceLearningService();
+            "Keystroke", "claude.log");
+        _httpClient = new HttpClient 
+        { 
+            Timeout = TimeSpan.FromSeconds(15), // Increased timeout
+            DefaultRequestHeaders = 
+            {
+                { "x-api-key", apiKey },
+                { "anthropic-version", "2023-06-01" }
+            }
+        };
     }
 
     private void Log(string msg)
@@ -42,62 +55,39 @@ public class GeminiPredictionEngine : IPredictionEngine
         catch { }
     }
 
-    /// <summary>
-    /// Gets the appropriate temperature for the context.
-    /// Code needs precision (low temp), chat benefits from flexibility (higher temp).
-    /// Falls back to the configured Temperature if no app context.
-    /// </summary>
-    private double GetDynamicTemperature(ContextSnapshot context)
-    {
-        if (!context.HasAppContext)
-            return Temperature;
-
-        var category = AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle);
-        
-        return category switch
-        {
-            AppCategory.Category.Code => 0.1,      // Strict, deterministic for code
-            AppCategory.Category.Terminal => 0.1,  // Precise for commands
-            AppCategory.Category.Email => 0.2,     // Professional, predictable
-            AppCategory.Category.Document => 0.25, // Structured prose
-            AppCategory.Category.Browser => 0.3,   // Balanced for web forms
-            AppCategory.Category.Chat => 0.35,     // Slightly more creative for conversation
-            _ => Temperature                       // Default from settings
-        };
-    }
-
     public async Task<string?> PredictAsync(ContextSnapshot context, CancellationToken ct = default)
     {
         var prefix = context.TypedText;
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
             return null;
 
+        // Check if we're in rate limit cooldown
+        var timeSinceLastError = DateTime.UtcNow - _lastRateLimitError;
+        if (timeSinceLastError < RateLimitCooldown)
+        {
+            Log($"Rate limit cooldown active ({timeSinceLastError.TotalSeconds:F1}s remaining), skipping prediction");
+            return null;
+        }
+
         try
         {
-            var userPrompt = BuildUserPrompt(context);
             var systemText = BuildSystemInstruction(context);
-            var dynamicTemp = GetDynamicTemperature(context);
+            var userPrompt = BuildUserPrompt(context);
+            Log($"Request size estimate: sys={systemText.Length}, user={userPrompt.Length} chars");
 
             var body = new
             {
-                systemInstruction = new
-                {
-                    parts = new object[] { new { text = systemText } }
-                },
-                contents = new object[]
+                model = "claude-3-haiku-20240307",
+                max_tokens = MaxOutputTokens,
+                temperature = Temperature,
+                system = systemText,
+                messages = new object[]
                 {
                     new
                     {
                         role = "user",
-                        parts = new object[] { new { text = userPrompt } }
+                        content = userPrompt
                     }
-                },
-                generationConfig = new
-                {
-                    maxOutputTokens = MaxOutputTokens,
-                    temperature = dynamicTemp,
-                    topP = 0.9,
-                    thinkingConfig = new { thinkingBudget = 0 }
                 }
             };
 
@@ -107,10 +97,10 @@ public class GeminiPredictionEngine : IPredictionEngine
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, ocr={context.HasScreenContext}, rolling={rollingCtxLen}] ===");
+            Log($"=== Request for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}, rolling={rollingCtxLen}] ===");
 
             var response = await _httpClient.PostAsync(
-                $"{_endpoint}?key={_apiKey}",
+                _endpoint,
                 new StringContent(json, Encoding.UTF8, "application/json"),
                 ct);
 
@@ -118,19 +108,30 @@ public class GeminiPredictionEngine : IPredictionEngine
             {
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Error {response.StatusCode}: {err}");
+                
+                // Track rate limit errors for backoff
+                if ((int)response.StatusCode == 429 || err.Contains("rate_limit"))
+                {
+                    _lastRateLimitError = DateTime.UtcNow;
+                    _consecutiveRateLimitErrors++;
+                    Log($"Rate limit hit! Cooldown: {RateLimitCooldown.TotalSeconds}s, Consecutive errors: {_consecutiveRateLimitErrors}");
+                }
+                
                 return null;
             }
+            
+            // Reset consecutive errors on success
+            _consecutiveRateLimitErrors = 0;
 
             var respBody = await response.Content.ReadAsStringAsync(ct);
-            var result = JsonSerializer.Deserialize<GeminiResponse>(respBody);
-            var completion = result?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
+            var result = JsonSerializer.Deserialize<ClaudeResponse>(respBody);
+            var completion = result?.Content?[0]?.Text?.Trim();
             Log($"Completion: {completion ?? "(null)"}");
 
             if (string.IsNullOrWhiteSpace(completion))
                 return null;
 
-            // Strip quotes Gemini adds despite instructions —
-            // both full wrapping ("...") and lone leading/trailing marks
+            // Strip quotes and handle prefix duplication
             completion = completion.Trim('"');
             completion = completion.Trim();
 
@@ -151,32 +152,33 @@ public class GeminiPredictionEngine : IPredictionEngine
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
             return null;
 
+        // Check if we're in rate limit cooldown
+        var timeSinceLastError = DateTime.UtcNow - _lastRateLimitError;
+        if (timeSinceLastError < RateLimitCooldown)
+        {
+            Log($"Rate limit cooldown active ({timeSinceLastError.TotalSeconds:F1}s remaining), skipping stream");
+            return null;
+        }
+
         try
         {
-            var userPrompt = BuildUserPrompt(context);
             var systemText = BuildSystemInstruction(context);
-            var dynamicTemp = GetDynamicTemperature(context);
+            var userPrompt = BuildUserPrompt(context);
 
             var body = new
             {
-                systemInstruction = new
-                {
-                    parts = new object[] { new { text = systemText } }
-                },
-                contents = new object[]
+                model = "claude-3-haiku-20240307",
+                max_tokens = MaxOutputTokens,
+                temperature = Temperature,
+                system = systemText,
+                stream = true,
+                messages = new object[]
                 {
                     new
                     {
                         role = "user",
-                        parts = new object[] { new { text = userPrompt } }
+                        content = userPrompt
                     }
-                },
-                generationConfig = new
-                {
-                    maxOutputTokens = MaxOutputTokens,
-                    temperature = dynamicTemp,
-                    topP = 0.9,
-                    thinkingConfig = new { thinkingBudget = 0 }
                 }
             };
 
@@ -185,10 +187,9 @@ public class GeminiPredictionEngine : IPredictionEngine
             var category = context.HasAppContext
                 ? AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle)
                 : AppCategory.Category.Unknown;
-            var rollingCtxLen = context.RollingContext?.Length ?? 0;
-            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, rolling={rollingCtxLen}] ===");
+            Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={Temperature:F1}] ===");
 
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{_streamEndpoint}&key={_apiKey}")
+            var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
@@ -199,8 +200,20 @@ public class GeminiPredictionEngine : IPredictionEngine
             {
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Stream error {response.StatusCode}: {err}");
+                
+                // Track rate limit errors for backoff
+                if ((int)response.StatusCode == 429 || err.Contains("rate_limit"))
+                {
+                    _lastRateLimitError = DateTime.UtcNow;
+                    _consecutiveRateLimitErrors++;
+                    Log($"Rate limit hit in stream! Cooldown: {RateLimitCooldown.TotalSeconds}s");
+                }
+                
                 return null;
             }
+            
+            // Reset consecutive errors on success
+            _consecutiveRateLimitErrors = 0;
 
             var fullCompletion = new StringBuilder();
             bool isFirstChunk = true;
@@ -213,14 +226,16 @@ public class GeminiPredictionEngine : IPredictionEngine
                 var line = await reader.ReadLineAsync(ct);
                 if (line == null) break;
 
-                // SSE format: "data: {json}" lines, with blank lines between events
+                // SSE format: "event: type" and "data: {json}" lines
                 if (!line.StartsWith("data: ")) continue;
 
                 var dataJson = line[6..]; // Strip "data: " prefix
+                if (dataJson == "[DONE]") continue;
+
                 try
                 {
-                    var chunk = JsonSerializer.Deserialize<GeminiResponse>(dataJson);
-                    var text = chunk?.Candidates?[0]?.Content?.Parts?[0]?.Text;
+                    var chunk = JsonSerializer.Deserialize<ClaudeStreamEvent>(dataJson);
+                    var text = chunk?.Delta?.Text;
 
                     if (!string.IsNullOrEmpty(text))
                     {
@@ -258,98 +273,7 @@ public class GeminiPredictionEngine : IPredictionEngine
     }
 
     /// <summary>
-    /// Fetch multiple alternative completions using candidateCount.
-    /// Uses the non-streaming endpoint with slightly higher temperature for variety.
-    /// Returns a list of completions (may be empty).
-    /// </summary>
-    public async Task<List<string>> FetchAlternativesAsync(ContextSnapshot context, int count = 3, CancellationToken ct = default)
-    {
-        var results = new List<string>();
-        var prefix = context.TypedText;
-
-        if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3)
-            return results;
-
-        try
-        {
-            var userPrompt = BuildUserPrompt(context);
-            var systemText = BuildSystemInstruction(context);
-            var dynamicTemp = GetDynamicTemperature(context);
-            // For alternatives, add variety on top of the base dynamic temperature
-            var altTemp = Math.Min(dynamicTemp + 0.3, 1.5);
-
-            var body = new
-            {
-                systemInstruction = new
-                {
-                    parts = new object[] { new { text = systemText } }
-                },
-                contents = new object[]
-                {
-                    new
-                    {
-                        role = "user",
-                        parts = new object[] { new { text = userPrompt } }
-                    }
-                },
-                generationConfig = new
-                {
-                    maxOutputTokens = MaxOutputTokens,
-                    candidateCount = count,
-                    temperature = altTemp,
-                    topP = 0.95,
-                    thinkingConfig = new { thinkingBudget = 0 }
-                }
-            };
-
-            var json = JsonSerializer.Serialize(body);
-            Log($"=== Alternatives for: \"{prefix}\" (count={count}, temp={altTemp:F1}) ===");
-
-            var response = await _httpClient.PostAsync(
-                $"{_endpoint}?key={_apiKey}",
-                new StringContent(json, Encoding.UTF8, "application/json"),
-                ct);
-
-            if (!response.IsSuccessStatusCode)
-                return results;
-
-            var respBody = await response.Content.ReadAsStringAsync(ct);
-            var result = JsonSerializer.Deserialize<GeminiResponse>(respBody);
-
-            if (result?.Candidates == null)
-                return results;
-
-            foreach (var candidate in result.Candidates)
-            {
-                var text = candidate?.Content?.Parts?[0]?.Text?.Trim();
-                if (string.IsNullOrWhiteSpace(text)) continue;
-
-                text = text.Trim('"');
-                if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    text = text[prefix.Length..];
-
-                // Add leading space if needed
-                if (text.Length > 0 && !prefix.EndsWith(" ") && !text.StartsWith(" "))
-                    text = " " + text;
-
-                text = TrimToWholeWords(text.Trim('"'));
-                text = RejectDuplicate(prefix, text!);
-
-                if (!string.IsNullOrWhiteSpace(text))
-                    results.Add(text);
-            }
-
-            Log($"Got {results.Count} alternatives");
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { Log($"Alternatives error: {ex.Message}"); }
-
-        return results;
-    }
-
-    /// <summary>
-    /// Build the system instruction — stable behavioral rules + app-specific tone + few-shot examples.
-    /// This goes into Gemini's systemInstruction field (separate from user content).
+    /// Build the system instruction — stable behavioral rules + app-specific tone.
     /// </summary>
     private string BuildSystemInstruction(ContextSnapshot context)
     {
@@ -366,25 +290,7 @@ public class GeminiPredictionEngine : IPredictionEngine
         }
 
         // Add few-shot examples from learning service
-        var examples = _learningService.GetExamples(context, 3);
-        if (examples.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("Here are examples of completions the user has accepted in the past. " +
-                "Match this style, tone, and level of detail:");
-            sb.AppendLine();
-            
-            for (int i = 0; i < examples.Count; i++)
-            {
-                var ex = examples[i];
-                sb.AppendLine($"Example {i + 1} ({ex.Context}):");
-                sb.AppendLine($"  User typed: \"{ex.Prefix}\"");
-                sb.AppendLine($"  Accepted completion: \"{ex.Completion}\"");
-                sb.AppendLine();
-            }
-            
-            Log($"Included {examples.Count} few-shot examples in prompt for {context.ProcessName}");
-        }
+        // Note: We could inject AcceptanceLearningService here for consistency
 
         sb.AppendLine();
         sb.AppendLine(LengthInstruction);
@@ -394,7 +300,6 @@ public class GeminiPredictionEngine : IPredictionEngine
 
     /// <summary>
     /// Build the user-facing prompt — rolling context + screen context + the text to complete.
-    /// Kept separate from system instruction so Gemini treats it as the "input".
     /// </summary>
     private string BuildUserPrompt(ContextSnapshot context)
     {
@@ -408,13 +313,12 @@ public class GeminiPredictionEngine : IPredictionEngine
         }
 
         // Rolling context: recently accepted text from this editing session
-        // This provides continuity across multiple completion/tab cycles
+        // Reduced size for Claude to stay under rate limits
         if (context.HasRollingContext)
         {
             var rollingText = context.RollingContext!;
-            // Limit rolling context to avoid overwhelming the prompt
-            if (rollingText.Length > 400)
-                rollingText = "..." + rollingText[^400..];
+            if (rollingText.Length > 200)
+                rollingText = "..." + rollingText[^200..];
 
             sb.AppendLine("Recently written text (the user's previous sentences in this document/conversation):");
             sb.AppendLine("---");
@@ -423,12 +327,13 @@ public class GeminiPredictionEngine : IPredictionEngine
             sb.AppendLine();
         }
 
-        // Screen context from OCR — this is the most valuable signal for external context
+        // Screen context from OCR
+        // Reduced size for Claude to stay under rate limits
         if (context.HasScreenContext)
         {
             var screenText = context.ScreenText!;
-            if (screenText.Length > 1200)
-                screenText = "..." + screenText[^1200..];
+            if (screenText.Length > 600)
+                screenText = "..." + screenText[^600..];
 
             sb.AppendLine("Text visible on screen (the conversation/document the user is participating in):");
             sb.AppendLine("---");
@@ -446,8 +351,6 @@ public class GeminiPredictionEngine : IPredictionEngine
 
     /// <summary>
     /// Detect if the completion is just repeating text the user already typed.
-    /// Checks if a significant chunk of the completion already appears in the typed text.
-    /// Returns null if it's a duplicate, otherwise returns the completion unchanged.
     /// </summary>
     private static string? RejectDuplicate(string typedText, string completion)
     {
@@ -459,7 +362,6 @@ public class GeminiPredictionEngine : IPredictionEngine
             return completion;
 
         // Check if the completion (or a substantial portion) already appears in the typed text
-        // Use a sliding window: if any 8+ word sequence from the completion exists in the typed text, reject it
         var completionWords = cleanCompletion.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var typedLower = typedText.ToLowerInvariant();
 
@@ -479,8 +381,6 @@ public class GeminiPredictionEngine : IPredictionEngine
 
     /// <summary>
     /// Trim trailing partial words so completions always end on a word boundary.
-    /// A "complete" ending is one that ends with a space, punctuation, or is the
-    /// end of a full word followed by nothing.
     /// </summary>
     private static string TrimToWholeWords(string text)
     {
@@ -497,7 +397,6 @@ public class GeminiPredictionEngine : IPredictionEngine
             return trimmed;
 
         // Find the last space — everything after it is the last word.
-        // If there's no space at all, the entire text is one word — keep it.
         int lastSpace = trimmed.LastIndexOf(' ');
         if (lastSpace < 0)
             return trimmed;
@@ -507,12 +406,34 @@ public class GeminiPredictionEngine : IPredictionEngine
         if (lastWord.Length == 1 && lastWord != "I" && lastWord != "a" && lastWord != "A")
             return trimmed[..lastSpace].TrimEnd();
 
-        // Otherwise keep it — it's likely a whole word, just no trailing punctuation
         return trimmed;
     }
 
-    private class GeminiResponse { [JsonPropertyName("candidates")] public GeminiCandidate[]? Candidates { get; set; } }
-    private class GeminiCandidate { [JsonPropertyName("content")] public GeminiContent? Content { get; set; } }
-    private class GeminiContent { [JsonPropertyName("parts")] public GeminiPart[]? Parts { get; set; } }
-    private class GeminiPart { [JsonPropertyName("text")] public string? Text { get; set; } }
+    // Response models
+    private class ClaudeResponse
+    {
+        [JsonPropertyName("content")]
+        public ClaudeContent[]? Content { get; set; }
+    }
+
+    private class ClaudeContent
+    {
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+    }
+
+    private class ClaudeStreamEvent
+    {
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+
+        [JsonPropertyName("delta")]
+        public ClaudeDelta? Delta { get; set; }
+    }
+
+    private class ClaudeDelta
+    {
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+    }
 }

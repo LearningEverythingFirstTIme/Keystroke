@@ -28,6 +28,8 @@ public partial class App : Application
     private DebounceTimer? _fastDebounceTimer;
     private PredictionCache _predictionCache = new(50);
     private AcceptanceTracker _acceptanceTracker = new();
+    private RollingContextService _rollingContext = new(maxChars: 500, timeoutMinutes: 5);
+    private AcceptanceLearningService _learningService = new();
     private bool _isEnabled = true;
     private MenuItem? _enabledMenuItem;
     private CancellationTokenSource? _predictionCts;
@@ -120,7 +122,27 @@ public partial class App : Application
                     MaxOutputTokens = _config.PresetMaxOutputTokens
                 },
             "gemini"
-                => throw new InvalidOperationException("Gemini API key not set in config.json"),
+                => throw new InvalidOperationException("Gemini API key not set. Please configure it in Settings."),
+            "gpt5" when !string.IsNullOrWhiteSpace(_config.OpenAiApiKey)
+                => new Gpt5PredictionEngine(_config.OpenAiApiKey, _config.Gpt5Model)
+                {
+                    SystemPrompt = _config.EffectiveSystemPrompt,
+                    LengthInstruction = _config.CompletionLengthInstruction,
+                    Temperature = _config.Temperature,
+                    MaxOutputTokens = _config.PresetMaxOutputTokens
+                },
+            "gpt5"
+                => throw new InvalidOperationException("OpenAI API key not set. Please configure it in Settings."),
+            "claude" when !string.IsNullOrWhiteSpace(_config.AnthropicApiKey)
+                => new ClaudePredictionEngine(_config.AnthropicApiKey, _config.ClaudeModel)
+                {
+                    SystemPrompt = _config.EffectiveSystemPrompt,
+                    LengthInstruction = _config.CompletionLengthInstruction,
+                    Temperature = _config.Temperature,
+                    MaxOutputTokens = _config.PresetMaxOutputTokens
+                },
+            "claude"
+                => throw new InvalidOperationException("Claude API key not set. Please configure it in Settings."),
             _ => new DummyPredictionEngine()
         };
     }
@@ -186,6 +208,39 @@ public partial class App : Application
             _testWindow.Log($"Status: {(_isEnabled ? "Enabled" : "Disabled")}");
             _testWindow.Log($"Engine: {_predictionEngine?.GetType().Name}");
             _testWindow.Log($"Buffer: \"{_typingBuffer.CurrentText}\"");
+            
+            // Show rolling context status
+            var ctxInfo = _rollingContext.GetInfo();
+            if (ctxInfo.Length > 0 && !ctxInfo.IsStale)
+            {
+                _testWindow.Log($"Rolling context: {ctxInfo.Length} chars from {ctxInfo.Process}");
+                _testWindow.Log($"  Last: \"{TruncateString(ctxInfo.WindowTitle, 40)}\"");
+            }
+            else
+            {
+                _testWindow.Log("Rolling context: (empty or stale)");
+            }
+            
+            // Show learning stats
+            var learningStats = _learningService.GetStats();
+            _testWindow.Log($"Learning file: {learningStats.DataFilePath}");
+            _testWindow.Log($"  Exists: {learningStats.DataFileExists}, Size: {learningStats.DataFileSize} bytes");
+            
+            if (learningStats.TotalAccepted > 0)
+            {
+                _testWindow.Log($"Learning data: {learningStats.TotalAccepted} accepted completions");
+                var categories = string.Join(", ", learningStats.ByCategory.Select(kvp => $"{kvp.Key}:{kvp.Value}"));
+                _testWindow.Log($"  By category: {categories}");
+            }
+            else if (learningStats.DataFileExists && learningStats.DataFileSize > 0)
+            {
+                _testWindow.Log("Learning data: File exists but 0 entries loaded (parsing issue?)");
+            }
+            else
+            {
+                _testWindow.Log("Learning data: (no data yet)");
+            }
+            
             _testWindow.Log("Type anywhere to see events here.\n");
         }
         _testWindow.Show();
@@ -215,14 +270,9 @@ public partial class App : Application
         _config = AppConfig.Load();
         Log("Settings updated from config.");
 
-        // Update prediction engine properties
-        if (_predictionEngine is GeminiPredictionEngine gemini)
-        {
-            gemini.SystemPrompt = _config.EffectiveSystemPrompt;
-            gemini.LengthInstruction = _config.CompletionLengthInstruction;
-            gemini.Temperature = _config.Temperature;
-            gemini.MaxOutputTokens = _config.PresetMaxOutputTokens;
-        }
+        // Recreate the engine so the new API key/model takes effect immediately
+        _predictionEngine = CreatePredictionEngine();
+        Log($"Prediction engine recreated: {_predictionEngine?.GetType().Name}");
 
         // Update debounce timers
         _debounceTimer?.Dispose();
@@ -387,6 +437,12 @@ public partial class App : Application
                     var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
                     _acceptanceTracker.LogAccepted(buffer, completion, procName, winTitle);
 
+                    // Update rolling context with the full accepted text (buffer + completion)
+                    // This provides continuity for the next prediction
+                    var fullAcceptedText = buffer + completion;
+                    _rollingContext.AppendAccepted(fullAcceptedText, procName, winTitle);
+                    LogToDebug($"Tab → Rolling context updated (+{fullAcceptedText.Length} chars)");
+
                     _typingBuffer.Clear();
                     _suggestionPanel.HideSuggestion();
                     CancelPendingPrediction();
@@ -481,7 +537,8 @@ public partial class App : Application
             TypedText = buffer,
             ProcessName = processName,
             WindowTitle = windowTitle,
-            ScreenText = _ocrService?.CachedText
+            ScreenText = _ocrService?.CachedText,
+            RollingContext = _rollingContext.GetContext(processName, windowTitle)
         };
 
         // Run prediction on background using streaming for progressive display
@@ -523,7 +580,10 @@ public partial class App : Application
 
                 if (completion != null)
                 {
-                    LogToDebug($"Streamed: \"{buffer}\" + \"{completion}\" [app={processName}]");
+                    var rollingInfo = context.HasRollingContext 
+                        ? $"[rolling={context.RollingContext!.Length} chars]" 
+                        : "[no rolling context]";
+                    LogToDebug($"Streamed: \"{buffer}\" + \"{completion}\" [app={processName}] {rollingInfo}");
 
                     // Fire background request for alternatives
                     _ = FetchAlternativesAsync(context, buffer, ct);
@@ -631,6 +691,15 @@ public partial class App : Application
     private void Log(string message)
     {
         File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+    }
+
+    /// <summary>
+    /// Helper to truncate strings for display.
+    /// </summary>
+    private static string TruncateString(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : value[..maxLength] + "...";
     }
 
     protected override void OnExit(ExitEventArgs e)

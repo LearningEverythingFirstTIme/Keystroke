@@ -27,8 +27,15 @@ public class ContextSnapshot
     public string? ScreenText { get; init; }
 
     /// <summary>
+    /// Recently accepted text from previous completions in the same session.
+    /// Provides continuity across completion sessions.
+    /// </summary>
+    public string? RollingContext { get; init; }
+
+    /// <summary>
     /// Whether any meaningful context beyond the typed text is available.
     /// </summary>
     public bool HasAppContext => !string.IsNullOrEmpty(ProcessName);
     public bool HasScreenContext => !string.IsNullOrEmpty(ScreenText);
+    public bool HasRollingContext => !string.IsNullOrEmpty(RollingContext);
 }

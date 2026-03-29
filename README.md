@@ -20,6 +20,9 @@ A system-wide AI autocomplete for Windows. Keystroke runs in the background, wat
 - **Multi-suggestion cycling** — press `Ctrl+Down` / `Ctrl+Up` to browse alternative completions
 - **Smart debounce** — triggers instantly on word boundaries (space, period), fast 100ms debounce mid-word
 - **LRU prediction cache** — repeated or backspaced prefixes get instant results
+- **Rolling context window** — remembers your last 500 characters of accepted text for topic continuity across multiple completions
+- **Acceptance-based learning** — learns from completions you accept to match your style with few-shot examples
+- **Dynamic temperature** — automatically adjusts creativity: precise (0.1) for code/terminal, balanced (0.25-0.3) for documents, flexible (0.35) for chat
 - **Anti-loop detection** — prevents the model from echoing text you've already written
 - **Whole-word trimming** — completions always end on clean word boundaries
 - **Acceptance tracking** — logs accepted/dismissed predictions to JSONL for future analysis
@@ -83,6 +86,17 @@ All settings are stored in `%AppData%/Keystroke/config.json` and are editable th
 | `Ctrl+Up` | Previous alternative suggestion |
 | `Ctrl+Shift+K` | Toggle Keystroke on/off |
 
+## Settings
+
+The Settings window provides an intuitive interface to customize Keystroke:
+
+- **🧠 General Tab** — Engine selection, API key, trigger behavior, debounce timing
+- **✨ Quality Tab** — Toggle smart features (rolling context, learning, OCR), creativity settings
+- **📊 Learning Tab** — Visual statistics showing accepted completions by category
+- **⚙️ Advanced Tab** — Custom system prompt editing
+
+**Quick Presets:** Choose from Minimal, Balanced, or Maximum quality presets for instant configuration.
+
 ## Project structure
 
 ```
@@ -99,6 +113,8 @@ src/KeystrokeApp/
     DebounceTimer.cs               # Configurable debounce with cancellation
     PredictionCache.cs             # LRU cache (50 entries)
     AcceptanceTracker.cs           # JSONL logging of accepted/dismissed predictions
+    AcceptanceLearningService.cs   # Learns from accepted completions for few-shot prompting
+    RollingContextService.cs       # Tracks recently accepted text for continuity
     CursorPositionHelper.cs        # Cross-process caret position detection
     ContextSnapshot.cs             # Context bundle for prediction requests
   Views/

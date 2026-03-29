@@ -10,8 +10,12 @@ public class AppConfig
 {
     // Engine settings
     public string? GeminiApiKey { get; set; }
+    public string? AnthropicApiKey { get; set; }
+    public string? OpenAiApiKey { get; set; }
     public string PredictionEngine { get; set; } = "gemini";
     public string GeminiModel { get; set; } = "gemini-2.5-flash";
+    public string ClaudeModel { get; set; } = "claude-3-haiku-20240307";
+    public string Gpt5Model { get; set; } = "gpt-5.4-mini";
 
     // Behavior settings
     public int DebounceMs { get; set; } = 300;
