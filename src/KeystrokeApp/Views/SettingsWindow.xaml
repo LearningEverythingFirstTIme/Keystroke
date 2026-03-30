@@ -41,14 +41,18 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border Name="Border" Background="Transparent" CornerRadius="6,6,0,0" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <DockPanel>
+                            <Border Name="Border" Background="Transparent" CornerRadius="6,6,0,0" Padding="{TemplateBinding Padding}" DockPanel.Dock="Top">
+                                <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border Name="Underline" Background="Transparent" Height="2" DockPanel.Dock="Bottom"/>
+                        </DockPanel>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Border" Property="Background" Value="{StaticResource BgCard}"/>
                                 <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
                                 <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter TargetName="Underline" Property="Background" Value="{StaticResource Accent}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Border" Property="Background" Value="{StaticResource BgHover}"/>

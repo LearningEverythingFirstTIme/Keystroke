@@ -31,6 +31,8 @@ public partial class App : Application
     private RollingContextService _rollingContext = new(maxChars: 500, timeoutMinutes: 5);
     private AcceptanceLearningService _learningService = new();
     private bool _isEnabled = true;
+    private int _sessionAcceptCount;
+    private Timer? _suspendTimer;
     private MenuItem? _enabledMenuItem;
     private readonly object _predictionCtsLock = new();
     private CancellationTokenSource? _predictionCts;
@@ -179,8 +181,8 @@ public partial class App : Application
     private void CreateTrayIcon()
     {
         _trayIcon = new TaskbarIcon();
-        _trayIcon.Icon = CreateKeyboardIcon();
-        _trayIcon.ToolTipText = "Keystroke";
+        _trayIcon.Icon = CreateKeyboardIcon(_isEnabled);
+        _trayIcon.ToolTipText = BuildToolTip();
 
         var menu = new ContextMenu();
 
@@ -188,14 +190,53 @@ public partial class App : Application
         _enabledMenuItem.Click += (s, e) =>
         {
             _isEnabled = _enabledMenuItem.IsChecked;
-            _trayIcon!.ToolTipText = _isEnabled ? "Keystroke" : "Keystroke (disabled)";
+            _trayIcon!.Icon = CreateKeyboardIcon(_isEnabled);
+            _trayIcon!.ToolTipText = BuildToolTip();
             Log(_isEnabled ? "Enabled" : "Disabled");
+        };
+
+        var suspendItem = new MenuItem { Header = "Suspend for 30 min" };
+        suspendItem.Click += (s, e) =>
+        {
+            _isEnabled = false;
+            _enabledMenuItem.IsChecked = false;
+            _trayIcon!.Icon = CreateKeyboardIcon(false);
+            _trayIcon!.ToolTipText = BuildToolTip() + "\nSuspended until " + DateTime.Now.AddMinutes(30).ToString("t");
+            _suggestionPanel?.HideSuggestion();
+            CancelPendingPrediction();
+            _typingBuffer.Clear();
+            Log("Suspended for 30 minutes");
+
+            _suspendTimer?.Dispose();
+            _suspendTimer = new Timer(_ =>
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _isEnabled = true;
+                    _enabledMenuItem.IsChecked = true;
+                    _trayIcon!.Icon = CreateKeyboardIcon(true);
+                    _trayIcon!.ToolTipText = BuildToolTip();
+                    Log("Resumed after suspension");
+                });
+            }, null, TimeSpan.FromMinutes(30), TimeSpan.FromMilliseconds(-1));
+        };
+
+        var engineInfo = new MenuItem
+        {
+            Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})",
+            IsEnabled = false
+        };
+
+        var sessionInfo = new MenuItem
+        {
+            Header = $"Accepted: {_sessionAcceptCount} this session",
+            IsEnabled = false
         };
 
         var showDebugItem = new MenuItem { Header = "Show Debug Window" };
         showDebugItem.Click += (s, e) => ShowDebugWindow();
 
-        var settingsItem = new MenuItem { Header = "⚙️ Settings" };
+        var settingsItem = new MenuItem { Header = "Settings" };
         settingsItem.Click += (s, e) => ShowSettingsWindow();
 
         var openConfigItem = new MenuItem { Header = "Open Config Folder" };
@@ -216,6 +257,10 @@ public partial class App : Application
         };
 
         menu.Items.Add(_enabledMenuItem);
+        menu.Items.Add(suspendItem);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(engineInfo);
+        menu.Items.Add(sessionInfo);
         menu.Items.Add(new Separator());
         menu.Items.Add(settingsItem);
         menu.Items.Add(showDebugItem);
@@ -224,7 +269,27 @@ public partial class App : Application
         menu.Items.Add(exitItem);
 
         _trayIcon.ContextMenu = menu;
-        _trayIcon.TrayMouseDoubleClick += (s, e) => ShowDebugWindow();
+        _trayIcon.TrayMouseDoubleClick += (s, e) => ShowSettingsWindow();
+    }
+
+    private string BuildToolTip()
+    {
+        var status = _isEnabled ? "Active" : "Paused";
+        var engine = _config.PredictionEngine;
+        var model = GetCurrentModelName();
+        var accepted = _sessionAcceptCount;
+        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session";
+    }
+
+    private string GetCurrentModelName()
+    {
+        return _config.PredictionEngine.ToLower() switch
+        {
+            "gemini" => _config.GeminiModel ?? "default",
+            "gpt5" => _config.Gpt5Model ?? "default",
+            "claude" => _config.ClaudeModel ?? "default",
+            _ => "default"
+        };
     }
 
     private void ShowDebugWindow()
@@ -327,6 +392,12 @@ public partial class App : Application
             _ocrService = null;
             Log("OCR disabled.");
         }
+
+        if (_trayIcon != null)
+        {
+            _trayIcon.ToolTipText = BuildToolTip();
+            _trayIcon.Icon = CreateKeyboardIcon(_isEnabled);
+        }
     }
 
     private void ToggleEnabled()
@@ -339,6 +410,8 @@ public partial class App : Application
                 _enabledMenuItem.IsChecked = _isEnabled;
             if (_trayIcon != null)
                 _trayIcon.ToolTipText = _isEnabled ? "Keystroke" : "Keystroke (disabled)";
+                _trayIcon.Icon = CreateKeyboardIcon(_isEnabled);
+                _trayIcon.ToolTipText = BuildToolTip();
 
             if (!_isEnabled)
             {
@@ -533,6 +606,11 @@ public partial class App : Application
 
                     InjectText(completion);
 
+                    // Show confirmation flash
+                    _suggestionPanel?.AcceptSuggestion();
+                    _sessionAcceptCount++;
+                    UpdateTraySessionInfo();
+
                     // Track acceptance
                     var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
                     if (_config.LearningEnabled)
@@ -685,6 +763,12 @@ public partial class App : Application
 
                 if (ct.IsCancellationRequested) return;
 
+                // Signal that streaming is complete - suggestion is fully loaded
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _suggestionPanel?.OnStreamingComplete();
+                });
+
                 if (completion != null)
                 {
                     var rollingInfo = context.HasRollingContext 
@@ -830,6 +914,20 @@ public partial class App : Application
         return value.Length <= maxLength ? value : value[..maxLength] + "...";
     }
 
+    private void UpdateTraySessionInfo()
+    {
+        if (_trayIcon?.ContextMenu?.Items == null) return;
+        foreach (var item in _trayIcon.ContextMenu.Items)
+        {
+            if (item is MenuItem mi && mi.Header is string s && s.StartsWith("Accepted:"))
+            {
+                mi.Header = $"Accepted: {_sessionAcceptCount} this session";
+                break;
+            }
+        }
+        _trayIcon.ToolTipText = BuildToolTip();
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         Log("App exiting...");
@@ -842,23 +940,26 @@ public partial class App : Application
         _suggestionPanel?.Close();
         _debounceTimer?.Dispose();
         _fastDebounceTimer?.Dispose();
+        _suspendTimer?.Dispose();
         base.OnExit(e);
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool DestroyIcon(IntPtr handle);
 
-    private Icon CreateKeyboardIcon()
+    private Icon CreateKeyboardIcon(bool enabled = true)
     {
         using var bitmap = new Bitmap(32, 32);
         using var g = Graphics.FromImage(bitmap);
 
         g.Clear(System.Drawing.Color.FromArgb(30, 30, 46));
 
-        using var brush = new SolidBrush(System.Drawing.Color.FromArgb(200, 200, 220));
+        using var bodyBrush = new SolidBrush(System.Drawing.Color.FromArgb(200, 200, 220));
         using var smallBrush = new SolidBrush(System.Drawing.Color.FromArgb(30, 30, 46));
+        using var statusGreen = new SolidBrush(System.Drawing.Color.FromArgb(47, 186, 78));
+        using var statusGray = new SolidBrush(System.Drawing.Color.FromArgb(100, 100, 120));
 
-        g.FillRectangle(brush, 2, 8, 28, 16);
+        g.FillRectangle(bodyBrush, 2, 8, 28, 16);
 
         for (int i = 0; i < 5; i++)
         {
@@ -866,8 +967,9 @@ public partial class App : Application
         }
         g.FillRectangle(smallBrush, 8, 18, 16, 3);
 
+        g.FillEllipse(enabled ? statusGreen : statusGray, 22, 2, 8, 8);
+
         var hIcon = bitmap.GetHicon();
-        // Icon.FromHandle doesn't take ownership — clone it so we can free the GDI handle
         var tempIcon = Icon.FromHandle(hIcon);
         var icon = (Icon)tempIcon.Clone();
         tempIcon.Dispose();

@@ -15,11 +15,11 @@
         ResizeMode="NoResize">
     
     <Border x:Name="SuggestionBorder"
-            Background="#E81E1E2E"
-            CornerRadius="8"
+            Background="#CC161B22"
+            CornerRadius="10"
             Padding="14,10"
             Margin="4"
-            BorderBrush="#3A3A5A"
+            BorderBrush="#30FFFFFF"
             BorderThickness="1"
             Cursor="SizeAll"
             MouseLeftButtonDown="Border_MouseLeftButtonDown"
@@ -27,22 +27,44 @@
             MouseLeftButtonUp="Border_MouseLeftButtonUp">
 
         <Border.RenderTransform>
-            <TranslateTransform x:Name="SlideTransform" Y="0"/>
+            <TransformGroup>
+                <ScaleTransform x:Name="ScaleTransform" ScaleX="0.95" ScaleY="0.95"/>
+                <TranslateTransform x:Name="SlideTransform" Y="8"/>
+            </TransformGroup>
         </Border.RenderTransform>
         
         <Border.Effect>
-            <DropShadowEffect Color="Black" Opacity="0.5" BlurRadius="16" ShadowDepth="3"/>
+            <DropShadowEffect Color="Black" 
+                              Opacity="0.5" 
+                              BlurRadius="24" 
+                              ShadowDepth="4"/>
         </Border.Effect>
         
         <StackPanel>
-            <!-- The suggestion (completion from Gemini) -->
+            <StackPanel x:Name="LoadingIndicator" 
+                        Orientation="Horizontal" 
+                        Visibility="Collapsed"
+                        Margin="0,0,0,4">
+                <TextBlock Text="Thinking" 
+                           FontFamily="Segoe UI" FontSize="12"
+                           Foreground="#8B949E"
+                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="LoadingDots" 
+                           FontFamily="Segoe UI" FontSize="12"
+                           Foreground="#8B949E"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+            
             <TextBlock x:Name="CompletionText"
                        FontFamily="Segoe UI" FontSize="14"
                        Foreground="#E0E0F0" FontWeight="SemiBold"
                        TextWrapping="Wrap"
                        MaxWidth="560"/>
 
-            <!-- Hint line with suggestion counter -->
+            <WrapPanel x:Name="CompletionWordsPanel" 
+                       MaxWidth="560"
+                       Visibility="Collapsed"/>
+
             <DockPanel Margin="0,6,0,0">
                 <TextBlock x:Name="CounterText"
                            DockPanel.Dock="Right"
