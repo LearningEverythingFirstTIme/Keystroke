@@ -32,7 +32,7 @@ public static class AppCategory
 
         // Email
         if (name is "outlook" or "thunderbird" or "mailspring"
-            or "OUTLOOK" or "olk")
+            or "olk")
             return Category.Email;
 
         // Code editors / IDEs

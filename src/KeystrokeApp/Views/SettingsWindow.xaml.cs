@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using KeystrokeApp.Services;
 
 namespace KeystrokeApp.Views;
@@ -12,6 +13,7 @@ public partial class SettingsWindow : Window
     private AppConfig _config;
     private AcceptanceLearningService _learningService;
     private bool _loading = true;
+    private DispatcherTimer? _saveDebounceTimer;
 
     public SettingsWindow(AppConfig config)
     {
@@ -186,20 +188,26 @@ public partial class SettingsWindow : Window
         };
         Grid.SetColumn(barFill, 2);
 
+        // barFill needs a Height to match barBg, otherwise it collapses to 0
+        barFill.Height = 8;
+
         grid.Children.Add(nameBlock);
         grid.Children.Add(countBlock);
         grid.Children.Add(barBg);
         grid.Children.Add(barFill);
 
-        // Animate the bar fill
-        Dispatcher.BeginInvoke(() =>
+        // Animate the bar fill once the background bar has been laid out
+        // and has a real ActualWidth. SizeChanged fires after the layout pass.
+        barBg.SizeChanged += (_, _) =>
         {
+            if (barBg.ActualWidth <= 0) return;
+
             var anim = new DoubleAnimation(0, barBg.ActualWidth * percent, TimeSpan.FromMilliseconds(500))
             {
                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             };
             barFill.BeginAnimation(WidthProperty, anim);
-        }, System.Windows.Threading.DispatcherPriority.Render);
+        };
 
         return grid;
     }
@@ -306,51 +314,54 @@ public partial class SettingsWindow : Window
     private void PresetMinimal_Click(object sender, RoutedEventArgs e)
     {
         _loading = true;
-        
-        LengthCombo.SelectedIndex = 0; // Brief
-        MinCharsSlider.Value = 5;
-        DebounceSlider.Value = 500;
-        FastDebounceSlider.Value = 200;
-        OcrEnabledCheck.IsChecked = false;
-        RollingContextCheck.IsChecked = false;
-        LearningEnabledCheck.IsChecked = false;
-        TempSlider.Value = 0.2;
-
-        _loading = false;
+        try
+        {
+            LengthCombo.SelectedIndex = 0; // Brief
+            MinCharsSlider.Value = 5;
+            DebounceSlider.Value = 500;
+            FastDebounceSlider.Value = 200;
+            OcrEnabledCheck.IsChecked = false;
+            RollingContextCheck.IsChecked = false;
+            LearningEnabledCheck.IsChecked = false;
+            TempSlider.Value = 0.2;
+        }
+        finally { _loading = false; }
         SaveSettings();
     }
 
     private void PresetBalanced_Click(object sender, RoutedEventArgs e)
     {
         _loading = true;
-
-        LengthCombo.SelectedIndex = 2; // Extended
-        MinCharsSlider.Value = 3;
-        DebounceSlider.Value = 300;
-        FastDebounceSlider.Value = 100;
-        OcrEnabledCheck.IsChecked = true;
-        RollingContextCheck.IsChecked = true;
-        LearningEnabledCheck.IsChecked = false;
-        TempSlider.Value = 0.3;
-        
-        _loading = false;
+        try
+        {
+            LengthCombo.SelectedIndex = 2; // Extended
+            MinCharsSlider.Value = 3;
+            DebounceSlider.Value = 300;
+            FastDebounceSlider.Value = 100;
+            OcrEnabledCheck.IsChecked = true;
+            RollingContextCheck.IsChecked = true;
+            LearningEnabledCheck.IsChecked = false;
+            TempSlider.Value = 0.3;
+        }
+        finally { _loading = false; }
         SaveSettings();
     }
 
     private void PresetMaximum_Click(object sender, RoutedEventArgs e)
     {
         _loading = true;
-
-        LengthCombo.SelectedIndex = 3; // Unlimited
-        MinCharsSlider.Value = 2;
-        DebounceSlider.Value = 150;
-        FastDebounceSlider.Value = 80;
-        OcrEnabledCheck.IsChecked = true;
-        RollingContextCheck.IsChecked = true;
-        LearningEnabledCheck.IsChecked = false;
-        TempSlider.Value = 0.4;
-        
-        _loading = false;
+        try
+        {
+            LengthCombo.SelectedIndex = 3; // Unlimited
+            MinCharsSlider.Value = 2;
+            DebounceSlider.Value = 150;
+            FastDebounceSlider.Value = 80;
+            OcrEnabledCheck.IsChecked = true;
+            RollingContextCheck.IsChecked = true;
+            LearningEnabledCheck.IsChecked = false;
+            TempSlider.Value = 0.4;
+        }
+        finally { _loading = false; }
         SaveSettings();
     }
 
@@ -387,9 +398,26 @@ public partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// Schedule a debounced save for text inputs to avoid writing on every keystroke.
+    /// </summary>
+    private void DebouncedSave()
+    {
+        if (_loading) return;
+
+        _saveDebounceTimer?.Stop();
+        _saveDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _saveDebounceTimer.Tick += (_, _) =>
+        {
+            _saveDebounceTimer?.Stop();
+            SaveSettings();
+        };
+        _saveDebounceTimer.Start();
+    }
+
     // Event handlers
     private void Setting_Changed(object sender, RoutedEventArgs e) => SaveSettings();
-    private void Setting_Changed(object sender, TextChangedEventArgs e) => SaveSettings();
+    private void Setting_Changed(object sender, TextChangedEventArgs e) => DebouncedSave();
     private void Setting_Changed(object sender, SelectionChangedEventArgs e) => SaveSettings();
 
     private void TempSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

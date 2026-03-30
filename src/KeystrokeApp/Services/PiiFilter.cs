@@ -22,16 +22,17 @@ public static partial class PiiFilter
     [GeneratedRegex(@"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")]
     private static partial Regex EmailRegex();
 
-    // Phone numbers: various formats (US-centric + international)
-    [GeneratedRegex(@"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")]
+    // Phone numbers: US formats + international (e.g., +44 20 7946 0958, +49 30 12345678)
+    [GeneratedRegex(@"(?:\+\d{1,3}[-.\s]?)?(?:\(?\d{1,4}\)?[-.\s]?){1,3}\d{3,4}[-.\s]?\d{3,4}\b")]
     private static partial Regex PhoneRegex();
 
-    // IP addresses (v4)
-    [GeneratedRegex(@"\b(?:\d{1,3}\.){3}\d{1,3}\b")]
+    // IP addresses (v4) — validated to 0-255 per octet
+    [GeneratedRegex(@"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b")]
     private static partial Regex IpAddressRegex();
 
     // API keys / tokens: long alphanumeric strings with common prefixes
-    [GeneratedRegex(@"\b(?:sk-[a-zA-Z0-9\-_]{20,}|AIzaSy[a-zA-Z0-9\-_]{30,}|ghp_[a-zA-Z0-9]{36,}|AKIA[A-Z0-9]{16})\b")]
+    // Includes: OpenAI sk-, Google AIzaSy, GitHub ghp_, AWS access key AKIA, AWS secret key (40-char base64)
+    [GeneratedRegex(@"\b(?:sk-[a-zA-Z0-9\-_]{20,}|AIzaSy[a-zA-Z0-9\-_]{30,}|ghp_[a-zA-Z0-9]{36,}|AKIA[A-Z0-9]{16}|(?:aws_secret_access_key|AWS_SECRET_ACCESS_KEY)\s*[:=]\s*[A-Za-z0-9/+=]{40})\b", RegexOptions.IgnoreCase)]
     private static partial Regex ApiKeyRegex();
 
     // Passwords in common patterns like "password: xxx" or "pwd=xxx"

@@ -51,9 +51,9 @@ public static class KeyProtection
             var plaintextBytes = ProtectedData.Unprotect(cipherBytes, null, DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(plaintextBytes);
         }
-        catch (CryptographicException)
+        catch (Exception)
         {
-            // Decryption failed (e.g., different user account, corrupted data).
+            // Decryption failed (e.g., different user account, corrupted data, malformed base64).
             // Return null so the user is prompted to re-enter the key.
             return null;
         }

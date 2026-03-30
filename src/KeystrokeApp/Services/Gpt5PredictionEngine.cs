@@ -118,7 +118,7 @@ public class Gpt5PredictionEngine : IPredictionEngine, IDisposable
             var body = new
             {
                 model = _model,
-                max_tokens = adaptiveTokens,
+                max_completion_tokens = adaptiveTokens,
                 temperature = dynamicTemp,
                 top_p = 0.9,
                 messages = BuildMessages(context)
@@ -147,7 +147,7 @@ public class Gpt5PredictionEngine : IPredictionEngine, IDisposable
 
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<Gpt5Response>(respBody);
-            var completion = result?.Choices?[0]?.Message?.Content?.Trim();
+            var completion = result?.Choices is { Length: > 0 } choices ? choices[0]?.Message?.Content?.Trim() : null;
             Log($"Completion: {completion ?? "(null)"}");
 
             if (string.IsNullOrWhiteSpace(completion))
@@ -184,7 +184,7 @@ public class Gpt5PredictionEngine : IPredictionEngine, IDisposable
             var body = new
             {
                 model = _model,
-                max_tokens = adaptiveTokens,
+                max_completion_tokens = adaptiveTokens,
                 temperature = dynamicTemp,
                 top_p = 0.9,
                 stream = true,
@@ -198,12 +198,12 @@ public class Gpt5PredictionEngine : IPredictionEngine, IDisposable
                 : AppCategory.Category.Unknown;
             Log($"=== Stream for: \"{prefix}\" [model={_model}, app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, tokens={adaptiveTokens}] ===");
 
-            var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+            using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
 
-            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -297,7 +297,7 @@ public class Gpt5PredictionEngine : IPredictionEngine, IDisposable
                 var body = new
                 {
                     model = _model,
-                    max_tokens = adaptiveTokens,
+                    max_completion_tokens = adaptiveTokens,
                     temperature = altTemp,
                     top_p = 0.95,
                     messages = BuildMessages(context)
@@ -313,7 +313,7 @@ public class Gpt5PredictionEngine : IPredictionEngine, IDisposable
 
                 var respBody = await response.Content.ReadAsStringAsync(ct);
                 var result = JsonSerializer.Deserialize<Gpt5Response>(respBody);
-                return result?.Choices?[0]?.Message?.Content?.Trim();
+                return result?.Choices is { Length: > 0 } ch ? ch[0]?.Message?.Content?.Trim() : null;
             });
 
             var completions = await Task.WhenAll(tasks);

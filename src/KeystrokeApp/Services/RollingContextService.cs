@@ -117,7 +117,7 @@ public class RollingContextService
     /// <summary>
     /// Returns true if we have meaningful context available.
     /// </summary>
-    public bool HasContext => _context.Length > 20;
+    public bool HasContext { get { lock (_lock) return _context.Length > 20; } }
 
     /// <summary>
     /// Gets metadata about the current context for debugging.

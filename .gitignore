@@ -11,6 +11,7 @@ publish/
 # OS
 Thumbs.db
 Desktop.ini
+nul
 
 # Sensitive / local
 *.log

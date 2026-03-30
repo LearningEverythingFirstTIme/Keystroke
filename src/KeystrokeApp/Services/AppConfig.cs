@@ -128,11 +128,35 @@ public class AppConfig
                 // while the encrypted fields are empty.
                 MigrateLegacyKeys(json, config);
 
+                config.Validate();
                 return config;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Log the error so corrupt configs are diagnosable, not silently lost
+            try
+            {
+                var logPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Keystroke", "config-error.log");
+                File.AppendAllText(logPath, $"[{DateTime.Now:o}] Config load failed: {ex}\n");
+            }
+            catch { }
+        }
         return new AppConfig();
+    }
+
+    /// <summary>
+    /// Clamp config values to sane ranges to prevent crashes from corrupt/edited config files.
+    /// </summary>
+    private void Validate()
+    {
+        DebounceMs = Math.Clamp(DebounceMs, 50, 5000);
+        FastDebounceMs = Math.Clamp(FastDebounceMs, 20, 2000);
+        MinBufferLength = Math.Clamp(MinBufferLength, 1, 20);
+        Temperature = Math.Clamp(Temperature, 0.0, 2.0);
+        MaxOutputTokens = Math.Clamp(MaxOutputTokens, 1, 2000);
     }
 
     /// <summary>
@@ -195,7 +219,12 @@ public class AppConfig
 
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(ConfigPath, json);
+
+        // Atomic write: write to temp file, then rename over the original.
+        // Prevents data loss if the process crashes mid-write.
+        var tempPath = ConfigPath + ".tmp";
+        File.WriteAllText(tempPath, json);
+        File.Move(tempPath, ConfigPath, overwrite: true);
     }
 
     public static void EnsureExists()

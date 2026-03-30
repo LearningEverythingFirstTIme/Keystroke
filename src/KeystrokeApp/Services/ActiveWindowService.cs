@@ -38,7 +38,8 @@ public static class ActiveWindowService
 
             // Process name
             GetWindowThreadProcessId(hwnd, out uint pid);
-            var process = Process.GetProcessById((int)pid);
+            if (pid == 0) return ("", title);
+            using var process = Process.GetProcessById((int)pid);
             var processName = process.ProcessName;
 
             return (processName, title);

@@ -16,15 +16,20 @@ public class OcrService : IDisposable
 {
     private readonly OcrEngine? _ocrEngine;
     private readonly string _logPath;
-    private string? _cachedText;
-    private string _cachedForWindow = "";
+    private volatile string? _cachedText;
+    private volatile string _cachedForWindow = "";
     private int _captureCount;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     /// <summary>
     /// Maximum characters to keep from OCR output.
     /// </summary>
     private const int MaxCachedLength = 2000;
+
+    /// <summary>
+    /// Maximum bitmap dimension to prevent excessive memory allocation on large/multi-monitor setups.
+    /// </summary>
+    private const int MaxCaptureDimension = 2560;
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -74,11 +79,15 @@ public class OcrService : IDisposable
             if (!GetWindowRect(hwnd, out RECT rect) || rect.Width <= 0 || rect.Height <= 0)
                 return;
 
+            // Cap dimensions to prevent excessive memory use on large/multi-monitor setups
+            var captureWidth = Math.Min(rect.Width, MaxCaptureDimension);
+            var captureHeight = Math.Min(rect.Height, MaxCaptureDimension);
+
             // Capture the window region
-            using var bitmap = new Bitmap(rect.Width, rect.Height, PixelFormat.Format32bppArgb);
+            using var bitmap = new Bitmap(captureWidth, captureHeight, PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(bitmap))
             {
-                g.CopyFromScreen(rect.Left, rect.Top, 0, 0, new Size(rect.Width, rect.Height));
+                g.CopyFromScreen(rect.Left, rect.Top, 0, 0, new Size(captureWidth, captureHeight));
             }
 
             // Convert System.Drawing.Bitmap → WinRT SoftwareBitmap
@@ -136,10 +145,10 @@ public class OcrService : IDisposable
 
         // Even for the same window, re-capture periodically (every ~4 ticks = 12s)
         // to pick up content changes like scrolling or new messages
-        _captureCount++;
-        if (_captureCount >= 4)
+        var count = Interlocked.Increment(ref _captureCount);
+        if (count >= 4)
         {
-            _captureCount = 0;
+            Interlocked.Exchange(ref _captureCount, 0);
             return true;
         }
 

@@ -6,20 +6,22 @@ namespace KeystrokeApp.Services;
 /// <summary>
 /// Accumulates typed characters into a buffer.
 /// Handles backspace (remove last char) and clears on Enter/Escape/arrows.
+/// Thread-safe: accessed from hook callbacks and debounce timer threads.
 /// </summary>
 public class TypingBuffer
 {
     private readonly StringBuilder _buffer = new();
+    private readonly object _lock = new();
 
     /// <summary>
     /// Current text in the buffer.
     /// </summary>
-    public string CurrentText => _buffer.ToString();
+    public string CurrentText { get { lock (_lock) return _buffer.ToString(); } }
 
     /// <summary>
     /// Number of characters in the buffer.
     /// </summary>
-    public int Length => _buffer.Length;
+    public int Length { get { lock (_lock) return _buffer.Length; } }
 
     /// <summary>
     /// Fired when the buffer content changes (character added or removed).
@@ -36,8 +38,13 @@ public class TypingBuffer
     /// </summary>
     public void AddChar(char c)
     {
-        _buffer.Append(c);
-        BufferChanged?.Invoke(CurrentText);
+        string text;
+        lock (_lock)
+        {
+            _buffer.Append(c);
+            text = _buffer.ToString();
+        }
+        BufferChanged?.Invoke(text);
     }
 
     /// <summary>
@@ -46,15 +53,26 @@ public class TypingBuffer
     /// </summary>
     public void RemoveLastChar()
     {
-        if (_buffer.Length > 0)
+        bool cleared = false;
+        string? text = null;
+
+        lock (_lock)
         {
-            _buffer.Remove(_buffer.Length - 1, 1);
-            
-            if (_buffer.Length == 0)
-                BufferCleared?.Invoke();
-            else
-                BufferChanged?.Invoke(CurrentText);
+            if (_buffer.Length > 0)
+            {
+                _buffer.Remove(_buffer.Length - 1, 1);
+
+                if (_buffer.Length == 0)
+                    cleared = true;
+                else
+                    text = _buffer.ToString();
+            }
         }
+
+        if (cleared)
+            BufferCleared?.Invoke();
+        else if (text != null)
+            BufferChanged?.Invoke(text);
     }
 
     /// <summary>
@@ -63,11 +81,15 @@ public class TypingBuffer
     /// </summary>
     public void Clear()
     {
-        if (_buffer.Length > 0)
+        bool wasNonEmpty;
+        lock (_lock)
         {
+            wasNonEmpty = _buffer.Length > 0;
             _buffer.Clear();
-            BufferCleared?.Invoke();
         }
+
+        if (wasNonEmpty)
+            BufferCleared?.Invoke();
     }
 
     /// <summary>
@@ -77,14 +99,17 @@ public class TypingBuffer
     /// </summary>
     public void SetText(string text)
     {
-        _buffer.Clear();
-        _buffer.Append(text);
+        lock (_lock)
+        {
+            _buffer.Clear();
+            _buffer.Append(text);
+        }
     }
 
     /// <summary>
     /// Check if buffer is empty.
     /// </summary>
-    public bool IsEmpty => _buffer.Length == 0;
+    public bool IsEmpty { get { lock (_lock) return _buffer.Length == 0; } }
 
     public override string ToString() => CurrentText;
 }

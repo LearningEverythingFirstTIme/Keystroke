@@ -261,10 +261,13 @@ public partial class SuggestionPanel : Window
 
     private void StartLoadingAnimation()
     {
+        // Stop any existing timer first to prevent orphaned timers
+        StopLoadingAnimation();
+
         LoadingIndicator.Visibility = Visibility.Visible;
         _loadingDotCount = 0;
         LoadingDots.Text = "";
-        
+
         _loadingDotTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(350)
@@ -424,6 +427,9 @@ public partial class SuggestionPanel : Window
     {
         _isAnimatingHide = true;
 
+        // Clear any previous animations to prevent event handler accumulation
+        BeginAnimation(OpacityProperty, null);
+
         var scaleDownX = new DoubleAnimation(1.0, 0.98, HideDuration) { EasingFunction = HideEase };
         var scaleDownY = new DoubleAnimation(1.0, 0.98, HideDuration) { EasingFunction = HideEase };
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleDownX);
@@ -437,11 +443,11 @@ public partial class SuggestionPanel : Window
                 _isAnimatingHide = false;
                 _isDragged = false;
                 Hide();
-                
+
                 ScaleTransform.ScaleX = 0.95;
                 ScaleTransform.ScaleY = 0.95;
                 SlideTransform.Y = 8;
-                
+
                 SuggestionBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
             }
         };

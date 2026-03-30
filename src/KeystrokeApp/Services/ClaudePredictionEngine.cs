@@ -141,7 +141,7 @@ public class ClaudePredictionEngine : IPredictionEngine, IDisposable
 
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<ClaudeResponse>(respBody);
-            var completion = result?.Content?[0]?.Text?.Trim();
+            var completion = result?.Content is { Length: > 0 } content ? content[0]?.Text?.Trim() : null;
             Log($"Completion: {completion ?? "(null)"}");
 
             if (string.IsNullOrWhiteSpace(completion))
@@ -199,18 +199,18 @@ public class ClaudePredictionEngine : IPredictionEngine, IDisposable
                 : AppCategory.Category.Unknown;
             Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, tokens={adaptiveTokens}] ===");
 
-            var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+            using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
 
-            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
 
             if (!response.IsSuccessStatusCode)
             {
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Stream error {response.StatusCode}: {err}");
-                
+
                 // Track rate limit errors for backoff
                 if ((int)response.StatusCode == 429 || err.Contains("rate_limit"))
                 {
@@ -323,7 +323,7 @@ public class ClaudePredictionEngine : IPredictionEngine, IDisposable
 
                 var respBody = await response.Content.ReadAsStringAsync(ct);
                 var result = JsonSerializer.Deserialize<ClaudeResponse>(respBody);
-                return result?.Content?[0]?.Text?.Trim();
+                return result?.Content is { Length: > 0 } c ? c[0]?.Text?.Trim() : null;
             });
 
             var completions = await Task.WhenAll(tasks);

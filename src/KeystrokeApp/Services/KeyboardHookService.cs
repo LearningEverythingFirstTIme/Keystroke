@@ -26,6 +26,24 @@ public class KeyboardHookService : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? lpModuleName);
 
+    [DllImport("user32.dll")]
+    private static extern int ToUnicodeEx(
+        uint wVirtKey, uint wScanCode, byte[] lpKeyState,
+        [Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pwszBuff,
+        int cchBuff, uint wFlags, IntPtr dwhkl);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetKeyboardState(byte[] lpKeyState);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetKeyboardLayout(uint idThread);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
 
     // ==================== Constants ====================
 
@@ -43,6 +61,7 @@ public class KeyboardHookService : IDisposable
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_SYSKEYUP = 0x0105;
 
     private const int VK_TAB = 0x09;
     private const int VK_ESCAPE = 0x1B;
@@ -145,6 +164,8 @@ public class KeyboardHookService : IDisposable
 
     public void Start()
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(KeyboardHookService));
         if (_hookId != IntPtr.Zero)
             return;
 
@@ -193,9 +214,9 @@ public class KeyboardHookService : IDisposable
             if (!_keysDown.Contains(vkCode))
             {
                 _keysDown.Add(vkCode);
-                
-                bool shouldSwallow = ProcessKeyDown(vkCode);
-                
+
+                bool shouldSwallow = ProcessKeyDown(vkCode, hookStruct.scanCode);
+
                 if (shouldSwallow)
                 {
                     // Swallow this key - don't pass to next hook
@@ -203,7 +224,7 @@ public class KeyboardHookService : IDisposable
                 }
             }
         }
-        else if (msgType == WM_KEYUP)
+        else if (msgType == WM_KEYUP || msgType == WM_SYSKEYUP)
         {
             var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
             _keysDown.Remove((int)hookStruct.vkCode);
@@ -214,7 +235,7 @@ public class KeyboardHookService : IDisposable
 
     // ==================== Key Processing ====================
 
-    private bool ProcessKeyDown(int vkCode)
+    private bool ProcessKeyDown(int vkCode, uint scanCode)
     {
         // Diagnostic: log raw hook state when Tab is pressed so we can see modifier state
         if (vkCode == VK_TAB)
@@ -232,7 +253,7 @@ public class KeyboardHookService : IDisposable
             return args.ShouldSwallow;
         }
 
-        char? character = VirtualKeyToChar(vkCode);
+        char? character = VirtualKeyToChar(vkCode, scanCode);
         if (character.HasValue)
         {
             CharacterTyped?.Invoke(character.Value);
@@ -282,58 +303,52 @@ public class KeyboardHookService : IDisposable
                           VK_HOME or VK_END or VK_PRIOR or VK_NEXT or VK_DELETE;
     }
 
-    private char? VirtualKeyToChar(int vkCode)
+    private char? VirtualKeyToChar(int vkCode, uint scanCode)
     {
-        if (vkCode is >= 0x41 and <= 0x5A)
+        // Use ToUnicodeEx for layout-aware, CapsLock-aware character translation.
+        // This replaces the old hardcoded US QWERTY mapping.
+
+        byte[] keyState = new byte[256];
+        if (!GetKeyboardState(keyState))
+            return null;
+
+        // The low-level hook fires before the OS updates key state for the
+        // current keystroke, so patch the modifier bytes from our own tracker.
+        keyState[VK_SHIFT] = IsShiftDown() ? (byte)0x80 : (byte)0;
+        keyState[VK_LSHIFT] = _keysDown.Contains(VK_LSHIFT) ? (byte)0x80 : (byte)0;
+        keyState[VK_RSHIFT] = _keysDown.Contains(VK_RSHIFT) ? (byte)0x80 : (byte)0;
+        keyState[VK_CONTROL] = IsCtrlDown() ? (byte)0x80 : (byte)0;
+        keyState[VK_LCONTROL] = _keysDown.Contains(VK_LCONTROL) ? (byte)0x80 : (byte)0;
+        keyState[VK_RCONTROL] = _keysDown.Contains(VK_RCONTROL) ? (byte)0x80 : (byte)0;
+        // CapsLock toggle state is already correct in GetKeyboardState (bit 0x01).
+
+        // Get the keyboard layout of the foreground window.
+        IntPtr hwnd = GetForegroundWindow();
+        uint threadId = GetWindowThreadProcessId(hwnd, out _);
+        IntPtr layout = GetKeyboardLayout(threadId);
+
+        var sb = new System.Text.StringBuilder(4);
+        int result = ToUnicodeEx((uint)vkCode, scanCode, keyState, sb, sb.Capacity, 0, layout);
+
+        if (result == 1)
         {
-            char c = (char)vkCode;
-            bool shiftPressed = IsShiftDown();
-            return shiftPressed ? c : char.ToLower(c);
+            char c = sb[0];
+            // Filter out control characters (Ctrl+letter produces 0x01-0x1A).
+            return !char.IsControl(c) ? c : null;
         }
 
-        if (vkCode is >= 0x30 and <= 0x39)
+        // result == 2+: dead key sequence (accent characters) — skip for now.
+        // result == 0: no translation (function keys, etc.).
+        // result < 0: dead key stored in driver state. Call ToUnicodeEx again
+        //             with a dummy key to flush the dead-key state so it doesn't
+        //             affect the next real keystroke.
+        if (result < 0)
         {
-            bool shiftPressed = IsShiftDown();
-            if (shiftPressed)
-            {
-                return vkCode switch
-                {
-                    0x30 => ')',
-                    0x31 => '!',
-                    0x32 => '@',
-                    0x33 => '#',
-                    0x34 => '$',
-                    0x35 => '%',
-                    0x36 => '^',
-                    0x37 => '&',
-                    0x38 => '*',
-                    0x39 => '(',
-                    _ => null
-                };
-            }
-            return (char)vkCode;
+            // Flush the dead key from the internal driver buffer.
+            ToUnicodeEx((uint)VK_ESCAPE, 0, keyState, sb, sb.Capacity, 0, layout);
         }
 
-        if (vkCode == 0x20)
-            return ' ';
-
-        bool shift = IsShiftDown();
-        
-        return vkCode switch
-        {
-            0xBA => shift ? ':' : ';',
-            0xBB => shift ? '+' : '=',
-            0xBC => shift ? '<' : ',',
-            0xBD => shift ? '_' : '-',
-            0xBE => shift ? '>' : '.',
-            0xBF => shift ? '?' : '/',
-            0xC0 => shift ? '~' : '`',
-            0xDB => shift ? '{' : '[',
-            0xDC => shift ? '|' : '\\',
-            0xDD => shift ? '}' : ']',
-            0xDE => shift ? '"' : '\'',
-            _ => null
-        };
+        return null;
     }
 
     // ==================== Modifier Helpers ====================
@@ -356,11 +371,5 @@ public class KeyboardHookService : IDisposable
 
         Stop();
         _disposed = true;
-        GC.SuppressFinalize(this);
-    }
-
-    ~KeyboardHookService()
-    {
-        Dispose();
     }
 }

@@ -11,6 +11,7 @@ namespace KeystrokeApp.Services;
 public class AcceptanceTracker
 {
     private readonly string _trackingPath;
+    private readonly object _writeLock = new();
 
     public AcceptanceTracker()
     {
@@ -49,9 +50,11 @@ public class AcceptanceTracker
             if (lines.Length <= maxLines)
                 return;
 
-            // Keep the most recent maxLines entries and rewrite
+            // Atomic rewrite: write to temp file, then rename
             var trimmed = lines[^maxLines..];
-            File.WriteAllLines(_trackingPath, trimmed);
+            var tempPath = _trackingPath + ".tmp";
+            File.WriteAllLines(tempPath, trimmed);
+            File.Move(tempPath, _trackingPath, overwrite: true);
         }
         catch { }
     }
@@ -60,6 +63,9 @@ public class AcceptanceTracker
     {
         try
         {
+            // Ensure directory exists on first write
+            Directory.CreateDirectory(Path.GetDirectoryName(_trackingPath)!);
+
             var entry = new
             {
                 timestamp = DateTime.UtcNow.ToString("o"),
@@ -74,7 +80,12 @@ public class AcceptanceTracker
             };
 
             var json = JsonSerializer.Serialize(entry);
-            File.AppendAllText(_trackingPath, json + "\n");
+
+            // Lock to prevent interleaved writes from concurrent threads
+            lock (_writeLock)
+            {
+                File.AppendAllText(_trackingPath, json + "\n");
+            }
         }
         catch { }
     }

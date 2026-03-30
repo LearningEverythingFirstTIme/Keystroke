@@ -13,6 +13,7 @@ public class DebounceTimer : IDisposable
     private readonly int _delayMs;
     private CancellationTokenSource? _cts;
     private readonly object _lock = new();
+    private bool _disposed;
 
     /// <summary>
     /// Fired when the debounce period completes without being restarted.
@@ -34,20 +35,24 @@ public class DebounceTimer : IDisposable
     public void Restart()
     {
         CancellationTokenSource? oldCts;
+        CancellationToken token;
 
         lock (_lock)
         {
+            if (_disposed) return;
+
             // Cancel any existing timer
             oldCts = _cts;
             _cts = new CancellationTokenSource();
-            var token = _cts.Token;
+            token = _cts.Token;
         }
 
-        // Cancel the old one outside the lock
+        // Cancel and dispose the old one outside the lock
         oldCts?.Cancel();
+        oldCts?.Dispose();
 
         // Start the new timer
-        _ = WaitAndFireAsync(_cts!.Token);
+        _ = WaitAndFireAsync(token);
     }
 
     /// <summary>
@@ -64,6 +69,7 @@ public class DebounceTimer : IDisposable
         }
 
         cts?.Cancel();
+        cts?.Dispose();
     }
 
     private async Task WaitAndFireAsync(CancellationToken token)
@@ -71,7 +77,7 @@ public class DebounceTimer : IDisposable
         try
         {
             await Task.Delay(_delayMs, token);
-            
+
             if (!token.IsCancellationRequested)
             {
                 DebounceComplete?.Invoke();
@@ -85,7 +91,16 @@ public class DebounceTimer : IDisposable
 
     public void Dispose()
     {
-        Cancel();
-        _cts?.Dispose();
+        CancellationTokenSource? cts;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            cts = _cts;
+            _cts = null;
+        }
+
+        cts?.Cancel();
+        cts?.Dispose();
     }
 }

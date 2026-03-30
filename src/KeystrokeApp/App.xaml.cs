@@ -34,6 +34,8 @@ public partial class App : Application
     private int _sessionAcceptCount;
     private Timer? _suspendTimer;
     private MenuItem? _enabledMenuItem;
+    private MenuItem? _engineMenuItem;
+    private MenuItem? _sessionMenuItem;
     private readonly object _predictionCtsLock = new();
     private CancellationTokenSource? _predictionCts;
     private string _lastPredictionPrefix = "";
@@ -47,6 +49,23 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Global exception handlers to prevent silent crashes
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log($"UNHANDLED UI EXCEPTION: {args.Exception}");
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+                Log($"UNHANDLED DOMAIN EXCEPTION: {ex}");
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log($"UNOBSERVED TASK EXCEPTION: {args.Exception}");
+            args.SetObserved();
+        };
 
         // Ensure directories and config exist
         Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
@@ -221,13 +240,13 @@ public partial class App : Application
             }, null, TimeSpan.FromMinutes(30), TimeSpan.FromMilliseconds(-1));
         };
 
-        var engineInfo = new MenuItem
+        _engineMenuItem = new MenuItem
         {
             Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})",
             IsEnabled = false
         };
 
-        var sessionInfo = new MenuItem
+        _sessionMenuItem = new MenuItem
         {
             Header = $"Accepted: {_sessionAcceptCount} this session",
             IsEnabled = false
@@ -259,8 +278,8 @@ public partial class App : Application
         menu.Items.Add(_enabledMenuItem);
         menu.Items.Add(suspendItem);
         menu.Items.Add(new Separator());
-        menu.Items.Add(engineInfo);
-        menu.Items.Add(sessionInfo);
+        menu.Items.Add(_engineMenuItem);
+        menu.Items.Add(_sessionMenuItem);
         menu.Items.Add(new Separator());
         menu.Items.Add(settingsItem);
         menu.Items.Add(showDebugItem);
@@ -398,6 +417,10 @@ public partial class App : Application
             _trayIcon.ToolTipText = BuildToolTip();
             _trayIcon.Icon = CreateKeyboardIcon(_isEnabled);
         }
+        if (_engineMenuItem != null)
+            _engineMenuItem.Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
+        if (_sessionMenuItem != null)
+            _sessionMenuItem.Header = $"Accepted: {_sessionAcceptCount} this session";
     }
 
     private void ToggleEnabled()
@@ -409,9 +432,10 @@ public partial class App : Application
             if (_enabledMenuItem != null)
                 _enabledMenuItem.IsChecked = _isEnabled;
             if (_trayIcon != null)
-                _trayIcon.ToolTipText = _isEnabled ? "Keystroke" : "Keystroke (disabled)";
+            {
                 _trayIcon.Icon = CreateKeyboardIcon(_isEnabled);
                 _trayIcon.ToolTipText = BuildToolTip();
+            }
 
             if (!_isEnabled)
             {
@@ -466,9 +490,13 @@ public partial class App : Application
                     // Track dismissal if a suggestion was showing
                     if (_config.LearningEnabled && _suggestionPanel?.HasSuggestion == true)
                     {
-                        var (pn, wt) = ActiveWindowService.GetActiveWindow();
-                        var dismissed = _suggestionPanel.GetFullSuggestion().Substring(oldBuffer.Length);
-                        _acceptanceTracker.LogDismissed(oldBuffer, dismissed, pn, wt);
+                        var fullSuggDismiss = _suggestionPanel.GetFullSuggestion();
+                        if (oldBuffer.Length <= fullSuggDismiss.Length)
+                        {
+                            var (pn, wt) = ActiveWindowService.GetActiveWindow();
+                            var dismissed = fullSuggDismiss.Substring(oldBuffer.Length);
+                            _acceptanceTracker.LogDismissed(oldBuffer, dismissed, pn, wt);
+                        }
                     }
 
                     _typingBuffer.Clear();
@@ -524,7 +552,9 @@ public partial class App : Application
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     var buffer = _typingBuffer.CurrentText;
-                    var completion = _suggestionPanel.GetFullSuggestion().Substring(buffer.Length);
+                    var fullSugg = _suggestionPanel.GetFullSuggestion();
+                    if (buffer.Length > fullSugg.Length) { _suggestionPanel.HideSuggestion(); break; }
+                    var completion = fullSugg.Substring(buffer.Length);
                     var nextWord = GetNextWord(completion);
 
                     LogToDebug($"Shift+Tab → Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");
@@ -562,7 +592,9 @@ public partial class App : Application
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     var buffer = _typingBuffer.CurrentText;
-                    var completion = _suggestionPanel.GetFullSuggestion().Substring(buffer.Length);
+                    var fullSugg2 = _suggestionPanel.GetFullSuggestion();
+                    if (buffer.Length > fullSugg2.Length) { _suggestionPanel.HideSuggestion(); break; }
+                    var completion = fullSugg2.Substring(buffer.Length);
                     var nextWord = GetNextWord(completion);
 
                     LogToDebug($"Ctrl+Right → Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");
@@ -596,6 +628,8 @@ public partial class App : Application
                     var buffer = _typingBuffer.CurrentText;
                     var fullText = _suggestionPanel.GetFullSuggestion();
 
+                    if (buffer.Length > fullText.Length) { _suggestionPanel.HideSuggestion(); break; }
+
                     LogToDebug($"Tab → Buffer: \"{buffer}\" ({buffer.Length} chars)");
                     LogToDebug($"Tab → Buffer ends with space: {buffer.EndsWith(" ")}");
                     LogToDebug($"Tab → Full suggestion: \"{fullText}\" ({fullText.Length} chars)");
@@ -623,7 +657,7 @@ public partial class App : Application
                     LogToDebug($"Tab → Rolling context updated (+{fullAcceptedText.Length} chars)");
 
                     _typingBuffer.Clear();
-                    _suggestionPanel.HideSuggestion();
+                    _suggestionPanel?.HideSuggestion();
                     CancelPendingPrediction();
 
                     // Swallow the Tab key so it doesn't insert a tab character
@@ -708,6 +742,7 @@ public partial class App : Application
         lock (_predictionCtsLock)
         {
             _predictionCts?.Cancel();
+            _predictionCts?.Dispose();
             _predictionCts = new CancellationTokenSource();
             ct = _predictionCts.Token;
         }
@@ -797,7 +832,11 @@ public partial class App : Application
 
         if (_ocrService.ShouldRecapture())
         {
-            _ = _ocrService.CaptureAsync();
+            _ = Task.Run(async () =>
+            {
+                try { await _ocrService.CaptureAsync(); }
+                catch (Exception ex) { LogToDebug($"OCR capture error: {ex.Message}"); }
+            });
         }
     }
 
@@ -831,6 +870,7 @@ public partial class App : Application
         lock (_predictionCtsLock)
         {
             _predictionCts?.Cancel();
+            _predictionCts?.Dispose();
             _predictionCts = null;
         }
     }
@@ -860,9 +900,17 @@ public partial class App : Application
         }
     }
 
+    private static readonly object _logLock = new();
     private void Log(string message)
     {
-        File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+        try
+        {
+            lock (_logLock)
+            {
+                File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
+            }
+        }
+        catch { }
     }
 
     /// <summary>

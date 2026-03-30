@@ -148,7 +148,9 @@ public class GeminiPredictionEngine : IPredictionEngine, IDisposable
 
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<GeminiResponse>(respBody);
-            var completion = result?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
+            var completion = result?.Candidates is { Length: > 0 } cands
+                && cands[0]?.Content?.Parts is { Length: > 0 } parts
+                ? parts[0]?.Text?.Trim() : null;
             Log($"Completion: {completion ?? "(null)"}");
 
             if (string.IsNullOrWhiteSpace(completion))
@@ -208,12 +210,12 @@ public class GeminiPredictionEngine : IPredictionEngine, IDisposable
             var rollingCtxLen = context.RollingContext?.Length ?? 0;
             Log($"=== Stream for: \"{prefix}\" [app={context.ProcessName}, cat={category}, temp={dynamicTemp:F1}, rolling={rollingCtxLen}, tokens={adaptiveTokens}] ===");
 
-            var request = new HttpRequestMessage(HttpMethod.Post, _streamEndpoint)
+            using var request = new HttpRequestMessage(HttpMethod.Post, _streamEndpoint)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
 
-            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -351,7 +353,7 @@ public class GeminiPredictionEngine : IPredictionEngine, IDisposable
                 text = TrimToWholeWords(text.Trim('"'));
                 text = RejectDuplicate(prefix, text!);
 
-                if (!string.IsNullOrWhiteSpace(text))
+                if (!string.IsNullOrWhiteSpace(text) && !results.Contains(text))
                     results.Add(text);
             }
 
