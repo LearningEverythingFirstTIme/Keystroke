@@ -42,6 +42,10 @@ public class AppConfig
     // Off by default — user must explicitly enable in settings.
     public bool LearningEnabled { get; set; } = false;
 
+    // Number of suggestions per request (1 = single prediction only, 2-5 = extras for Ctrl+Up/Down cycling)
+    // Lower values reduce API costs and latency; higher values give more choices.
+    public int MaxSuggestions { get; set; } = 3;
+
     // First-launch consent: must be true before the app activates keystroke monitoring.
     public bool ConsentAccepted { get; set; } = false;
 
@@ -156,6 +160,7 @@ public class AppConfig
         FastDebounceMs = Math.Clamp(FastDebounceMs, 20, 2000);
         MinBufferLength = Math.Clamp(MinBufferLength, 1, 20);
         Temperature = Math.Clamp(Temperature, 0.0, 2.0);
+        MaxSuggestions = Math.Clamp(MaxSuggestions, 1, 5);
         MaxOutputTokens = Math.Clamp(MaxOutputTokens, 1, 2000);
     }
 

@@ -811,8 +811,9 @@ public partial class App : Application
                         : "[no rolling context]";
                     LogToDebug($"Streamed: \"{buffer}\" + \"{completion}\" [app={processName}] {rollingInfo}");
 
-                    // Fire background request for alternatives
-                    _ = FetchAlternativesAsync(context, buffer, ct);
+                    // Fire background request for alternatives (skip if user only wants 1 suggestion)
+                    if (_config.MaxSuggestions > 1)
+                        _ = FetchAlternativesAsync(context, buffer, ct);
                 }
             }
             catch (OperationCanceledException) { }
@@ -849,7 +850,7 @@ public partial class App : Application
         {
             if (_predictionEngine == null) return;
 
-            var alternatives = await _predictionEngine.FetchAlternativesAsync(context, 3, ct);
+            var alternatives = await _predictionEngine.FetchAlternativesAsync(context, _config.MaxSuggestions, ct);
             if (ct.IsCancellationRequested || alternatives.Count == 0) return;
 
             Dispatcher.BeginInvoke(() =>

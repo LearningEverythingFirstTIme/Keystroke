@@ -592,6 +592,29 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Suggestions Per Request -->
+                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Suggestions Per Request" FontSize="14" FontWeight="SemiBold" 
+                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="More suggestions = more choices (Ctrl+Up/Down) but costs more tokens" 
+                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
+
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="1 = Fastest / Cheapest" FontSize="11" 
+                                               Foreground="{StaticResource TextMuted}" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="SuggestionsLabel" Text="3" 
+                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
+                                               FontSize="14" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="5 = Most Options" FontSize="11" 
+                                               Foreground="{StaticResource TextMuted}" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="SuggestionsSlider" Minimum="1" Maximum="5" Value="3"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        ValueChanged="SuggestionsSlider_Changed"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Creativity Override -->
                         <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
                             <StackPanel>

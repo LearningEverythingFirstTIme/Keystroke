@@ -70,6 +70,10 @@ public partial class SettingsWindow : Window
         FastDebounceSlider.Value = _config.FastDebounceMs;
         FastDebounceLabel.Text = $"{_config.FastDebounceMs}ms";
 
+        // Quality settings - suggestions count
+        SuggestionsSlider.Value = _config.MaxSuggestions;
+        SuggestionsLabel.Text = _config.MaxSuggestions.ToString();
+
         // Quality settings - feature toggles (stored in config, add properties as needed)
         OcrEnabledCheck.IsChecked = _config.OcrEnabled;
         RollingContextCheck.IsChecked = true; // Currently always on, could be config option
@@ -301,6 +305,7 @@ public partial class SettingsWindow : Window
         _config.FastDebounceMs = (int)FastDebounceSlider.Value;
         _config.OcrEnabled = OcrEnabledCheck.IsChecked == true;
         _config.LearningEnabled = LearningEnabledCheck.IsChecked == true;
+        _config.MaxSuggestions = (int)SuggestionsSlider.Value;
 
         var promptText = PromptBox.Text.Trim();
         _config.CustomSystemPrompt = (promptText == AppConfig.DefaultSystemPrompt) ? null : promptText;
@@ -324,6 +329,8 @@ public partial class SettingsWindow : Window
             RollingContextCheck.IsChecked = false;
             LearningEnabledCheck.IsChecked = false;
             TempSlider.Value = 0.2;
+            SuggestionsSlider.Value = 1;
+            SuggestionsLabel.Text = "1";
         }
         finally { _loading = false; }
         SaveSettings();
@@ -342,6 +349,8 @@ public partial class SettingsWindow : Window
             RollingContextCheck.IsChecked = true;
             LearningEnabledCheck.IsChecked = false;
             TempSlider.Value = 0.3;
+            SuggestionsSlider.Value = 3;
+            SuggestionsLabel.Text = "3";
         }
         finally { _loading = false; }
         SaveSettings();
@@ -360,6 +369,8 @@ public partial class SettingsWindow : Window
             RollingContextCheck.IsChecked = true;
             LearningEnabledCheck.IsChecked = false;
             TempSlider.Value = 0.4;
+            SuggestionsSlider.Value = 5;
+            SuggestionsLabel.Text = "5";
         }
         finally { _loading = false; }
         SaveSettings();
@@ -445,6 +456,12 @@ public partial class SettingsWindow : Window
     {
         if (FastDebounceLabel != null)
             FastDebounceLabel.Text = $"{(int)e.NewValue}ms";
+        SaveSettings();
+    }
+    private void SuggestionsSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (SuggestionsLabel != null)
+            SuggestionsLabel.Text = ((int)e.NewValue).ToString();
         SaveSettings();
     }
 
