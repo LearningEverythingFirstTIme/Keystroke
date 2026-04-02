@@ -21,17 +21,30 @@ public partial class SuggestionPanel : Window
     private const double CaretGap = 4;
     private const double ScreenEdgeMargin = 10;
 
-    private static readonly Duration ShowDuration = new(TimeSpan.FromMilliseconds(200));
-    private static readonly Duration HideDuration = new(TimeSpan.FromMilliseconds(120));
+    private static readonly Duration ShowDuration = new(TimeSpan.FromMilliseconds(280));
+    private static readonly Duration HideDuration = new(TimeSpan.FromMilliseconds(160));
     private static readonly Duration WordRevealDuration = new(TimeSpan.FromMilliseconds(40));
-    
-    private static readonly IEasingFunction ShowEase = new BackEase 
-    { 
-        EasingMode = EasingMode.EaseOut, 
-        Amplitude = 0.3
+
+    // Position/fade easing: fast deceleration, no overshoot — clean landing
+    private static readonly IEasingFunction ShowPositionEase = new ExponentialEase
+    {
+        EasingMode = EasingMode.EaseOut,
+        Exponent = 4
+    };
+    // Scale easing: springy settle so the panel "clicks" into place
+    private static readonly IEasingFunction ShowScaleEase = new BackEase
+    {
+        EasingMode = EasingMode.EaseOut,
+        Amplitude = 0.4
     };
     private static readonly IEasingFunction HideEase = new QuadraticEase { EasingMode = EasingMode.EaseIn };
     private static readonly IEasingFunction WordRevealEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+
+    // Theme-driven colors — updated live by ApplyTheme()
+    private Color _normalBorderColor  = ThemeDefinitions.Midnight.NormalBorder;
+    private Color _sweepPeakColor     = ThemeDefinitions.Midnight.SweepPeak;
+    private Color _sweepSoftColor     = ThemeDefinitions.Midnight.SweepSoft;
+    private Color _streamingFlashColor = ThemeDefinitions.Midnight.StreamingFlash;
 
     private string _currentSuggestion = "";
     private string _currentPrefix = "";
@@ -53,6 +66,9 @@ public partial class SuggestionPanel : Window
 
     private DispatcherTimer? _loadingDotTimer;
     private int _loadingDotCount;
+    private LinearGradientBrush? _sweepBrush;
+    private double _sweepAngle;
+    private DispatcherTimer? _sweepTimer;
 
     public SuggestionPanel()
     {
@@ -83,13 +99,9 @@ public partial class SuggestionPanel : Window
         StopLoadingAnimation();
 
         if (!IsVisible || _isAnimatingHide)
-        {
-            _isAnimatingHide = false;
-            Show();
-            AnimateShow();
-        }
-
-        PositionNearCaret();
+            ShowAndAnimate();
+        else
+            PositionNearCursor();
     }
 
     public void AppendSuggestion(string prefix, string additionalText)
@@ -112,11 +124,7 @@ public partial class SuggestionPanel : Window
             CompletionText.Text = _currentSuggestion;
 
         if (!IsVisible || _isAnimatingHide)
-        {
-            _isAnimatingHide = false;
-            Show();
-            AnimateShow();
-        }
+            ShowAndAnimate();
     }
 
     public void BeginStreamingSuggestion(string prefix)
@@ -140,13 +148,9 @@ public partial class SuggestionPanel : Window
         StartLoadingAnimation();
 
         if (!IsVisible || _isAnimatingHide)
-        {
-            _isAnimatingHide = false;
-            Show();
-            AnimateShow();
-        }
-
-        PositionNearCaret();
+            ShowAndAnimate();
+        else
+            PositionNearCursor();
     }
 
     public void SetAlternatives(string prefix, List<string> alternatives)
@@ -211,12 +215,13 @@ public partial class SuggestionPanel : Window
 
         StopLoadingAnimation();
 
-        var flashBrush = new SolidColorBrush(Color.FromRgb(0x30, 0x50, 0x70));
+        // Flash the border with the brand accent — bright blue-violet, same family as the sweep
+        var flashBrush = new SolidColorBrush(_normalBorderColor);
         SuggestionBorder.BorderBrush = flashBrush;
 
         var borderFlash = new ColorAnimation(
-            Color.FromRgb(0x30, 0x50, 0x70),
-            Color.FromRgb(0x30, 0xFF, 0xFF),
+            _normalBorderColor,
+            _streamingFlashColor,
             TimeSpan.FromMilliseconds(120))
         {
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
@@ -230,30 +235,82 @@ public partial class SuggestionPanel : Window
         if (!IsVisible) return;
         StopLoadingAnimation();
 
-        var flashBrush = new SolidColorBrush(Color.FromRgb(0x30, 0x50, 0x70));
-        SuggestionBorder.BorderBrush = flashBrush;
-
+        // Border: vivid green flash — intentional contrast with the blue-violet brand accent
+        var borderBrush = new SolidColorBrush(_normalBorderColor);
+        SuggestionBorder.BorderBrush = borderBrush;
         var borderFlash = new ColorAnimation(
-            Color.FromRgb(0x30, 0x50, 0x70),
-            Color.FromRgb(0x40, 0xC0, 0x60),
-            TimeSpan.FromMilliseconds(120))
+            _normalBorderColor,
+            Color.FromArgb(0xFF, 0x50, 0xFF, 0x80),
+            TimeSpan.FromMilliseconds(100))
         {
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
             AutoReverse = true
         };
-        flashBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderFlash);
+        borderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderFlash);
 
-        var confirmScale = new DoubleAnimation(1.0, 1.02, TimeSpan.FromMilliseconds(80))
+        // Background: brief green-tinted wash so the whole panel acknowledges the accept
+        var bgBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x16, 0x1B, 0x22));
+        SuggestionBorder.Background = bgBrush;
+        var bgFlash = new ColorAnimation(
+            Color.FromArgb(0x80, 0x16, 0x1B, 0x22),
+            Color.FromArgb(0x80, 0x18, 0x30, 0x1E),
+            TimeSpan.FromMilliseconds(100))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+            AutoReverse = true
+        };
+        bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, bgFlash);
+
+        // Scale: satisfying pop — noticeably larger than before (1.02 → 1.05)
+        var confirmScale = new DoubleAnimation(1.0, 1.05, TimeSpan.FromMilliseconds(90))
         {
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
             AutoReverse = true
         };
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, confirmScale);
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, confirmScale);
+
+        // Text: flash to white so the accepted text visibly lights up
+        if (!_isUsingWordAnimation && CompletionText.Visibility == Visibility.Visible)
+        {
+            var textBrush = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xF0));
+            CompletionText.Foreground = textBrush;
+            var textFlash = new ColorAnimation(
+                Color.FromRgb(0xE0, 0xE0, 0xF0),
+                Color.FromRgb(0xFF, 0xFF, 0xFF),
+                TimeSpan.FromMilliseconds(80))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                AutoReverse = true
+            };
+            textBrush.BeginAnimation(SolidColorBrush.ColorProperty, textFlash);
+        }
     }
 
     public string GetFullSuggestion() => _currentPrefix + _currentSuggestion;
     public bool HasSuggestion => IsVisible && !string.IsNullOrEmpty(_currentSuggestion);
+
+    public void ApplyTheme(PanelTheme theme)
+    {
+        _normalBorderColor   = theme.NormalBorder;
+        _sweepPeakColor      = theme.SweepPeak;
+        _sweepSoftColor      = theme.SweepSoft;
+        _streamingFlashColor = theme.StreamingFlash;
+
+        PanelGlow.Color = theme.ShadowColor;
+
+        // Update resting border when not in loading state
+        if (_sweepTimer == null)
+            SuggestionBorder.BorderBrush = new SolidColorBrush(_normalBorderColor);
+
+        // Hot-update the sweep gradient if it's currently animating
+        if (_sweepBrush != null)
+        {
+            _sweepBrush.GradientStops[1].Color = _sweepSoftColor;
+            _sweepBrush.GradientStops[2].Color = _sweepPeakColor;
+            _sweepBrush.GradientStops[3].Color = _sweepSoftColor;
+        }
+    }
 
     #endregion
 
@@ -261,30 +318,65 @@ public partial class SuggestionPanel : Window
 
     private void StartLoadingAnimation()
     {
-        // Stop any existing timer first to prevent orphaned timers
         StopLoadingAnimation();
 
         LoadingIndicator.Visibility = Visibility.Visible;
         _loadingDotCount = 0;
         LoadingDots.Text = "";
 
-        _loadingDotTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(350)
-        };
-        _loadingDotTimer.Tick += (s, e) =>
+        _loadingDotTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _loadingDotTimer.Tick += (_, _) =>
         {
             _loadingDotCount = (_loadingDotCount + 1) % 4;
             LoadingDots.Text = new string('.', _loadingDotCount);
         };
         _loadingDotTimer.Start();
+
+        // Sweep a blue-violet highlight around the border while the AI is thinking
+        _sweepAngle = 0;
+        _sweepBrush = new LinearGradientBrush
+        {
+            GradientStops = new GradientStopCollection
+            {
+                new GradientStop(Colors.Transparent, 0.00),
+                new GradientStop(_sweepSoftColor,    0.35),
+                new GradientStop(_sweepPeakColor,    0.50),
+                new GradientStop(_sweepSoftColor,    0.65),
+                new GradientStop(Colors.Transparent, 1.00),
+            }
+        };
+        UpdateSweepBrush(0);
+        SuggestionBorder.BorderBrush = _sweepBrush;
+
+        // 33ms (~30fps) — the sweep is slow-moving so 30fps is indistinguishable from 60fps,
+        // but halves the software re-render cost caused by AllowsTransparency=True.
+        _sweepTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+        _sweepTimer.Tick += (_, _) =>
+        {
+            _sweepAngle = (_sweepAngle + 6.0) % 360.0; // 6° per tick keeps the same ~1.9s/rev
+            UpdateSweepBrush(_sweepAngle);
+        };
+        _sweepTimer.Start();
     }
 
     private void StopLoadingAnimation()
     {
         _loadingDotTimer?.Stop();
         _loadingDotTimer = null;
+        _sweepTimer?.Stop();
+        _sweepTimer = null;
+        _sweepBrush = null;
         LoadingIndicator.Visibility = Visibility.Collapsed;
+        SuggestionBorder.BorderBrush = new SolidColorBrush(_normalBorderColor);
+    }
+
+    private void UpdateSweepBrush(double angleDeg)
+    {
+        double rad = angleDeg * Math.PI / 180.0;
+        double dx = Math.Cos(rad) * 0.5;
+        double dy = Math.Sin(rad) * 0.5;
+        _sweepBrush!.StartPoint = new Point(0.5 - dx, 0.5 - dy);
+        _sweepBrush.EndPoint   = new Point(0.5 + dx, 0.5 + dy);
     }
 
     #endregion
@@ -356,7 +448,7 @@ public partial class SuggestionPanel : Window
         return new TextBlock
         {
             Text = word + " ",
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI"),
+            FontFamily = new FontFamily("Cascadia Code, Consolas"),
             FontSize = 14,
             Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xF0)),
             FontWeight = FontWeights.SemiBold,
@@ -407,20 +499,48 @@ public partial class SuggestionPanel : Window
 
     #region Show/Hide Animations
 
+    private void ShowAndAnimate()
+    {
+        _isAnimatingHide = false;
+        Show();
+
+        // Park off-screen while Opacity is still 0 so the layout pass (which
+        // runs at Render priority) completes with real dimensions before we
+        // position and animate. Without this, ActualWidth/Height are 0 on the
+        // first PositionNearCursor() call, causing a visible jump when
+        // OnRenderSizeChanged fires with the real size.
+        Left = -9999;
+        Top = -9999;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            // Guard: a hide may have been requested before the layout pass finished
+            if (_isAnimatingHide) return;
+            PositionNearCursor();
+            AnimateShow();
+        });
+    }
+
     private void AnimateShow()
     {
         _isAnimatingHide = false;
 
-        var scaleX = new DoubleAnimation(0.95, 1.0, ShowDuration) { EasingFunction = ShowEase };
-        var scaleY = new DoubleAnimation(0.95, 1.0, ShowDuration) { EasingFunction = ShowEase };
+        // Scale: springy settle from 85% to full size
+        var scaleX = new DoubleAnimation(0.85, 1.0, ShowDuration) { EasingFunction = ShowScaleEase };
+        var scaleY = new DoubleAnimation(0.85, 1.0, ShowDuration) { EasingFunction = ShowScaleEase };
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX);
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY);
 
-        var fadeIn = new DoubleAnimation(0, 1, ShowDuration) { EasingFunction = ShowEase };
+        // Fade: sharp deceleration so it's opaque quickly
+        var fadeIn = new DoubleAnimation(0, 1, ShowDuration) { EasingFunction = ShowPositionEase };
         BeginAnimation(OpacityProperty, fadeIn);
 
-        var slideUp = new DoubleAnimation(8, 0, ShowDuration) { EasingFunction = ShowEase };
-        SlideTransform.BeginAnimation(TranslateTransform.YProperty, slideUp);
+        // Fly in from below-right — panel sweeps up-left to settle at caret
+        var slideX = new DoubleAnimation(12, 0, ShowDuration) { EasingFunction = ShowPositionEase };
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, slideX);
+
+        var slideY = new DoubleAnimation(24, 0, ShowDuration) { EasingFunction = ShowPositionEase };
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, slideY);
     }
 
     private void AnimateHide()
@@ -430,10 +550,15 @@ public partial class SuggestionPanel : Window
         // Clear any previous animations to prevent event handler accumulation
         BeginAnimation(OpacityProperty, null);
 
-        var scaleDownX = new DoubleAnimation(1.0, 0.98, HideDuration) { EasingFunction = HideEase };
-        var scaleDownY = new DoubleAnimation(1.0, 0.98, HideDuration) { EasingFunction = HideEase };
-        ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleDownX);
-        ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleDownY);
+        // Stop X slide — should already be at 0, snap it clean
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.X = 0;
+
+        // Scale UP slightly — panel "dissolves outward" rather than shrinking away
+        var scaleUpX = new DoubleAnimation(1.0, 1.04, HideDuration) { EasingFunction = HideEase };
+        var scaleUpY = new DoubleAnimation(1.0, 1.04, HideDuration) { EasingFunction = HideEase };
+        ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleUpX);
+        ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleUpY);
 
         var fadeOut = new DoubleAnimation(Opacity, 0, HideDuration) { EasingFunction = HideEase };
         fadeOut.Completed += (_, _) =>
@@ -444,17 +569,45 @@ public partial class SuggestionPanel : Window
                 _isDragged = false;
                 Hide();
 
-                ScaleTransform.ScaleX = 0.95;
-                ScaleTransform.ScaleY = 0.95;
-                SlideTransform.Y = 8;
+                // Reset to fly-in starting state for next appearance
+                ScaleTransform.ScaleX = 0.85;
+                ScaleTransform.ScaleY = 0.85;
+                SlideTransform.X = 12;
+                SlideTransform.Y = 24;
 
-                SuggestionBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+                SuggestionBorder.BorderBrush = new SolidColorBrush(_normalBorderColor);
+                SuggestionBorder.Background = new SolidColorBrush(Color.FromArgb(0x80, 0x16, 0x1B, 0x22));
             }
         };
         BeginAnimation(OpacityProperty, fadeOut);
 
-        var slideDown = new DoubleAnimation(0, 4, HideDuration) { EasingFunction = HideEase };
-        SlideTransform.BeginAnimation(TranslateTransform.YProperty, slideDown);
+        // Drift upward as it fades — float away toward the caret
+        var driftUp = new DoubleAnimation(0, -8, HideDuration) { EasingFunction = HideEase };
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, driftUp);
+    }
+
+    #endregion
+
+    #region Hover Glow
+
+    private void Border_MouseEnter(object sender, MouseEventArgs e)
+    {
+        // Only animate Opacity — BlurRadius animation forces a full software re-render
+        // every frame (AllowsTransparency=True disables GPU acceleration), which is expensive.
+        var glowUp = new DoubleAnimation(0.5, 0.8, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+        PanelGlow.BeginAnimation(DropShadowEffect.OpacityProperty, glowUp);
+    }
+
+    private void Border_MouseLeave(object sender, MouseEventArgs e)
+    {
+        var glowDown = new DoubleAnimation(0.8, 0.5, TimeSpan.FromMilliseconds(250))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+        PanelGlow.BeginAnimation(DropShadowEffect.OpacityProperty, glowDown);
     }
 
     #endregion
@@ -495,28 +648,27 @@ public partial class SuggestionPanel : Window
 
     #region Positioning
 
-    private void PositionNearCaret()
+    private void PositionNearCursor()
     {
         if (_isDragged) return;
 
-        var caret = CursorPositionHelper.GetCaretPosition();
+        var cursor = CursorPositionHelper.GetMousePosition();
         var workArea = SystemParameters.WorkArea;
 
         double panelWidth = Math.Max(ActualWidth, 200);
         double panelHeight = Math.Max(ActualHeight, 60);
 
-        double caretX = caret.X / _dpiScaleX;
-        double caretY = caret.Y / _dpiScaleY;
-        double caretH = caret.Height / _dpiScaleY;
+        double cursorX = cursor.X / _dpiScaleX;
+        double cursorY = cursor.Y / _dpiScaleY;
 
-        double x = caretX;
-        double y = caretY + CaretGap;
+        double x = cursorX;
+        double y = cursorY + CaretGap;
 
         if (x + panelWidth > workArea.Right - ScreenEdgeMargin)
             x = workArea.Right - panelWidth - ScreenEdgeMargin;
 
         if (y + panelHeight > workArea.Bottom - ScreenEdgeMargin)
-            y = caretY - caretH - panelHeight - CaretGap;
+            y = cursorY - panelHeight - CaretGap;
 
         x = Math.Max(workArea.Left + ScreenEdgeMargin, x);
         y = Math.Max(workArea.Top + ScreenEdgeMargin, y);
@@ -529,7 +681,7 @@ public partial class SuggestionPanel : Window
     {
         base.OnRenderSizeChanged(sizeInfo);
         if (IsVisible)
-            PositionNearCaret();
+            PositionNearCursor();
     }
 
     #endregion
@@ -540,6 +692,8 @@ public partial class SuggestionPanel : Window
         var helper = new WindowInteropHelper(this);
         int exStyle = GetWindowLong(helper.Handle, GWL_EXSTYLE);
         SetWindowLong(helper.Handle, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+
+        EnableAcrylic();
 
         var source = PresentationSource.FromVisual(this);
         if (source?.CompositionTarget != null)
@@ -554,4 +708,61 @@ public partial class SuggestionPanel : Window
 
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public WindowCompositionAttribute Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    private enum WindowCompositionAttribute { WCA_ACCENT_POLICY = 19 }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public AccentState AccentState;
+        public uint AccentFlags;
+        public uint GradientColor; // ABGR: (alpha << 24) | (blue << 16) | (green << 8) | red
+        public uint AnimationId;
+    }
+
+    private enum AccentState
+    {
+        ACCENT_DISABLED = 0,
+        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
+    }
+
+    private void EnableAcrylic()
+    {
+        // Dark tint that blends with the blurred background — ABGR for #161B22 at ~63% opacity
+        var accent = new AccentPolicy
+        {
+            AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            AccentFlags = 0,
+            GradientColor = 0xA0221B16
+        };
+
+        int size = Marshal.SizeOf(accent);
+        IntPtr ptr = Marshal.AllocHGlobal(size);
+        try
+        {
+            Marshal.StructureToPtr(accent, ptr, false);
+            var data = new WindowCompositionAttributeData
+            {
+                Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                SizeOfData = size,
+                Data = ptr
+            };
+            SetWindowCompositionAttribute(new WindowInteropHelper(this).Handle, ref data);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
+    }
 }

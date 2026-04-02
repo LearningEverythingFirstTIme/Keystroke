@@ -15,6 +15,12 @@ nul
 
 # Sensitive / local
 *.log
+*.env
+.env*
+**/config.json
+**/secrets.json
+**/credentials.json
+**/appsettings.*.json
 
 # AI tool workspace files
 .openclaw/

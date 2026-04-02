@@ -21,6 +21,11 @@ public class OcrService : IDisposable
     private int _captureCount;
     private volatile bool _disposed;
 
+    // Reusable GDI+ bitmap and MemoryStream — avoids a large allocation every 3 seconds.
+    // Recreated only when the captured window dimensions change.
+    private Bitmap? _reusableBitmap;
+    private readonly MemoryStream _reusableMs = new();
+
     /// <summary>
     /// Maximum characters to keep from OCR output.
     /// </summary>
@@ -83,20 +88,29 @@ public class OcrService : IDisposable
             var captureWidth = Math.Min(rect.Width, MaxCaptureDimension);
             var captureHeight = Math.Min(rect.Height, MaxCaptureDimension);
 
-            // Capture the window region
-            using var bitmap = new Bitmap(captureWidth, captureHeight, PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(bitmap))
+            // Reuse the bitmap if dimensions match; recreate only when the window is resized.
+            if (_reusableBitmap == null
+                || _reusableBitmap.Width  != captureWidth
+                || _reusableBitmap.Height != captureHeight)
+            {
+                _reusableBitmap?.Dispose();
+                _reusableBitmap = new Bitmap(captureWidth, captureHeight, PixelFormat.Format32bppArgb);
+            }
+
+            using (var g = Graphics.FromImage(_reusableBitmap))
             {
                 g.CopyFromScreen(rect.Left, rect.Top, 0, 0, new Size(captureWidth, captureHeight));
             }
 
-            // Convert System.Drawing.Bitmap → WinRT SoftwareBitmap
-            using var ms = new MemoryStream();
-            bitmap.Save(ms, ImageFormat.Bmp);
-            ms.Seek(0, SeekOrigin.Begin);
+            // Reuse the MemoryStream buffer — reset and refill rather than reallocating.
+            _reusableMs.SetLength(0);
+            _reusableMs.Seek(0, SeekOrigin.Begin);
+            _reusableBitmap.Save(_reusableMs, ImageFormat.Bmp);
+            _reusableMs.Seek(0, SeekOrigin.Begin);
 
+            // Convert System.Drawing.Bitmap → WinRT SoftwareBitmap
             using var stream = new InMemoryRandomAccessStream();
-            await ms.CopyToAsync(stream.AsStreamForWrite());
+            await _reusableMs.CopyToAsync(stream.AsStreamForWrite());
             stream.Seek(0);
 
             var decoder = await BitmapDecoder.CreateAsync(stream);
@@ -196,13 +210,15 @@ public class OcrService : IDisposable
     private void Log(string msg)
     {
         try { File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); }
-        catch { }
+        catch (IOException) { }
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        _reusableBitmap?.Dispose();
+        _reusableMs.Dispose();
         GC.SuppressFinalize(this);
     }
 }

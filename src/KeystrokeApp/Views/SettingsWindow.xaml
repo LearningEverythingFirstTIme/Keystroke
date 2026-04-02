@@ -289,6 +289,19 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="SwatchButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter HorizontalAlignment="Center"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -342,6 +355,8 @@
                                     <ComboBoxItem Content="🚀 Gemini (Recommended)"/>
                                     <ComboBoxItem Content="⚡ GPT-5"/>
                                     <ComboBoxItem Content="✨ Claude"/>
+                                    <ComboBoxItem Content="🧪 Ollama (Local, Experimental)"/>
+                                    <ComboBoxItem Content="🌐 OpenRouter (Any Model)"/>
                                     <ComboBoxItem Content="🧪 Dummy (Testing)"/>
                                 </ComboBox>
 
@@ -358,9 +373,9 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="ApiKeyBox" Grid.Column="0" Margin="0,0,8,0" 
+                                        <TextBox x:Name="GeminiApiKeyBox" Grid.Column="0" Margin="0,0,8,0"
                                                  TextChanged="Setting_Changed"/>
-                                        <TextBlock x:Name="ApiKeyStatus" Grid.Column="1" Text="●" FontSize="16"
+                                        <TextBlock x:Name="GeminiApiKeyStatus" Grid.Column="1" Text="●" FontSize="16"
                                                    VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"
                                                    ToolTip="API key status"/>
                                     </Grid>
@@ -439,6 +454,95 @@
                                         <ComboBoxItem Content="claude-haiku-4-5 (Fast)" Tag="claude-haiku-4-5-20251001"/>
                                         <ComboBoxItem Content="claude-sonnet-4-5 (Smart)" Tag="claude-sonnet-4-5-20250214"/>
                                     </ComboBox>
+                                </StackPanel>
+
+                                <!-- Ollama Settings (no API key needed) -->
+                                <StackPanel x:Name="OllamaPanel" Visibility="Collapsed">
+                                    <!-- Experimental warning -->
+                                    <Border Background="#1AFFA500" BorderBrush="#80FFA500" BorderThickness="1"
+                                            CornerRadius="6" Padding="10,8" Margin="0,12,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="🧪 Experimental — Use at your own risk"
+                                                       FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="#FFFFA500" Margin="0,0,0,4"/>
+                                            <TextBlock TextWrapping="Wrap" FontSize="11"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       Text="Local model quality varies significantly by model size and hardware. Completion accuracy is not guaranteed. Requires Ollama installed and running locally. Not recommended for general use."/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                               Margin="0,12,0,4"/>
+                                    <ComboBox x:Name="OllamaModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="qwen3:30b-a3b ★ Best (MoE, 14B quality at 8B speed)" Tag="qwen3:30b-a3b"/>
+                                        <ComboBoxItem Content="qwen3:8b (8B dense, fast)" Tag="qwen3:8b"/>
+                                        <ComboBoxItem Content="mistral:7b (fast, great prose)" Tag="mistral:7b"/>
+                                        <ComboBoxItem Content="qwen2.5:7b (solid, well-tested)" Tag="qwen2.5:7b"/>
+                                        <ComboBoxItem Content="llama3.1:8b (Meta 8B)" Tag="llama3.1:8b"/>
+                                        <ComboBoxItem Content="llama3.2:latest (3B, fastest)" Tag="llama3.2:latest"/>
+                                        <ComboBoxItem Content="qwen2.5:0.5b-base (tiny base model)" Tag="qwen2.5:0.5b-base"/>
+                                    </ComboBox>
+                                    
+                                    <TextBlock Text="Ollama Endpoint" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                               Margin="0,12,0,4"/>
+                                    <TextBox x:Name="OllamaEndpointBox" TextChanged="Setting_Changed"/>
+                                    
+                                    <TextBlock x:Name="OllamaStatus" Text="● Checking..."
+                                               FontSize="12" Foreground="{StaticResource TextMuted}"
+                                               Margin="0,8,0,0"/>
+                                </StackPanel>
+
+                                <!-- OpenRouter Settings -->
+                                <StackPanel x:Name="OpenRouterPanel" Visibility="Collapsed">
+
+                                    <!-- API Key row -->
+                                    <TextBlock Text="OpenRouter API Key" FontSize="12"
+                                               Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="OpenRouterApiKeyBox" Grid.Column="0" Margin="0,0,8,0"
+                                                 TextChanged="Setting_Changed"/>
+                                        <TextBlock x:Name="OpenRouterApiKeyStatus" Grid.Column="1" Text="●"
+                                                   FontSize="16" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   ToolTip="API key status"/>
+                                    </Grid>
+
+                                    <!-- Model selector header: label + refresh button -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Model" FontSize="12"
+                                                   Foreground="{StaticResource TextSecondary}"
+                                                   VerticalAlignment="Center"/>
+                                        <Button x:Name="OpenRouterRefreshBtn" Grid.Column="1"
+                                                Content="↻ Refresh" FontSize="11"
+                                                Background="Transparent" Foreground="{StaticResource Accent}"
+                                                BorderThickness="0" Padding="4,2" Cursor="Hand"
+                                                Click="OpenRouterRefresh_Click"/>
+                                    </Grid>
+
+                                    <!-- Dynamic model list — populated in code-behind -->
+                                    <!-- ⭐ = recommended for autocomplete; others work but vary in quality -->
+                                    <ComboBox x:Name="OpenRouterModelCombo" Margin="0,0,0,4"
+                                              SelectionChanged="OpenRouterModelCombo_SelectionChanged"/>
+
+                                    <!-- Loading / error state label -->
+                                    <TextBlock x:Name="OpenRouterModelStatus" FontSize="11"
+                                               Foreground="{StaticResource TextMuted}" Margin="0,2,0,0"/>
+
+                                    <!-- Warning shown when a reasoning-first model is selected -->
+                                    <TextBlock x:Name="OpenRouterReasoningWarning"
+                                               Text="⚠ Reasoning model selected. These models have higher latency and inconsistent completion quality for autocomplete use."
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="#F08830"
+                                               Visibility="Collapsed" Margin="0,6,0,0"/>
+
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -659,50 +763,52 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    
-                                    <Border Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="8" 
+
+                                    <Border Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="8"
                                             Padding="12" Margin="0,0,8,0">
                                         <StackPanel>
-                                            <TextBlock x:Name="StatsTotalAccepted" Text="0" FontSize="28" 
+                                            <TextBlock x:Name="StatsTotalAccepted" Text="0" FontSize="28"
                                                        FontWeight="Bold" Foreground="{StaticResource Accent}"/>
-                                            <TextBlock Text="Accepted" Foreground="{StaticResource TextMuted}" 
+                                            <TextBlock Text="Accepted" Foreground="{StaticResource TextMuted}"
                                                        FontSize="11"/>
                                         </StackPanel>
                                     </Border>
-                                    
-                                    <Border Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="8" 
+
+                                    <!-- Accept Rate replaces the less-useful Categories count;
+                                         category breakdown is already visible in the bars below. -->
+                                    <Border Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="8"
                                             Padding="12" Margin="4,0,4,0">
                                         <StackPanel>
-                                            <TextBlock x:Name="StatsCategories" Text="0" FontSize="28" 
+                                            <TextBlock x:Name="StatsAcceptRate" Text="—" FontSize="28"
                                                        FontWeight="Bold" Foreground="{StaticResource Success}"/>
-                                            <TextBlock Text="Categories" Foreground="{StaticResource TextMuted}" 
+                                            <TextBlock Text="Accept Rate" Foreground="{StaticResource TextMuted}"
                                                        FontSize="11"/>
                                         </StackPanel>
                                     </Border>
-                                    
-                                    <Border Grid.Column="2" Background="{StaticResource BgInput}" CornerRadius="8" 
+
+                                    <Border Grid.Column="2" Background="{StaticResource BgInput}" CornerRadius="8"
                                             Padding="12" Margin="8,0,0,0">
                                         <StackPanel>
-                                            <TextBlock x:Name="StatsLastActivity" Text="-" FontSize="14" 
+                                            <TextBlock x:Name="StatsLastActivity" Text="-" FontSize="14"
                                                        FontWeight="Bold" Foreground="{StaticResource TextPrimary}"
                                                        VerticalAlignment="Center" Margin="0,8,0,0"/>
-                                            <TextBlock Text="Last Activity" Foreground="{StaticResource TextMuted}" 
+                                            <TextBlock Text="Last Activity" Foreground="{StaticResource TextMuted}"
                                                        FontSize="11"/>
                                         </StackPanel>
                                     </Border>
                                 </Grid>
 
-                                <!-- Category Breakdown -->
-                                <TextBlock Text="Breakdown by App Type" FontSize="12" 
+                                <!-- Category Intelligence Cards (Sub-Phase D) -->
+                                <TextBlock Text="Learning Intelligence by Category" FontSize="12"
                                            Foreground="{StaticResource TextSecondary}" Margin="0,0,0,8"/>
                                 <StackPanel x:Name="CategoryBreakdownPanel">
-                                    <!-- Dynamically populated -->
+                                    <!-- Dynamically populated with CreateIntelligenceCard() -->
                                 </StackPanel>
                             </StackPanel>
                         </Border>
 
                         <!-- Data Management -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16">
+                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
                             <StackPanel>
                                 <TextBlock Text="Data Management" FontSize="14" FontWeight="SemiBold" 
                                            Foreground="{StaticResource TextPrimary}" Margin="0,0,0,12"/>
@@ -721,6 +827,210 @@
                                     <Button Grid.Column="1" Content="Reset" Style="{StaticResource SecondaryButton}"
                                             Click="ResetLearning_Click"/>
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Style Profile -->
+                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Writing Style Profile" FontSize="14" FontWeight="SemiBold" 
+                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Periodically analyzes your accepted completions to learn your unique writing style" 
+                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="✨ Style Profile" FontSize="13" 
+                                                       Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Learns your tone, vocabulary, and sentence structure" 
+                                                       Foreground="{StaticResource TextMuted}" FontSize="11" 
+                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="StyleProfileCheck" Grid.Column="1" IsChecked="True"
+                                                  Checked="StyleProfileCheck_Changed" Unchecked="StyleProfileCheck_Changed"
+                                                  VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="Update Frequency (acceptances between updates)" FontSize="12" 
+                                               Foreground="{StaticResource TextSecondary}"/>
+                                    <TextBlock x:Name="StyleProfileIntervalLabel" Text="30" 
+                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
+                                               FontSize="12" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="StyleProfileIntervalSlider" Minimum="10" Maximum="100" Value="30"
+                                        IsSnapToTickEnabled="True" TickFrequency="5"
+                                        ValueChanged="StyleProfileIntervalSlider_Changed"/>
+
+                                 <TextBlock x:Name="StyleProfileStatus" Text="" FontSize="11"
+                                            Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
+
+                                 <!-- Progress Ring -->
+                                 <Grid x:Name="StyleProgressPanel" Margin="0,16,0,12"
+                                       HorizontalAlignment="Center" Visibility="Collapsed">
+                                     <Grid.ColumnDefinitions>
+                                         <ColumnDefinition Width="Auto"/>
+                                         <ColumnDefinition Width="*"/>
+                                     </Grid.ColumnDefinitions>
+
+                                     <!-- Ring -->
+                                     <Grid Width="80" Height="80">
+                                         <Ellipse Width="80" Height="80"
+                                                  Stroke="#30363D" StrokeThickness="6"
+                                                  Fill="Transparent"/>
+                                         <Ellipse x:Name="ProgressArc"
+                                                  Width="80" Height="80"
+                                                  Stroke="#2F81F7" StrokeThickness="6"
+                                                  Fill="Transparent"
+                                                  StrokeDashArray="0 38.746"
+                                                  StrokeDashOffset="0"
+                                                  RenderTransformOrigin="0.5,0.5">
+                                             <Ellipse.RenderTransform>
+                                                 <RotateTransform Angle="-90"/>
+                                             </Ellipse.RenderTransform>
+                                         </Ellipse>
+                                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                             <TextBlock x:Name="ProgressCount" Text="0/30"
+                                                        FontSize="14" FontWeight="SemiBold"
+                                                        Foreground="#F0F6FC" HorizontalAlignment="Center"/>
+                                             <TextBlock x:Name="ProgressLabel" Text="acceptances"
+                                                        FontSize="9" Foreground="#6E7681"
+                                                        HorizontalAlignment="Center"/>
+                                         </StackPanel>
+                                     </Grid>
+
+                                     <!-- Legend -->
+                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
+                                         <TextBlock x:Name="ProgressMessage" Text="until next profile update"
+                                                    FontSize="12" Foreground="#8B949E"/>
+                                         <TextBlock x:Name="ProgressGenerated" Text=""
+                                                    FontSize="11" Foreground="#238636" Margin="0,4,0,0"/>
+                                     </StackPanel>
+                                 </Grid>
+
+                                 <!-- Category Badges -->
+                                 <WrapPanel x:Name="CategoryBadgesPanel" Margin="0,0,0,8" Orientation="Horizontal"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Vocabulary Fingerprint -->
+                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Vocabulary Fingerprint" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Analyses your accepted completions to learn your personal word choices, phrase patterns, and sentence structure — no AI call required"
+                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"
+                                           TextWrapping="Wrap"/>
+
+                                <!-- Status row -->
+                                <TextBlock x:Name="VocabProfileStatus" Text="No fingerprint generated yet."
+                                           Foreground="{StaticResource TextMuted}" FontSize="11"
+                                           Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                                <!-- Per-category badges -->
+                                <WrapPanel x:Name="VocabCategoryBadgesPanel" Orientation="Horizontal"/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- APPEARANCE TAB -->
+            <TabItem Header="🎨 Appearance">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8,8,8,16">
+                        <Border Style="{StaticResource CardStyle}" Padding="16">
+                            <StackPanel>
+                                <TextBlock Text="Panel Theme" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Sets the accent color of the autocomplete suggestion panel"
+                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,24"/>
+
+                                <UniformGrid Columns="5" HorizontalAlignment="Left">
+
+                                    <!-- Midnight -->
+                                    <Button Tag="midnight" Click="Swatch_Click"
+                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
+                                        <StackPanel>
+                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
+                                                <Ellipse x:Name="SwatchRingMidnight"
+                                                         Stroke="Transparent" StrokeThickness="3"/>
+                                                <Ellipse Fill="#5050E8" Width="38" Height="38"/>
+                                            </Grid>
+                                            <TextBlock Text="Midnight" FontSize="11" FontFamily="Segoe UI"
+                                                       Foreground="{StaticResource TextSecondary}"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- Ember -->
+                                    <Button Tag="ember" Click="Swatch_Click"
+                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
+                                        <StackPanel>
+                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
+                                                <Ellipse x:Name="SwatchRingEmber"
+                                                         Stroke="Transparent" StrokeThickness="3"/>
+                                                <Ellipse Fill="#D06010" Width="38" Height="38"/>
+                                            </Grid>
+                                            <TextBlock Text="Ember" FontSize="11" FontFamily="Segoe UI"
+                                                       Foreground="{StaticResource TextSecondary}"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- Forest -->
+                                    <Button Tag="forest" Click="Swatch_Click"
+                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
+                                        <StackPanel>
+                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
+                                                <Ellipse x:Name="SwatchRingForest"
+                                                         Stroke="Transparent" StrokeThickness="3"/>
+                                                <Ellipse Fill="#209A50" Width="38" Height="38"/>
+                                            </Grid>
+                                            <TextBlock Text="Forest" FontSize="11" FontFamily="Segoe UI"
+                                                       Foreground="{StaticResource TextSecondary}"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- Rose -->
+                                    <Button Tag="rose" Click="Swatch_Click"
+                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
+                                        <StackPanel>
+                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
+                                                <Ellipse x:Name="SwatchRingRose"
+                                                         Stroke="Transparent" StrokeThickness="3"/>
+                                                <Ellipse Fill="#C83898" Width="38" Height="38"/>
+                                            </Grid>
+                                            <TextBlock Text="Rose" FontSize="11" FontFamily="Segoe UI"
+                                                       Foreground="{StaticResource TextSecondary}"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- Slate -->
+                                    <Button Tag="slate" Click="Swatch_Click"
+                                            Style="{StaticResource SwatchButton}">
+                                        <StackPanel>
+                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
+                                                <Ellipse x:Name="SwatchRingSlate"
+                                                         Stroke="Transparent" StrokeThickness="3"/>
+                                                <Ellipse Fill="#586878" Width="38" Height="38"/>
+                                            </Grid>
+                                            <TextBlock Text="Slate" FontSize="11" FontFamily="Segoe UI"
+                                                       Foreground="{StaticResource TextSecondary}"
+                                                       HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                </UniformGrid>
                             </StackPanel>
                         </Border>
                     </StackPanel>

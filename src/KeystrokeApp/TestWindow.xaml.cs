@@ -1,14 +1,14 @@
 using System.Windows;
 
-namespace KeystrokeApp;
+namespace KeystrokeApp.Views;
 
 /// <summary>
-/// Simple test window to display keyboard hook events.
-/// This is just for Phase 2.1 testing - will be removed later.
+/// Debug window that displays live keyboard hook events and prediction diagnostics.
+/// Opened via "Show Debug Window" in the system tray menu.
 /// </summary>
-public partial class TestWindow : Window
+public partial class DebugWindow : Window
 {
-    public TestWindow()
+    public DebugWindow()
     {
         InitializeComponent();
     }

@@ -15,15 +15,24 @@ public class AppConfig
     [JsonIgnore] public string? GeminiApiKey { get; set; }
     [JsonIgnore] public string? AnthropicApiKey { get; set; }
     [JsonIgnore] public string? OpenAiApiKey { get; set; }
+    [JsonIgnore] public string? OpenRouterApiKey { get; set; }
 
     // Encrypted on-disk representations (used only for JSON serialization)
     public string? GeminiApiKeyEncrypted { get; set; }
     public string? AnthropicApiKeyEncrypted { get; set; }
     public string? OpenAiApiKeyEncrypted { get; set; }
+    public string? OpenRouterApiKeyEncrypted { get; set; }
     public string PredictionEngine { get; set; } = "gemini";
     public string GeminiModel { get; set; } = "gemini-3.1-flash-lite-preview";
     public string ClaudeModel { get; set; } = "claude-haiku-4-5-20251001";
     public string Gpt5Model { get; set; } = "gpt-5.4-nano";
+
+    // Local LLM (Ollama) settings — no API key needed
+    public string OllamaModel { get; set; } = "qwen3:30b-a3b";
+    public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+
+    // OpenRouter settings — proxies hundreds of models via one OpenAI-compatible API
+    public string OpenRouterModel { get; set; } = "google/gemini-flash-2.0";
 
     // Behavior settings
     public int DebounceMs { get; set; } = 300;
@@ -37,10 +46,16 @@ public class AppConfig
 
     // Context features
     public bool OcrEnabled { get; set; } = true;
+    public bool RollingContextEnabled { get; set; } = true;
 
     // Learning: opt-in tracking of accepted/dismissed completions for few-shot learning.
     // Off by default — user must explicitly enable in settings.
     public bool LearningEnabled { get; set; } = false;
+
+    // Style profile: periodically analyzes accepted completions to generate a writing
+    // style summary injected into the system prompt. Only active when LearningEnabled is true.
+    public bool StyleProfileEnabled { get; set; } = true;
+    public int StyleProfileInterval { get; set; } = 30;
 
     // Number of suggestions per request (1 = single prediction only, 2-5 = extras for Ctrl+Up/Down cycling)
     // Lower values reduce API costs and latency; higher values give more choices.
@@ -48,6 +63,9 @@ public class AppConfig
 
     // First-launch consent: must be true before the app activates keystroke monitoring.
     public bool ConsentAccepted { get; set; } = false;
+
+    // Suggestion panel color theme ("midnight", "ember", "forest", "rose", "slate")
+    public string ThemeId { get; set; } = "midnight";
 
     // User-customizable system prompt (empty = use default)
     public string? CustomSystemPrompt { get; set; }
@@ -124,6 +142,7 @@ public class AppConfig
                 config.GeminiApiKey = KeyProtection.Decrypt(config.GeminiApiKeyEncrypted);
                 config.AnthropicApiKey = KeyProtection.Decrypt(config.AnthropicApiKeyEncrypted);
                 config.OpenAiApiKey = KeyProtection.Decrypt(config.OpenAiApiKeyEncrypted);
+                config.OpenRouterApiKey = KeyProtection.Decrypt(config.OpenRouterApiKeyEncrypted);
 
                 // Migrate legacy plaintext keys from old config format.
                 // Old configs stored keys as "GeminiApiKey" etc. directly in JSON.
@@ -146,7 +165,7 @@ public class AppConfig
                     "Keystroke", "config-error.log");
                 File.AppendAllText(logPath, $"[{DateTime.Now:o}] Config load failed: {ex}\n");
             }
-            catch { }
+            catch (IOException) { }
         }
         return new AppConfig();
     }
@@ -162,6 +181,7 @@ public class AppConfig
         Temperature = Math.Clamp(Temperature, 0.0, 2.0);
         MaxSuggestions = Math.Clamp(MaxSuggestions, 1, 5);
         MaxOutputTokens = Math.Clamp(MaxOutputTokens, 1, 2000);
+        StyleProfileInterval = Math.Clamp(StyleProfileInterval, 10, 200);
     }
 
     /// <summary>
@@ -205,8 +225,17 @@ public class AppConfig
                 config.OpenAiApiKey = oaiKey.GetString();
                 migrated = true;
             }
+
+            if (config.OpenRouterApiKey == null &&
+                root.TryGetProperty("OpenRouterApiKey", out var orKey) &&
+                orKey.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrEmpty(orKey.GetString()))
+            {
+                config.OpenRouterApiKey = orKey.GetString();
+                migrated = true;
+            }
         }
-        catch { }
+        catch (Exception) { /* Malformed JSON in config — skip migration, caller falls back to defaults */ }
 
         // Re-save immediately so plaintext keys are replaced with encrypted versions
         if (migrated)
@@ -221,6 +250,7 @@ public class AppConfig
         GeminiApiKeyEncrypted = KeyProtection.Encrypt(GeminiApiKey);
         AnthropicApiKeyEncrypted = KeyProtection.Encrypt(AnthropicApiKey);
         OpenAiApiKeyEncrypted = KeyProtection.Encrypt(OpenAiApiKey);
+        OpenRouterApiKeyEncrypted = KeyProtection.Encrypt(OpenRouterApiKey);
 
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });

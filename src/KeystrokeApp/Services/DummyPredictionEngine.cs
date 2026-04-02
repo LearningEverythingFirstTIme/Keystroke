@@ -35,4 +35,7 @@ public class DummyPredictionEngine : IPredictionEngine
 
         return Task.FromResult(completion);
     }
+
+    public Task<string?> GenerateTextAsync(string systemPrompt, string userPrompt, int maxTokens = 200, CancellationToken ct = default)
+        => Task.FromResult<string?>("The user writes in a neutral, professional tone with concise sentences.");
 }
