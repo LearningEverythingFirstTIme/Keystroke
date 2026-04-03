@@ -9,27 +9,27 @@ using Windows.Storage.Streams;
 namespace KeystrokeApp.Services;
 
 /// <summary>
-/// Captures the active window and runs Windows OCR to extract visible text.
+/// Reads the active window via Windows OCR to extract visible text.
 /// Results are cached and only refreshed on demand (e.g. window focus change).
 /// </summary>
-public class OcrService : IDisposable
+public class ScreenReaderService : IDisposable
 {
     private readonly OcrEngine? _ocrEngine;
     private readonly string _logPath;
     private volatile string? _cachedText;
     private volatile string _cachedForWindow = "";
-    private int _captureCount;
+    private int _readCount;
     private volatile bool _disposed;
 
     // Reusable GDI+ bitmap and MemoryStream — avoids a large allocation every 3 seconds.
-    // Recreated only when the captured window dimensions change.
+    // Recreated only when the window dimensions change.
     private Bitmap? _reusableBitmap;
     private readonly MemoryStream _reusableMs = new();
 
     /// <summary>
     /// Maximum characters to keep from OCR output.
     /// </summary>
-    private const int MaxCachedLength = 2000;
+    private const int MaxCachedLength = 5000;
 
     /// <summary>
     /// Maximum bitmap dimension to prevent excessive memory allocation on large/multi-monitor setups.
@@ -51,7 +51,7 @@ public class OcrService : IDisposable
         public int Height => Bottom - Top;
     }
 
-    public OcrService()
+    public ScreenReaderService()
     {
         _logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -62,16 +62,16 @@ public class OcrService : IDisposable
     }
 
     /// <summary>
-    /// Get the most recently cached OCR text. Returns null if no capture has run.
+    /// Get the most recently cached OCR text. Returns null if no scan has run.
     /// This is safe to call from the prediction path — it never blocks on OCR.
     /// </summary>
     public string? CachedText => _cachedText;
 
     /// <summary>
-    /// Capture and OCR the active window. Call this from a background thread.
+    /// Read and OCR the active window. Call this from a background thread.
     /// Results are stored in CachedText for the prediction engine to read.
     /// </summary>
-    public async Task CaptureAsync()
+    public async Task ReadScreenAsync()
     {
         if (_ocrEngine == null || _disposed)
             return;
@@ -131,38 +131,38 @@ public class OcrService : IDisposable
                     text = text[^MaxCachedLength..];
 
                 _cachedText = text;
-                Log($"Captured {text.Length} chars from OCR");
+                Log($"Read {text.Length} chars from OCR");
             }
         }
         catch (Exception ex)
         {
-            Log($"Capture error: {ex.Message}");
+            Log($"Screen read error: {ex.Message}");
         }
     }
 
     /// <summary>
-    /// Check if a new OCR capture should be triggered.
+    /// Check if a new screen read should be triggered.
     /// Returns true on window change OR if enough time has passed for a refresh.
     /// </summary>
-    public bool ShouldRecapture()
+    public bool ShouldRefresh()
     {
-        var (processName, windowTitle) = ActiveWindowService.GetActiveWindow();
+        var (processName, windowTitle) = AppContextService.GetActiveWindow();
         var windowKey = $"{processName}|{windowTitle}";
 
         if (windowKey != _cachedForWindow)
         {
             _cachedForWindow = windowKey;
-            _captureCount = 0;
+            _readCount = 0;
             Log($"Window changed → {processName} \"{windowTitle}\"");
             return true;
         }
 
-        // Even for the same window, re-capture periodically (every ~4 ticks = 12s)
+        // Even for the same window, re-scan periodically (every ~4 ticks = 12s)
         // to pick up content changes like scrolling or new messages
-        var count = Interlocked.Increment(ref _captureCount);
+        var count = Interlocked.Increment(ref _readCount);
         if (count >= 4)
         {
-            Interlocked.Exchange(ref _captureCount, 0);
+            Interlocked.Exchange(ref _readCount, 0);
             return true;
         }
 
@@ -180,12 +180,12 @@ public class OcrService : IDisposable
 
     /// <summary>
     /// Remove text that comes from Keystroke's own suggestion overlay,
-    /// which the OCR will pick up if it's visible during capture.
+    /// which the OCR will pick up if it's visible during a screen read.
     /// </summary>
     private static string StripKeystrokeUiText(string text)
     {
         // The suggestion panel shows a hint line and completion text
-        // that OCR captures as part of the screen content
+        // that OCR reads as part of the screen content
         string[] uiFragments =
         [
             "Tab to accept",

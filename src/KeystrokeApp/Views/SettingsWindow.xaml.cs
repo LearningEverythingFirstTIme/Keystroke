@@ -1005,15 +1005,15 @@ public partial class SettingsWindow : Window
         {
             try
             {
-                var trackingPath = Path.Combine(
+                var dataPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "Keystroke", "tracking.jsonl");
+                    "Keystroke", "completions.jsonl");
                 var styleProfilePath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "Keystroke", "style-profile.json");
 
-                if (File.Exists(trackingPath))
-                    File.WriteAllText(trackingPath, "");
+                if (File.Exists(dataPath))
+                    File.WriteAllText(dataPath, "");
                 if (File.Exists(styleProfilePath))
                     File.Delete(styleProfilePath);
 

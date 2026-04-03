@@ -7,7 +7,7 @@ using WindowsInput;
 namespace KeystrokeHook;
 
 /// <summary>
-/// Phase 1: "Hello World" Keyboard Hook
+/// Phase 1: "Hello World" Input Listener
 /// 
 /// Uses InputSimulator library (well-tested wrapper around SendInput).
 /// </summary>
@@ -82,7 +82,7 @@ class Program
         };
         _typingThread.Start();
 
-        // Set up the keyboard hook
+        // Set up the input listener
         _hookId = SetHook(_hookCallback);
 
         if (_hookId == IntPtr.Zero)

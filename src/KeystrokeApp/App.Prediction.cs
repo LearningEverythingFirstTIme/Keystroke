@@ -104,7 +104,7 @@ public partial class App
         _lastPredictionPrefix = buffer;
 
         // Build context snapshot — app detection is instant, OCR uses cached result
-        var (processName, windowTitle) = ActiveWindowService.GetActiveWindow();
+        var (processName, windowTitle) = AppContextService.GetActiveWindow();
         var context = new ContextSnapshot
         {
             TypedText   = buffer,
@@ -233,18 +233,18 @@ public partial class App
     // ==================== OCR ====================
 
     /// <summary>
-    /// Periodic OCR capture. Only re-captures when the active window has changed.
+    /// Periodic screen read. Only re-reads when the active window has changed.
     /// </summary>
     private void OnOcrTimerTick(object? state)
     {
         if (!_isEnabled || _ocrService == null) return;
 
-        if (_ocrService.ShouldRecapture())
+        if (_ocrService.ShouldRefresh())
         {
             _ = Task.Run(async () =>
             {
-                try { await _ocrService.CaptureAsync(); }
-                catch (Exception ex) { LogToDebug($"OCR capture error: {ex.Message}"); }
+                try { await _ocrService.ReadScreenAsync(); }
+                catch (Exception ex) { LogToDebug($"Screen read error: {ex.Message}"); }
             });
         }
     }

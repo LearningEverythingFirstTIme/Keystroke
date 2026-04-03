@@ -8,7 +8,7 @@ namespace KeystrokeApp.Services;
 /// Keys are scoped to the current Windows user — only the same user account
 /// on the same machine can decrypt them.
 /// </summary>
-public static class KeyProtection
+public static class ApiKeyEncryption
 {
     private const string EncryptedPrefix = "enc:";
 

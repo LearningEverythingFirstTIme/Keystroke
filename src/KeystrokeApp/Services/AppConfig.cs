@@ -48,7 +48,7 @@ public class AppConfig
     public bool OcrEnabled { get; set; } = true;
     public bool RollingContextEnabled { get; set; } = true;
 
-    // Learning: opt-in tracking of accepted/dismissed completions for few-shot learning.
+    // Learning: opt-in logging of accepted/dismissed completions for few-shot learning.
     // Off by default — user must explicitly enable in settings.
     public bool LearningEnabled { get; set; } = false;
 
@@ -61,7 +61,7 @@ public class AppConfig
     // Lower values reduce API costs and latency; higher values give more choices.
     public int MaxSuggestions { get; set; } = 3;
 
-    // First-launch consent: must be true before the app activates keystroke monitoring.
+    // First-launch consent: must be true before the app activates input processing.
     public bool ConsentAccepted { get; set; } = false;
 
     // Suggestion panel color theme ("midnight", "ember", "forest", "rose", "slate")
@@ -72,25 +72,28 @@ public class AppConfig
 
     // The default system prompt (used when CustomSystemPrompt is empty)
     public static string DefaultSystemPrompt =>
-        "You are a predictive text engine embedded in a keyboard autocomplete system.\n" +
-        "Your ONLY job is to predict the most likely continuation of what the user is typing.\n\n" +
-        "OUTPUT RULES (strict — violating these makes your output unusable):\n" +
-        "- Output ONLY the predicted continuation text. Nothing else.\n" +
-        "- NEVER repeat any part of the text the user has already typed.\n" +
+        "You are a keyboard autocomplete engine. Predict the next words someone is typing.\n\n" +
+        "GROUNDING (most important — read this first):\n" +
+        "- <screen_context> = what is visible on screen right now. This is your PRIMARY source of truth for topic, tone, and intent.\n" +
+        "- <recently_written> = text written earlier in this session. Use it to maintain the train of thought and avoid repeating earlier phrases.\n" +
+        "- <complete_this> = the text being typed RIGHT NOW. Your output is appended directly after it.\n" +
+        "- <user_style_hints> (when present) = OPTIONAL hints about writing habits. Use lightly — never override what makes sense given screen context.\n" +
+        "- In a conversation, predict a natural reply to the MOST RECENT message from the other person. Do not parrot or rephrase what was already said.\n" +
+        "- ONLY predict content grounded in the provided context. Do not introduce new topics, names, or facts.\n\n" +
+        "OUTPUT FORMAT (strict — violating these makes output unusable):\n" +
+        "- Output ONLY continuation text. Nothing else.\n" +
+        "- NEVER repeat any part of the text inside <complete_this>.\n" +
         "- NEVER wrap output in quotation marks, backticks, or any formatting.\n" +
         "- NEVER include explanations, alternatives, or meta-commentary.\n" +
-        "- If you are not confident in a prediction, output NOTHING. An empty response is always better than a wrong one.\n\n" +
-        "PREDICTION RULES (how to decide what to predict):\n" +
-        "- Predict the SINGLE most likely continuation. Favor common, expected phrasing over creative or unusual wording.\n" +
-        "- The screen context shows what the user is looking at — use it to understand the topic and conversation flow.\n" +
-        "- ONLY predict content that is directly relevant to what the user has started typing. Do not introduce new topics, names, or facts not supported by the screen context.\n" +
-        "- If the screen shows a conversation, predict a natural reply to the most recent message. Do not parrot or rephrase what someone else already said.\n" +
-        "- NEVER repeat or echo text that the user has already written earlier in the same message. If the user has already typed a phrase, do not predict that same phrase again. Look at the FULL text the user has typed so far and ensure your prediction is a NEW continuation, not a duplicate of something already said.\n" +
-        "- Match the user's tone and formality exactly. If they write casually, predict casual text. If formal, predict formal text.\n" +
-        "- Complete ONLY the current sentence or thought. Stop at a natural ending point — do not ramble or start a new sentence unless the user clearly would.\n" +
-        "- When the typed text is very short or ambiguous (under ~5 words), prefer shorter, safer completions. Only predict longer continuations when the intent is clear.\n" +
-        "- Never predict UI elements, placeholder text, or instructions (e.g. 'Type a message', 'Send', 'Tab to accept').\n" +
-        "- Always complete with whole words. Never end your output in the middle of a word.";
+        "- If not confident, output NOTHING. Empty is always better than wrong.\n\n" +
+        "PREDICTION QUALITY:\n" +
+        "- Predict the SINGLE most likely continuation. Favor natural, expected phrasing.\n" +
+        "- Match tone and formality to the existing text exactly.\n" +
+        "- Complete the current sentence or thought. Stop at a natural ending point.\n" +
+        "- When typed text is very short (under ~5 words), prefer shorter, safer completions.\n" +
+        "- NEVER use filler words like 'honestly', 'basically', 'actually', 'literally', 'definitely' unless they appear in the screen context or recently written text.\n" +
+        "- Never predict UI elements or placeholder text (e.g. 'Type a message', 'Send').\n" +
+        "- Always complete with whole words. Never end mid-word.";
 
     /// <summary>
     /// Get the effective system prompt (custom if set, otherwise default).
@@ -139,10 +142,10 @@ public class AppConfig
                 var config = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
 
                 // Decrypt API keys from their on-disk encrypted form
-                config.GeminiApiKey = KeyProtection.Decrypt(config.GeminiApiKeyEncrypted);
-                config.AnthropicApiKey = KeyProtection.Decrypt(config.AnthropicApiKeyEncrypted);
-                config.OpenAiApiKey = KeyProtection.Decrypt(config.OpenAiApiKeyEncrypted);
-                config.OpenRouterApiKey = KeyProtection.Decrypt(config.OpenRouterApiKeyEncrypted);
+                config.GeminiApiKey = ApiKeyEncryption.Decrypt(config.GeminiApiKeyEncrypted);
+                config.AnthropicApiKey = ApiKeyEncryption.Decrypt(config.AnthropicApiKeyEncrypted);
+                config.OpenAiApiKey = ApiKeyEncryption.Decrypt(config.OpenAiApiKeyEncrypted);
+                config.OpenRouterApiKey = ApiKeyEncryption.Decrypt(config.OpenRouterApiKeyEncrypted);
 
                 // Migrate legacy plaintext keys from old config format.
                 // Old configs stored keys as "GeminiApiKey" etc. directly in JSON.
@@ -247,10 +250,10 @@ public class AppConfig
     public void Save()
     {
         // Encrypt API keys before writing to disk
-        GeminiApiKeyEncrypted = KeyProtection.Encrypt(GeminiApiKey);
-        AnthropicApiKeyEncrypted = KeyProtection.Encrypt(AnthropicApiKey);
-        OpenAiApiKeyEncrypted = KeyProtection.Encrypt(OpenAiApiKey);
-        OpenRouterApiKeyEncrypted = KeyProtection.Encrypt(OpenRouterApiKey);
+        GeminiApiKeyEncrypted = ApiKeyEncryption.Encrypt(GeminiApiKey);
+        AnthropicApiKeyEncrypted = ApiKeyEncryption.Encrypt(AnthropicApiKey);
+        OpenAiApiKeyEncrypted = ApiKeyEncryption.Encrypt(OpenAiApiKey);
+        OpenRouterApiKeyEncrypted = ApiKeyEncryption.Encrypt(OpenRouterApiKey);
 
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });

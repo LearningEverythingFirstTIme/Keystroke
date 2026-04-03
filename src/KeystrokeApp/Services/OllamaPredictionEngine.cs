@@ -622,6 +622,8 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
         completion = TrimToWholeWords(completion);
         completion = RejectDuplicate(prefix, completion!);
+        if (!string.IsNullOrWhiteSpace(completion))
+            RecordRecentCompletion(completion);
         return string.IsNullOrWhiteSpace(completion) ? null : completion;
     }
 

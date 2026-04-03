@@ -97,34 +97,37 @@ public static class AppCategory
     public static string GetToneHint(Category category) => category switch
     {
         Category.Chat =>
-            "This is a chat/messaging app. The user is having a conversation. " +
+            "Chat/messaging app — conversational context. " +
             "Predict casual, conversational text. Use contractions, informal language. " +
             "Keep predictions short — chat messages are typically brief.",
 
         Category.Email =>
-            "This is an email client. Predict professional, clear text. " +
-            "Use complete sentences and appropriate greetings/closings. " +
-            "Match formality to the thread — reply-all to executives is different from a quick note to a teammate.",
+            "Email client — professional context. " +
+            "Predict professional, clear text with complete sentences. " +
+            "Match formality to the thread tone visible on screen.",
 
         Category.Code =>
-            "This is a code editor or IDE. If the user is writing code, predict syntactically valid code. " +
-            "If they're writing a comment or commit message, predict natural language. " +
+            "Code editor or IDE. " +
+            "For code: predict syntactically valid code. " +
+            "For comments or commit messages: predict natural language. " +
             "Be precise with variable names, function signatures, and language idioms.",
 
         Category.Document =>
-            "This is a document or note-taking app. Predict well-structured prose. " +
-            "Continue paragraphs naturally. Match the document's voice and formality level.",
+            "Document or note-taking app. " +
+            "Predict well-structured prose. Continue paragraphs naturally. " +
+            "Match the document's existing voice and formality level.",
 
         Category.Terminal =>
-            "This is a terminal/command line. Predict shell commands, flags, and file paths. " +
-            "Be precise with syntax. Predict based on common command patterns and the visible command history.",
+            "Terminal/command line. " +
+            "Predict shell commands, flags, and file paths. " +
+            "Be precise with syntax. Use visible command history for context.",
 
         Category.Browser =>
-            "The user is typing in a web browser. Infer the context from the page title and visible text. " +
-            "Adapt tone to whatever the user appears to be doing — searching, commenting, filling a form, etc.",
+            "Web browser — infer context from page title and visible text. " +
+            "Adapt tone to the activity: searching, commenting, filling a form, etc.",
 
         _ =>
-            "Adapt your tone to match whatever the user appears to be writing."
+            "Adapt tone to match the existing text."
     };
 
     /// <summary>

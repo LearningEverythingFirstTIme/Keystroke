@@ -3,7 +3,7 @@ using System.Windows;
 namespace KeystrokeApp.Views;
 
 /// <summary>
-/// Debug window that displays live keyboard hook events and prediction diagnostics.
+/// Debug window that displays live input listener events and prediction diagnostics.
 /// Opened via "Show Debug Window" in the system tray menu.
 /// </summary>
 public partial class DebugWindow : Window

@@ -144,7 +144,10 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 : (IsReasoningFirstModel() ? msg?.Reasoning?.Trim() : null);
 
             Log($"Completion: {completion ?? "(null)"}");
-            return PostProcess(prefix, completion);
+            var processed = PostProcess(prefix, completion);
+            if (!string.IsNullOrWhiteSpace(processed))
+                RecordRecentCompletion(processed);
+            return processed;
         }
         catch (OperationCanceledException) { return null; }
         catch (Exception ex) { Log($"Exception: {ex.Message}"); return null; }
@@ -341,6 +344,8 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             var result = TrimToWholeWords(StripThinkTags(raw));
             result     = RejectDuplicate(prefix, result) ?? "";
             Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected)" : "")}");
+            if (!string.IsNullOrWhiteSpace(result))
+                RecordRecentCompletion(result);
             return string.IsNullOrWhiteSpace(result) ? null : result;
         }
         catch (OperationCanceledException) { return null; }
@@ -416,7 +421,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
 
         foreach (var ex in examples)
         {
-            var fewShotUser = $"[Application: {ex.Context}]\n\nThe user is currently typing the following text. Predict what comes next:\n\n{ex.Prefix}";
+            var fewShotUser = $"[Application: {ex.Context}]\n\n<complete_this>\n{ex.Prefix}\n</complete_this>";
             messages.Add(new { role = "user",      content = fewShotUser  });
             messages.Add(new { role = "assistant", content = ex.Completion });
         }

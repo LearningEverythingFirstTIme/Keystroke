@@ -6,22 +6,22 @@ namespace KeystrokeApp.Services;
 
 /// <summary>
 /// Tracks prediction acceptance/dismissal for the learning system.
-/// Writes structured JSONL to %AppData%/Keystroke/tracking.jsonl.
+/// Writes structured JSONL to %AppData%/Keystroke/completions.jsonl.
 ///
 /// Sub-Phase A enrichment: accepted entries now carry latencyMs, cycleDepth,
 /// editedAfter, and a derived qualityScore so the learning service can weight
 /// past evidence by how well it actually matched the user's intent.
 /// </summary>
-public class AcceptanceTracker
+public class CompletionFeedbackService
 {
-    private readonly string _trackingPath;
+    private readonly string _dataPath;
     private readonly object _writeLock = new();
 
-    public AcceptanceTracker()
+    public CompletionFeedbackService()
     {
-        _trackingPath = Path.Combine(
+        _dataPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Keystroke", "tracking.jsonl");
+            "Keystroke", "completions.jsonl");
     }
 
     // ── Public logging API ────────────────────────────────────────────────────
@@ -65,24 +65,24 @@ public class AcceptanceTracker
     }
 
     /// <summary>
-    /// If the tracking file exceeds maxLines, rewrites it keeping only the most recent entries.
+    /// If the completions file exceeds maxLines, rewrites it keeping only the most recent entries.
     /// Call once at startup — keeps the file from growing unbounded over months of use.
     /// </summary>
     public void PruneIfNeeded(int maxLines = 2000)
     {
         try
         {
-            if (!File.Exists(_trackingPath))
+            if (!File.Exists(_dataPath))
                 return;
 
-            var lines = File.ReadAllLines(_trackingPath);
+            var lines = File.ReadAllLines(_dataPath);
             if (lines.Length <= maxLines)
                 return;
 
             var trimmed  = lines[^maxLines..];
-            var tempPath = _trackingPath + ".tmp";
+            var tempPath = _dataPath + ".tmp";
             File.WriteAllLines(tempPath, trimmed);
-            File.Move(tempPath, _trackingPath, overwrite: true);
+            File.Move(tempPath, _dataPath, overwrite: true);
         }
         catch (Exception) { /* Pruning failure is non-fatal */ }
     }
@@ -130,7 +130,7 @@ public class AcceptanceTracker
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_trackingPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(_dataPath)!);
 
             var entry = new
             {
@@ -152,10 +152,10 @@ public class AcceptanceTracker
 
             lock (_writeLock)
             {
-                File.AppendAllText(_trackingPath, json + "\n");
+                File.AppendAllText(_dataPath, json + "\n");
             }
         }
-        catch (Exception) { /* Tracking write failure is non-fatal */ }
+        catch (Exception) { /* Write failure is non-fatal */ }
     }
 
     /// <summary>

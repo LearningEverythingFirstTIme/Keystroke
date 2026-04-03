@@ -6,13 +6,13 @@ namespace KeystrokeApp.Services;
 ///
 /// Usage:
 ///   1. Call StartWatching(callback) immediately after text injection.
-///   2. Call OnBackspace() from the keyboard hook whenever Backspace fires.
+///   2. Call OnBackspace() from the input listener whenever Backspace fires.
 ///   3. After the watch window expires, callback is invoked with editedAfter=true/false.
 ///
 /// The callback fires exactly once on the thread-pool after the window expires.
 /// It is safe to call OnBackspace() or StartWatching() from any thread.
 /// </summary>
-public sealed class PostEditDetector : IDisposable
+public sealed class CorrectionDetector : IDisposable
 {
     /// <summary>
     /// How long after text injection we watch for a corrective backspace.
@@ -64,7 +64,7 @@ public sealed class PostEditDetector : IDisposable
     }
 
     /// <summary>
-    /// Signal that a Backspace key was pressed. Call this from the keyboard hook
+    /// Signal that a Backspace key was pressed. Call this from the input listener
     /// on every Backspace event — it's a no-op when no watch is active.
     /// </summary>
     public void OnBackspace()

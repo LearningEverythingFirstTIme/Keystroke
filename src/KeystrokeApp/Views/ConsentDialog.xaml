@@ -27,14 +27,14 @@
         <!-- Scrollable consent text -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
             <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9" FontSize="13" LineHeight="20">
-                <Bold>Keyboard Monitoring</Bold><LineBreak/>
-                Keystroke uses a system-wide keyboard hook to capture what you type
-                in order to provide AI-powered text completions. Your keystrokes are
-                processed locally and only the current typed text is sent to your
-                chosen AI provider (Google, Anthropic, or OpenAI) for prediction.<LineBreak/>
+                <Bold>Input Processing</Bold><LineBreak/>
+                Keystroke listens for your typed input in order to provide AI-powered
+                text completions. Your input is processed locally and only the current
+                typed text is sent to your chosen AI provider (Google, Anthropic, or
+                OpenAI) for prediction.<LineBreak/>
                 <LineBreak/>
                 <Bold>Screen Context (Optional)</Bold><LineBreak/>
-                When enabled, Keystroke can capture text visible on your screen using
+                When enabled, Keystroke can read text visible on your screen using
                 OCR to improve prediction relevance. This screen text is sent to your
                 AI provider along with your typed text. You can disable this in Settings.<LineBreak/>
                 <LineBreak/>
@@ -51,9 +51,9 @@
                 stored on external servers by Keystroke.<LineBreak/>
                 <LineBreak/>
                 <Bold>Your Control</Bold><LineBreak/>
-                You can pause keystroke monitoring at any time via the system tray icon
-                or Ctrl+Shift+K. You can disable OCR and Learning in Settings. You can
-                clear all local data from Settings at any time.
+                You can pause input processing at any time via the system tray icon
+                or Ctrl+Shift+K. You can disable screen reading and Learning in Settings.
+                You can clear all local data from Settings at any time.
             </TextBlock>
         </ScrollViewer>
 
@@ -62,7 +62,7 @@
                   Foreground="#C9D1D9" FontSize="13"
                   Checked="AgreeCheck_Changed" Unchecked="AgreeCheck_Changed">
             <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9">
-                I understand and consent to keyboard monitoring and data processing as described above.
+                I understand and consent to input processing and data handling as described above.
             </TextBlock>
         </CheckBox>
 

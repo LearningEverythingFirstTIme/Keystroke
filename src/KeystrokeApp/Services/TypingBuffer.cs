@@ -6,7 +6,7 @@ namespace KeystrokeApp.Services;
 /// <summary>
 /// Accumulates typed characters into a buffer.
 /// Handles backspace (remove last char) and clears on Enter/Escape/arrows.
-/// Thread-safe: accessed from hook callbacks and debounce timer threads.
+/// Thread-safe: accessed from listener callbacks and debounce timer threads.
 /// </summary>
 public class TypingBuffer
 {

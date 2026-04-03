@@ -18,13 +18,13 @@ namespace KeystrokeApp;
 public partial class App : Application
 {
     // ── Service instances ─────────────────────────────────────────────────────
-    private KeyboardHookService?      _hookService;
+    private InputListenerService?     _inputListener;
     private TaskbarIcon?              _trayIcon;
     private DebugWindow?              _debugWindow;
     private SuggestionPanel?         _suggestionPanel;
     private SettingsWindow?          _settingsWindow;
     private IPredictionEngine?       _predictionEngine;
-    private OcrService?              _ocrService;
+    private ScreenReaderService?              _ocrService;
     private Timer?                   _ocrTimer;
 
     // ── App state ─────────────────────────────────────────────────────────────
@@ -33,8 +33,8 @@ public partial class App : Application
     private DebounceTimer?           _debounceTimer;
     private DebounceTimer?           _fastDebounceTimer;
     private PredictionCache          _predictionCache  = new(50);
-    private AcceptanceTracker        _acceptanceTracker = new();
-    private RollingContextService    _rollingContext   = new(maxChars: 500, timeoutMinutes: 5);
+    private CompletionFeedbackService        _acceptanceTracker = new();
+    private RollingContextService    _rollingContext   = new(maxChars: 2000, timeoutMinutes: 5);
     private AcceptanceLearningService  _learningService          = new();
     private StyleProfileService        _styleProfileService       = new();
     private VocabularyProfileService   _vocabularyProfileService  = new();
@@ -57,7 +57,7 @@ public partial class App : Application
 
     // ── Sub-Phase A: interaction signal capture ───────────────────────────────
     // Written on the UI thread (streaming complete / cache hit path in App.Prediction.cs);
-    // read on the keyboard-hook thread (Tab accept in App.KeyboardHandlers.cs).
+    // read on the input-listener thread (Tab accept in App.KeyboardHandlers.cs).
     // Use Interlocked so no explicit locking is needed across threads.
     //   _suggestionShownAtTicks  — DateTime.UtcNow.Ticks when the full suggestion became visible;
     //                              0 means no suggestion is currently shown.
@@ -65,7 +65,7 @@ public partial class App : Application
     //                              reset to 0 each time a new suggestion arrives.
     private long _suggestionShownAtTicks = 0;
     private int  _cycleDepth             = 0;
-    private readonly PostEditDetector _postEditDetector = new();
+    private readonly CorrectionDetector _postEditDetector = new();
 
     private string _logPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -106,7 +106,7 @@ public partial class App : Application
             _config = AppConfig.Load();
             Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
 
-            // First-launch consent — must accept before keystroke monitoring activates
+            // First-launch consent — must accept before input processing activates
             if (!_config.ConsentAccepted)
             {
                 var consent = new Views.ConsentDialog();
@@ -124,7 +124,7 @@ public partial class App : Application
                 Log("User accepted consent.");
             }
 
-            // Prune tracking file if it's grown too large
+            // Prune completions file if it's grown too large
             _acceptanceTracker.PruneIfNeeded(maxLines: 2000);
 
             // Sub-Phase D: wire LearningScoreService to the learning stack.
@@ -182,13 +182,13 @@ public partial class App : Application
             _fastDebounceTimer = new DebounceTimer(_config.FastDebounceMs);
             _fastDebounceTimer.DebounceComplete += OnDebounceComplete;
 
-            // Initialize keyboard hook
-            _hookService = new KeyboardHookService();
-            _hookService.CharacterTyped  += OnCharacterTyped;
-            _hookService.SpecialKeyPressed += OnSpecialKeyPressed;
-            _hookService.HookDiagnostic  += msg => LogToDebug(msg);
-            _hookService.Start();
-            Log("Keyboard hook started.");
+            // Initialize input listener
+            _inputListener = new InputListenerService();
+            _inputListener.CharacterTyped  += OnCharacterTyped;
+            _inputListener.SpecialKeyPressed += OnSpecialKeyPressed;
+            _inputListener.InputDiagnostic  += msg => LogToDebug(msg);
+            _inputListener.Start();
+            Log("Input listener started.");
 
             // Create suggestion panel (hidden initially) and apply saved theme
             _suggestionPanel = new SuggestionPanel();
@@ -198,7 +198,7 @@ public partial class App : Application
             // Initialize OCR service with periodic capture (every 3 seconds)
             if (_config.OcrEnabled)
             {
-                _ocrService = new OcrService();
+                _ocrService = new ScreenReaderService();
                 _ocrTimer   = new Timer(OnOcrTimerTick, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
                 Log("OCR service initialized.");
             }
@@ -229,7 +229,7 @@ public partial class App : Application
         _postEditDetector.Dispose();
         _ocrTimer?.Dispose();
         _ocrService?.Dispose();
-        _hookService?.Dispose();
+        _inputListener?.Dispose();
         (_predictionEngine as IDisposable)?.Dispose();
         _trayIcon?.Dispose();
         _suggestionPanel?.Close();
@@ -425,7 +425,7 @@ public partial class App : Application
         // Toggle OCR on/off based on settings
         if (_config.OcrEnabled && _ocrService == null)
         {
-            _ocrService = new OcrService();
+            _ocrService = new ScreenReaderService();
             _ocrTimer   = new Timer(OnOcrTimerTick, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
             Log("OCR enabled.");
         }

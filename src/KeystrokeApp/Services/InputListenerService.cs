@@ -6,15 +6,15 @@ using System.Runtime.InteropServices;
 namespace KeystrokeApp.Services;
 
 /// <summary>
-/// System-wide low-level keyboard hook that fires events for key presses.
-/// Supports intercepting (swallowing) specific keys.
+/// System-wide low-level input listener for autocomplete.
+/// Supports filtering specific keys from reaching applications.
 /// </summary>
-public class KeyboardHookService : IDisposable
+public class InputListenerService : IDisposable
 {
     // ==================== P/Invoke Signatures ====================
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
+    private static extern IntPtr SetWindowsHookEx(int idHook, ListenerProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -79,7 +79,7 @@ public class KeyboardHookService : IDisposable
 
     // ==================== Types ====================
 
-    private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
+    private delegate IntPtr ListenerProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct KBDLLHOOKSTRUCT
@@ -104,10 +104,10 @@ public class KeyboardHookService : IDisposable
     public event Action<SpecialKeyEventArgs>? SpecialKeyPressed;
 
     /// <summary>
-    /// Diagnostic event — fired with raw hook state when Tab is pressed.
+    /// Diagnostic event — fired with raw listener state when Tab is pressed.
     /// Useful for debugging modifier detection.
     /// </summary>
-    public event Action<string>? HookDiagnostic;
+    public event Action<string>? InputDiagnostic;
 
     public enum SpecialKey
     {
@@ -148,16 +148,16 @@ public class KeyboardHookService : IDisposable
 
     // ==================== State ====================
 
-    private IntPtr _hookId = IntPtr.Zero;
-    private readonly HookProc _hookCallback;
+    private IntPtr _listenerId = IntPtr.Zero;
+    private readonly ListenerProc _listenerCallback;
     private bool _disposed;
     private readonly HashSet<int> _keysDown = new();
 
     // ==================== Constructor ====================
 
-    public KeyboardHookService()
+    public InputListenerService()
     {
-        _hookCallback = HookCallback;
+        _listenerCallback = ListenerCallback;
     }
 
     // ==================== Public Methods ====================
@@ -165,44 +165,44 @@ public class KeyboardHookService : IDisposable
     public void Start()
     {
         if (_disposed)
-            throw new ObjectDisposedException(nameof(KeyboardHookService));
-        if (_hookId != IntPtr.Zero)
+            throw new ObjectDisposedException(nameof(InputListenerService));
+        if (_listenerId != IntPtr.Zero)
             return;
 
-        _hookId = SetHook(_hookCallback);
+        _listenerId = SetListener(_listenerCallback);
 
-        if (_hookId == IntPtr.Zero)
+        if (_listenerId == IntPtr.Zero)
         {
             int error = Marshal.GetLastWin32Error();
-            throw new InvalidOperationException($"Failed to set keyboard hook. Error code: {error}");
+            throw new InvalidOperationException($"Failed to start input listener. Error code: {error}");
         }
     }
 
     public void Stop()
     {
-        if (_hookId != IntPtr.Zero)
+        if (_listenerId != IntPtr.Zero)
         {
-            UnhookWindowsHookEx(_hookId);
-            _hookId = IntPtr.Zero;
+            UnhookWindowsHookEx(_listenerId);
+            _listenerId = IntPtr.Zero;
         }
         _keysDown.Clear();
     }
 
-    // ==================== Hook Setup ====================
+    // ==================== Listener Setup ====================
 
-    private IntPtr SetHook(HookProc proc)
+    private IntPtr SetListener(ListenerProc proc)
     {
         using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
         using var curModule = curProcess.MainModule!;
         return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
     }
 
-    // ==================== Hook Callback ====================
+    // ==================== Listener Callback ====================
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private IntPtr ListenerCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode < 0)
-            return CallNextHookEx(_hookId, nCode, wParam, lParam);
+            return CallNextHookEx(_listenerId, nCode, wParam, lParam);
 
         int msgType = wParam.ToInt32();
         
@@ -219,7 +219,7 @@ public class KeyboardHookService : IDisposable
 
                 if (shouldSwallow)
                 {
-                    // Swallow this key - don't pass to next hook
+                    // Swallow this key - don't pass to next listener
                     return new IntPtr(1);
                 }
             }
@@ -230,20 +230,20 @@ public class KeyboardHookService : IDisposable
             _keysDown.Remove((int)hookStruct.vkCode);
         }
 
-        return CallNextHookEx(_hookId, nCode, wParam, lParam);
+        return CallNextHookEx(_listenerId, nCode, wParam, lParam);
     }
 
     // ==================== Key Processing ====================
 
     private bool ProcessKeyDown(int vkCode, uint scanCode)
     {
-        // Diagnostic: log raw hook state when Tab is pressed so we can see modifier state
+        // Diagnostic: log raw listener state when Tab is pressed so we can see modifier state
         if (vkCode == VK_TAB)
         {
             var keysHex = string.Join(", ", _keysDown.Select(k => $"0x{k:X2}"));
             var shiftDown = IsShiftDown();
             var ctrlDown = IsCtrlDown();
-            HookDiagnostic?.Invoke($"[Hook] Tab pressed | _keysDown=[{keysHex}] | IsShiftDown={shiftDown} | IsCtrlDown={ctrlDown}");
+            InputDiagnostic?.Invoke($"[Listener] Tab pressed | _keysDown=[{keysHex}] | IsShiftDown={shiftDown} | IsCtrlDown={ctrlDown}");
         }
 
         if (IsSpecialKey(vkCode, out SpecialKey specialKey))
@@ -312,7 +312,7 @@ public class KeyboardHookService : IDisposable
         if (!GetKeyboardState(keyState))
             return null;
 
-        // The low-level hook fires before the OS updates key state for the
+        // The low-level listener fires before the OS updates key state for the
         // current keystroke, so patch the modifier bytes from our own tracker.
         keyState[VK_SHIFT] = IsShiftDown() ? (byte)0x80 : (byte)0;
         keyState[VK_LSHIFT] = _keysDown.Contains(VK_LSHIFT) ? (byte)0x80 : (byte)0;
@@ -354,7 +354,7 @@ public class KeyboardHookService : IDisposable
     // ==================== Modifier Helpers ====================
 
     // WH_KEYBOARD_LL fires before the OS updates GetKeyState/GetAsyncKeyState,
-    // so we track modifier state ourselves via _keysDown. The hook reports
+    // so we track modifier state ourselves via _keysDown. The listener reports
     // left/right variants (VK_LSHIFT etc.) rather than the generic codes.
     private bool IsShiftDown() =>
         _keysDown.Contains(VK_LSHIFT) || _keysDown.Contains(VK_RSHIFT) || _keysDown.Contains(VK_SHIFT);

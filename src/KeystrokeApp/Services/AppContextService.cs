@@ -8,7 +8,7 @@ namespace KeystrokeApp.Services;
 /// Detects the currently active (foreground) window's process name and title.
 /// Uses Win32 P/Invoke — fast enough (~0.1ms) to call on every prediction request.
 /// </summary>
-public static class ActiveWindowService
+public static class AppContextService
 {
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();

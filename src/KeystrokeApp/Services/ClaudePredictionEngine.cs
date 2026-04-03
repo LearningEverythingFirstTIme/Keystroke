@@ -21,9 +21,9 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
     private readonly string _model;
     private readonly string _endpoint;
 
-    // Claude has tighter context limits to stay under rate limits
-    protected override int RollingContextLimit => 200;
-    protected override int ScreenContextLimit  => 600;
+    // Claude still uses slightly tighter limits than other cloud engines
+    protected override int RollingContextLimit => 800;
+    protected override int ScreenContextLimit  => 2400;
 
     public ClaudePredictionEngine(string apiKey, string model = "claude-haiku-4-5-20251001")
         : base("claude.log")
@@ -100,6 +100,8 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
             completion = TrimToWholeWords(completion);
             completion = RejectDuplicate(prefix, completion!);
+            if (!string.IsNullOrWhiteSpace(completion))
+                RecordRecentCompletion(completion);
             return string.IsNullOrWhiteSpace(completion) ? null : completion;
         }
         catch (OperationCanceledException) { return null; }
@@ -191,6 +193,8 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
             var result = TrimToWholeWords(fullCompletion.ToString().TrimEnd('"').Trim());
             result = RejectDuplicate(prefix, result) ?? "";
             Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected as duplicate)" : "")}");
+            if (!string.IsNullOrWhiteSpace(result))
+                RecordRecentCompletion(result);
             return string.IsNullOrWhiteSpace(result) ? null : result;
         }
         catch (OperationCanceledException) { return null; }
@@ -271,7 +275,7 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
         foreach (var ex in examples)
         {
-            var fewShotUser = $"[Application: {ex.Context}]\n\nThe user is currently typing the following text. Predict what comes next:\n\n{ex.Prefix}";
+            var fewShotUser = $"[Application: {ex.Context}]\n\n<complete_this>\n{ex.Prefix}\n</complete_this>";
             messages.Add(new { role = "user",      content = fewShotUser  });
             messages.Add(new { role = "assistant", content = ex.Completion });
         }

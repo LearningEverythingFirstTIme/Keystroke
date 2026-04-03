@@ -90,6 +90,8 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
             completion = TrimToWholeWords(completion);
             completion = RejectDuplicate(prefix, completion!);
+            if (!string.IsNullOrWhiteSpace(completion))
+                RecordRecentCompletion(completion);
             return string.IsNullOrWhiteSpace(completion) ? null : completion;
         }
         catch (OperationCanceledException) { return null; }
@@ -183,6 +185,8 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             var result = TrimToWholeWords(fullCompletion.ToString().TrimEnd('"').Trim());
             result = RejectDuplicate(prefix, result) ?? "";
             Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected as duplicate)" : "")}");
+            if (!string.IsNullOrWhiteSpace(result))
+                RecordRecentCompletion(result);
             return string.IsNullOrWhiteSpace(result) ? null : result;
         }
         catch (OperationCanceledException) { return null; }
@@ -270,7 +274,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
         foreach (var ex in examples)
         {
-            var fewShotUser = $"[Application: {ex.Context}]\n\nThe user is currently typing the following text. Predict what comes next:\n\n{ex.Prefix}";
+            var fewShotUser = $"[Application: {ex.Context}]\n\n<complete_this>\n{ex.Prefix}\n</complete_this>";
             contents.Add(new { role = "user",  parts = new[] { new { text = fewShotUser  } } });
             contents.Add(new { role = "model", parts = new[] { new { text = ex.Completion } } });
         }
