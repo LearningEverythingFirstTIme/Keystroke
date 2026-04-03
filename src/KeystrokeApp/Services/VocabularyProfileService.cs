@@ -23,14 +23,20 @@ public class VocabularyProfileService
     // ── Thresholds ────────────────────────────────────────────────────────────
     private const int MinEntriesPerCategory = 15;  // minimum accepted entries to analyse a category
     private const int MaxSamplesPerCategory = 60;   // cap to keep analysis fast
-    private const int MinPhraseFrequency    = 3;    // a phrase must appear this many times to be kept
+    private const double MinPhraseRatio     = 0.15;  // a phrase must appear in ≥15% of samples to be kept
     private const int MinWordFrequency      = 2;    // personal word must appear at least twice
     private const int MaxTopWords           = 20;   // words shown per category
     private const int MaxPhrases            = 5;    // opening/closing phrases shown per category
 
+    /// <summary>
+    /// Profiles older than this are considered stale and suppressed rather than
+    /// injected. Stale vocabulary hints can lock in outdated patterns.
+    /// </summary>
+    private static readonly TimeSpan MaxProfileAge = TimeSpan.FromDays(7);
+
     // ── File paths ────────────────────────────────────────────────────────────
     private readonly string _profilePath;
-    private readonly string _trackingPath;
+    private readonly string _dataPath;
     private readonly string _logPath;
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -46,7 +52,7 @@ public class VocabularyProfileService
     {
         var appData     = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Keystroke");
         _profilePath    = Path.Combine(appData, "vocabulary-profile.json");
-        _trackingPath   = Path.Combine(appData, "tracking.jsonl");
+        _dataPath   = Path.Combine(appData, "completions.jsonl");
         _logPath        = Path.Combine(appData, "vocabulary-profile.log");
     }
 
@@ -91,6 +97,12 @@ public class VocabularyProfileService
         lock (_lock)
         {
             if (_profile == null) return null;
+
+            // Suppress stale profiles — outdated vocabulary hints can lock in
+            // patterns the user has moved past.
+            if ((DateTime.UtcNow - _profile.LastUpdated) > MaxProfileAge)
+                return null;
+
             if (!_profile.Categories.TryGetValue(category, out var vocab)) return null;
 
             var sb = new StringBuilder();
@@ -171,11 +183,12 @@ public class VocabularyProfileService
     /// <summary>Extracts all vocabulary signals for one category's completions.</summary>
     private static CategoryVocabulary AnalyzeCategory(List<string> completions)
     {
+        int sampleCount = completions.Count;
         return new CategoryVocabulary
         {
             TopWords        = ExtractTopWords(completions),
-            OpeningPhrases  = ExtractPhrases(completions, fromStart: true),
-            ClosingPhrases  = ExtractPhrases(completions, fromStart: false),
+            OpeningPhrases  = ExtractPhrases(completions, fromStart: true,  sampleCount),
+            ClosingPhrases  = ExtractPhrases(completions, fromStart: false, sampleCount),
             AvgSentenceWords = ComputeAvgSentenceLength(completions),
             UsesContractions = DetectContractions(completions),
             OxfordComma      = DetectOxfordComma(completions),
@@ -215,9 +228,10 @@ public class VocabularyProfileService
 
     /// <summary>
     /// Extracts n-gram (2- and 3-word) phrases from the start or end of completions.
-    /// Only phrases that appear at least <see cref="MinPhraseFrequency"/> times are kept.
+    /// Only phrases that appear in at least MinPhraseRatio of the samples are kept,
+    /// preventing early lock-in when the corpus is still small.
     /// </summary>
-    private static List<string> ExtractPhrases(IEnumerable<string> completions, bool fromStart)
+    private static List<string> ExtractPhrases(IEnumerable<string> completions, bool fromStart, int sampleCount)
     {
         var freq = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
@@ -246,13 +260,35 @@ public class VocabularyProfileService
             }
         }
 
+        // Relative threshold: a phrase must appear in ≥15% of samples, with a
+        // floor of 3 to avoid noise in very small corpora.
+        int minFreq = Math.Max(3, (int)Math.Ceiling(sampleCount * MinPhraseRatio));
+
         return freq
-            .Where(kv => kv.Value >= MinPhraseFrequency)
+            .Where(kv => kv.Value >= minFreq)
+            .Where(kv => !GenericPhrases.Contains(kv.Key.ToLowerInvariant()))
             .OrderByDescending(kv => kv.Value)
             .Take(MaxPhrases)
             .Select(kv => kv.Key)
             .ToList();
     }
+
+    /// <summary>
+    /// Generic phrases that should never be included in vocabulary hints because
+    /// they are statistically common filler, not personal style signals. Including
+    /// them causes the model to over-index on these as "the user's preferred endings."
+    /// </summary>
+    private static readonly HashSet<string> GenericPhrases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "all day", "right now", "at all", "so much", "a lot",
+        "as well", "for sure", "of course", "you know", "i think",
+        "just a", "this is", "that is", "it is", "and i",
+        "to the", "in the", "on the", "for the", "with the",
+        "to be", "going to", "want to", "need to", "have to",
+        "the same", "so far", "at the", "be able", "as soon",
+        "out of", "a bit", "or something", "and all", "and everything",
+        "to do", "for a", "like that", "like this", "about it",
+    };
 
     private static double ComputeAvgSentenceLength(IEnumerable<string> completions)
     {
@@ -403,15 +439,16 @@ public class VocabularyProfileService
         var entries = new List<VocabEntry>();
         try
         {
-            if (!File.Exists(_trackingPath)) return entries;
+            if (!File.Exists(_dataPath)) return entries;
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            foreach (var line in File.ReadAllLines(_trackingPath))
+            foreach (var line in File.ReadAllLines(_dataPath))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 try
                 {
                     var e = JsonSerializer.Deserialize<VocabEntry>(line, opts);
-                    if (e?.Action == "accepted" && !string.IsNullOrWhiteSpace(e.Completion))
+                    if (e?.Action == "accepted" && !string.IsNullOrWhiteSpace(e.Completion)
+                        && !IsCompletionContaminated(e.Completion))
                         entries.Add(e);
                 }
                 catch { /* malformed line — skip */ }
@@ -428,6 +465,13 @@ public class VocabularyProfileService
     }
 
     // ── Private entry model ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Filters out completions with known contamination (prompt leakage, repetitive patterns)
+    /// so they don't influence vocabulary profile generation. Delegates to the shared filter.
+    /// </summary>
+    private static bool IsCompletionContaminated(string completion) =>
+        ContaminationFilter.IsContaminated(completion);
 
     private class VocabEntry
     {

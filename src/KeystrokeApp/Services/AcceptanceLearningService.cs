@@ -5,7 +5,7 @@ namespace KeystrokeApp.Services;
 
 /// <summary>
 /// Learns from user's accepted completions to provide few-shot examples
-/// for better predictions. Reads from tracking.jsonl and finds similar
+/// for better predictions. Reads from completions.jsonl and finds similar
 /// past completions based on app context and prefix similarity.
 ///
 /// Also tracks dismissed completions and exposes them as negative examples
@@ -17,7 +17,7 @@ namespace KeystrokeApp.Services;
 /// </summary>
 public class AcceptanceLearningService
 {
-    private readonly string _trackingPath;
+    private readonly string _dataPath;
     private readonly string _logPath;
     private readonly List<TrackingEntry> _acceptedEntries;
     private readonly List<TrackingEntry> _dismissedEntries;
@@ -54,6 +54,11 @@ public class AcceptanceLearningService
     // in-session examples always outrank equivalent historical entries.
     private const double SessionBoostMultiplier = 1.5;
 
+    // Quality gate: only completions with quality ≥ this threshold enter the
+    // session buffer. Low-quality accepts (slow, heavily cycled, immediately
+    // edited) are weak evidence of desired voice and can amplify bad patterns.
+    private const float SessionMinQuality = 0.6f;
+
     private readonly Queue<SessionAccept> _sessionBuffer = new();
     private readonly object               _sessionLock   = new();
 
@@ -65,9 +70,9 @@ public class AcceptanceLearningService
 
     public AcceptanceLearningService()
     {
-        _trackingPath = Path.Combine(
+        _dataPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Keystroke", "tracking.jsonl");
+            "Keystroke", "completions.jsonl");
         _logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke", "learning.log");
@@ -76,11 +81,11 @@ public class AcceptanceLearningService
         _lastFileRead = DateTime.MinValue;
         _lastFileSize = 0;
 
-        Log($"Initialized. Looking for tracking data at: {_trackingPath}");
-        Log($"File exists: {File.Exists(_trackingPath)}");
-        if (File.Exists(_trackingPath))
+        Log($"Initialized. Looking for completions data at: {_dataPath}");
+        Log($"File exists: {File.Exists(_dataPath)}");
+        if (File.Exists(_dataPath))
         {
-            var info = new FileInfo(_trackingPath);
+            var info = new FileInfo(_dataPath);
             Log($"File size: {info.Length} bytes");
         }
     }
@@ -91,6 +96,8 @@ public class AcceptanceLearningService
     /// Gets few-shot examples similar to the current context.
     /// Deduplicates results so no two completions are excessively similar.
     /// Returns empty list if no relevant examples found.
+    /// For very short prefixes (&lt;3 words), returns at most 1 example to avoid
+    /// training the model to always complete ambiguous openings the same way.
     /// </summary>
     public List<FewShotExample> GetExamples(ContextSnapshot context, int count = 3)
     {
@@ -103,6 +110,13 @@ public class AcceptanceLearningService
             // avoids biasing the model toward unrepresentative early accepts.
             int adaptiveCount = GetAdaptiveExampleCount(count);
 
+            // Short-prefix suppression: very short prefixes are highly ambiguous.
+            // Injecting multiple few-shot examples for "I", "Hey", "Thanks" causes
+            // the model to always complete them the same way. Cap to 1 example.
+            var prefixWords = context.TypedText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (prefixWords.Length < 3)
+                adaptiveCount = Math.Min(1, adaptiveCount);
+
             var scored = _acceptedEntries
                 .Where(e => IsRelevant(e, context))
                 .Select(e => (Entry: e, Score: CalculateRelevanceScore(e, context)))
@@ -111,14 +125,22 @@ public class AcceptanceLearningService
                 .ThenByDescending(x => x.Entry.Timestamp);
 
             // Greedy deduplication: select up to `adaptiveCount` examples whose
-            // completions are not too similar to any already-selected completion.
+            // completions are not too similar to any already-selected completion,
+            // AND whose endings are sufficiently diverse (prevents "all end with X" loops).
             var selected = new List<FewShotExample>();
             foreach (var (entry, _) in scored)
             {
                 bool tooSimilar = selected.Any(s =>
                     JaccardSimilarity(s.Completion, entry.Completion) > DeduplicationThreshold);
 
-                if (!tooSimilar)
+                // Ending diversity: reject if this completion's last 2 words match
+                // any already-selected example's last 2 words (prevents reinforcing
+                // repetitive closing patterns like "all day", "right now", etc.)
+                bool endingDuplicate = selected.Any(s =>
+                    GetTrailingWords(s.Completion, 2) == GetTrailingWords(entry.Completion, 2)
+                    && GetTrailingWords(entry.Completion, 2).Length > 3);
+
+                if (!tooSimilar && !endingDuplicate)
                 {
                     selected.Add(new FewShotExample
                     {
@@ -152,6 +174,11 @@ public class AcceptanceLearningService
     /// Gets dismissed completions similar to the current context.
     /// Used to inject "avoid these patterns" guidance into the system prompt.
     /// Returns empty list if no relevant dismissed examples found.
+    ///
+    /// Context-continuity filter: only dismissals where the user continued typing
+    /// in the same app category are included. A dismiss followed by an app switch
+    /// or long gap likely means the user changed their mind about what to type,
+    /// not that the completion was bad — those shouldn't pollute anti-repetition.
     /// </summary>
     public List<FewShotExample> GetNegativeExamples(ContextSnapshot context, int count = 2)
     {
@@ -159,8 +186,16 @@ public class AcceptanceLearningService
 
         lock (_lock)
         {
+            var currentCategory = AppCategory.GetEffectiveCategory(
+                context.ProcessName, context.WindowTitle).ToString();
+
             return _dismissedEntries
                 .Where(e => IsRelevant(e, context))
+                // Context continuity: only use dismissals from the same category
+                // that have a follow-up entry (accepted or dismissed) in the same
+                // category within 60 seconds — proving the user continued typing
+                // in the same context and the dismissal was about completion quality.
+                .Where(e => HasFollowUpInSameContext(e))
                 .Select(e => (Entry: e, Score: CalculateRelevanceScore(e, context)))
                 .Where(x => x.Score > MinRelevanceScore)
                 .OrderByDescending(x => x.Score)
@@ -182,10 +217,14 @@ public class AcceptanceLearningService
     /// <summary>
     /// Records a newly accepted completion in the in-memory session buffer.
     /// Called immediately when the user presses Tab — no disk I/O involved.
+    /// Only high-quality accepts (quality ≥ SessionMinQuality) enter the buffer;
+    /// low-quality accepts are weak evidence of desired voice and can amplify
+    /// bad patterns through the feedback loop.
     /// </summary>
-    public void AddToSession(string prefix, string completion, string category)
+    public void AddToSession(string prefix, string completion, string category, float qualityScore)
     {
         if (string.IsNullOrWhiteSpace(completion)) return;
+        if (qualityScore < SessionMinQuality) return;
 
         lock (_sessionLock)
         {
@@ -238,11 +277,30 @@ public class AcceptanceLearningService
 
     private static string FormatSessionHint(List<SessionAccept> items)
     {
+        // Deduplicate: skip completions whose last 2 words match an already-included one,
+        // AND skip completions that are too short to be useful style signals.
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Text the user has written and accepted this session (continue in the same voice and topic):");
+        sb.AppendLine("Recently accepted completions this session (for voice/topic continuity, not templates to copy):");
+        var includedEndings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int included = 0;
         foreach (var item in items)
-            sb.AppendLine($"  \"{item.Completion.Trim()}\"");
-        return sb.ToString().TrimEnd();
+        {
+            var trimmed = item.Completion.Trim();
+            if (trimmed.Length < 15) continue; // too short to be a useful style signal
+
+            // Check ending diversity
+            var words = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var ending = words.Length >= 2
+                ? string.Join(" ", words[^2..]).ToLowerInvariant()
+                : trimmed.ToLowerInvariant();
+
+            if (ending.Length > 3 && !includedEndings.Add(ending))
+                continue; // same ending as a previously included item
+
+            sb.AppendLine($"  \"{trimmed}\"");
+            included++;
+        }
+        return included >= 2 ? sb.ToString().TrimEnd() : "";
     }
 
     private void PruneSessionBuffer()
@@ -284,8 +342,8 @@ public class AcceptanceLearningService
                 ? (float)_acceptedEntries.Average(e => e.QualityScore)
                 : 0f;
 
-            bool fileExists = File.Exists(_trackingPath);
-            long fileSize   = fileExists ? new FileInfo(_trackingPath).Length : 0;
+            bool fileExists = File.Exists(_dataPath);
+            long fileSize   = fileExists ? new FileInfo(_dataPath).Length : 0;
 
             return new LearningStats
             {
@@ -299,7 +357,7 @@ public class AcceptanceLearningService
                 AvgQualityByCategory  = avgQualityByCategory
                     .ToDictionary(k => k.Key, k => (float)k.Value),
                 OverallAvgQuality     = overallAvgQuality,
-                DataFilePath          = _trackingPath,
+                DataFilePath          = _dataPath,
                 DataFileExists        = fileExists,
                 DataFileSize          = fileSize
             };
@@ -309,13 +367,13 @@ public class AcceptanceLearningService
     /// <summary>Forces a full refresh of the data from disk.</summary>
     public void Refresh()
     {
-        if (!File.Exists(_trackingPath))
+        if (!File.Exists(_dataPath))
             return;
 
         try
         {
-            var fileInfo = new FileInfo(_trackingPath);
-            Log($"Refreshing from {_trackingPath}");
+            var fileInfo = new FileInfo(_dataPath);
+            Log($"Refreshing from {_dataPath}");
             Log($"File size: {fileInfo.Length}, Last read: {_lastFileSize}");
 
             lock (_lock)
@@ -328,7 +386,7 @@ public class AcceptanceLearningService
                     _dismissedEntries.Clear();
                 }
 
-                using var stream = File.Open(_trackingPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var stream = File.Open(_dataPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 using var reader = new StreamReader(stream);
 
                 if (fileInfo.Length > _lastFileSize && _lastFileSize > 0)
@@ -356,8 +414,14 @@ public class AcceptanceLearningService
                         if (entry.Action == "accepted" &&
                             entry.Completion?.Length >= MinCompletionLength)
                         {
-                            _acceptedEntries.Add(entry);
-                            linesAccepted++;
+                            // Skip entries whose completions contain prompt leakage
+                            // or known poisoned patterns — these pollute few-shot
+                            // examples and style/vocab analysis.
+                            if (!IsCompletionContaminated(entry.Completion))
+                            {
+                                _acceptedEntries.Add(entry);
+                                linesAccepted++;
+                            }
                         }
                         else if (entry.Action == "dismissed" &&
                                  !string.IsNullOrWhiteSpace(entry.Completion))
@@ -423,6 +487,37 @@ public class AcceptanceLearningService
             return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Returns true if a dismissed entry has a follow-up entry (accepted or dismissed)
+    /// in the same app category within 60 seconds. This proves the user continued
+    /// typing in the same context, meaning the dismissal was about completion quality
+    /// rather than the user switching tasks or changing their mind.
+    /// Must be called inside _lock.
+    /// </summary>
+    private bool HasFollowUpInSameContext(TrackingEntry dismissed)
+    {
+        var cutoff = dismissed.Timestamp.AddSeconds(60);
+
+        // Check accepted entries for a follow-up
+        foreach (var e in _acceptedEntries)
+        {
+            if (e.Timestamp > dismissed.Timestamp && e.Timestamp <= cutoff
+                && string.Equals(e.Category, dismissed.Category, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        // Check other dismissed entries for a follow-up
+        foreach (var e in _dismissedEntries)
+        {
+            if (e == dismissed) continue;
+            if (e.Timestamp > dismissed.Timestamp && e.Timestamp <= cutoff
+                && string.Equals(e.Category, dismissed.Category, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -527,6 +622,26 @@ public class AcceptanceLearningService
         for (int i = 0; i < words.Length - 1; i++)
             ngrams.Add($"{words[i]} {words[i + 1]}"); // bigrams
         return ngrams;
+    }
+
+    /// <summary>
+    /// Checks if a completion contains phrases that indicate prompt leakage
+    /// or known contamination patterns. Delegates to the shared ContaminationFilter
+    /// so all learning services use the same phrase list.
+    /// </summary>
+    private static bool IsCompletionContaminated(string completion) =>
+        ContaminationFilter.IsContaminated(completion);
+
+    /// <summary>
+    /// Returns the last N words of a string, lowercased and trimmed.
+    /// Used for ending-diversity checks in few-shot selection.
+    /// </summary>
+    private static string GetTrailingWords(string text, int count)
+    {
+        var words = text.Trim().TrimEnd('.', ',', '!', '?', ';', ':')
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length < count) return text.Trim().ToLowerInvariant();
+        return string.Join(" ", words[^count..]).ToLowerInvariant();
     }
 
     /// <summary>

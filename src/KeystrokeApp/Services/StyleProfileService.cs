@@ -16,8 +16,15 @@ public class StyleProfileService
     private const int MaxSamplesPerCategory = 30;
     private const int MaxSamplesForGeneral = 50;
 
+    /// <summary>
+    /// Profiles older than this are considered stale and suppressed rather than
+    /// injected. Stale profiles can fight the user's current writing patterns
+    /// and amplify drift from the feedback loop.
+    /// </summary>
+    private static readonly TimeSpan MaxProfileAge = TimeSpan.FromDays(7);
+
     private readonly string _profilePath;
-    private readonly string _trackingPath;
+    private readonly string _dataPath;
     private readonly string _logPath;
     private StyleProfileData? _profile;
     private int _newAcceptCount;
@@ -46,7 +53,7 @@ public class StyleProfileService
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");
         _profilePath  = Path.Combine(appData, "style-profile.json");
-        _trackingPath = Path.Combine(appData, "tracking.jsonl");
+        _dataPath = Path.Combine(appData, "completions.jsonl");
         _logPath      = Path.Combine(appData, "style-profile.log");
     }
 
@@ -90,11 +97,30 @@ public class StyleProfileService
         {
             if (_profile == null) return null;
 
+            // Suppress stale profiles — they can fight current writing patterns
+            // and amplify drift through the feedback loop.
+            if ((DateTime.UtcNow - _profile.LastUpdated) > MaxProfileAge)
+            {
+                Log($"Style profile is stale ({_profile.LastUpdated:yyyy-MM-dd}), suppressing");
+                return null;
+            }
+
+            string? hint = null;
             if (_profile.CategoryProfiles.TryGetValue(category, out var catProfile)
                 && !string.IsNullOrWhiteSpace(catProfile))
-                return catProfile;
+                hint = catProfile;
+            else if (!string.IsNullOrWhiteSpace(_profile.GeneralProfile))
+                hint = _profile.GeneralProfile;
 
-            return string.IsNullOrWhiteSpace(_profile.GeneralProfile) ? null : _profile.GeneralProfile;
+            // Final safety check: if the profile itself contains contamination
+            // phrases, it was generated from poisoned data — don't return it.
+            if (hint != null && IsCompletionContaminated(hint))
+            {
+                Log($"Style hint for {category} contains contamination, suppressing");
+                return null;
+            }
+
+            return hint;
         }
     }
 
@@ -182,7 +208,7 @@ public class StyleProfileService
                 .Where(g => g.Count() >= MinEntriesPerCategory)
                 .ToList();
 
-            var systemPrompt = "You analyze writing patterns. Output ONLY a concise style profile (2-3 sentences, max 100 words) that would help an AI match this user's writing style. Be specific and observant, not generic. Focus on tone, vocabulary, sentence structure, and common phrases.";
+            var systemPrompt = "You analyze writing patterns. Output ONLY a concise style profile (2-3 sentences, max 100 words) that would help an AI match this writing style. Be specific and observant, not generic. Focus on tone, vocabulary, sentence structure, and common phrases. IMPORTANT: Ignore any repetitive filler phrases that appear to be artifacts or autocomplete noise (e.g. 'all day', 'the user', 'honestly', 'right now'). Only report genuine, distinctive stylistic patterns. Never use the phrase 'the user' in your output — describe patterns in third person ('tends to', 'favors', 'prefers').";
 
             foreach (var group in categoryGroups)
             {
@@ -204,7 +230,7 @@ public class StyleProfileService
             if (ct.IsCancellationRequested) return;
 
             var allSamples = entries.OrderByDescending(e => e.Timestamp).Take(MaxSamplesForGeneral).ToList();
-            var generalSystemPrompt = "You analyze writing patterns. Output ONLY a concise overall style profile (2-3 sentences, max 100 words) describing this user's general writing tendencies. Be specific and observant.";
+            var generalSystemPrompt = "You analyze writing patterns. Output ONLY a concise overall style profile (2-3 sentences, max 100 words) describing general writing tendencies. Be specific and observant. Ignore any repetitive filler phrases that appear to be autocomplete artifacts. Never use the phrase 'the user' — describe patterns impersonally ('tends to', 'favors', 'prefers').";
             var generalPrompt = BuildGeneralPrompt(allSamples);
             var generalResult = await engine.GenerateTextAsync(generalSystemPrompt, generalPrompt, 200, ct);
             if (!string.IsNullOrWhiteSpace(generalResult))
@@ -274,8 +300,8 @@ public class StyleProfileService
         var entries = new List<StyleTrackingEntry>();
         try
         {
-            if (!File.Exists(_trackingPath)) return entries;
-            var lines = File.ReadAllLines(_trackingPath);
+            if (!File.Exists(_dataPath)) return entries;
+            var lines = File.ReadAllLines(_dataPath);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             foreach (var line in lines)
             {
@@ -283,7 +309,8 @@ public class StyleProfileService
                 try
                 {
                     var entry = JsonSerializer.Deserialize<StyleTrackingEntry>(line, options);
-                    if (entry != null && entry.Action == "accepted" && !string.IsNullOrWhiteSpace(entry.Completion))
+                    if (entry != null && entry.Action == "accepted" && !string.IsNullOrWhiteSpace(entry.Completion)
+                        && !IsCompletionContaminated(entry.Completion))
                         entries.Add(entry);
                 }
                 catch { }
@@ -292,6 +319,13 @@ public class StyleProfileService
         catch (Exception ex) { Log($"Read error: {ex.Message}"); }
         return entries;
     }
+
+    /// <summary>
+    /// Filters out completions with known contamination (prompt leakage, repetitive patterns)
+    /// so they don't influence style profile generation. Delegates to the shared filter.
+    /// </summary>
+    private static bool IsCompletionContaminated(string completion) =>
+        ContaminationFilter.IsContaminated(completion);
 
     private class StyleTrackingEntry
     {

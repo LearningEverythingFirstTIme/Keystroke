@@ -25,13 +25,13 @@ public partial class App
         }
     }
 
-    private void OnSpecialKeyPressed(KeyboardHookService.SpecialKeyEventArgs args)
+    private void OnSpecialKeyPressed(InputListenerService.SpecialKeyEventArgs args)
     {
         var key = args.Key;
 
         switch (key)
         {
-            case KeyboardHookService.SpecialKey.Backspace:
+            case InputListenerService.SpecialKey.Backspace:
                 if (_isEnabled)
                 {
                     // Notify the post-edit detector first — if this backspace fires within
@@ -43,8 +43,8 @@ public partial class App
                 }
                 break;
 
-            case KeyboardHookService.SpecialKey.Enter:
-            case KeyboardHookService.SpecialKey.Escape:
+            case InputListenerService.SpecialKey.Enter:
+            case InputListenerService.SpecialKey.Escape:
                 if (_isEnabled)
                 {
                     var oldBuffer = _typingBuffer.CurrentText;
@@ -55,7 +55,7 @@ public partial class App
                         var fullSuggDismiss = _suggestionPanel.GetFullSuggestion();
                         if (oldBuffer.Length <= fullSuggDismiss.Length)
                         {
-                            var (pn, wt) = ActiveWindowService.GetActiveWindow();
+                            var (pn, wt) = AppContextService.GetActiveWindow();
                             var dismissed = fullSuggDismiss.Substring(oldBuffer.Length);
                             _acceptanceTracker.LogDismissed(oldBuffer, dismissed, pn, wt);
                         }
@@ -68,15 +68,15 @@ public partial class App
                 }
                 break;
 
-            case KeyboardHookService.SpecialKey.LeftArrow:
-            case KeyboardHookService.SpecialKey.RightArrow:
-            case KeyboardHookService.SpecialKey.UpArrow:
-            case KeyboardHookService.SpecialKey.DownArrow:
-            case KeyboardHookService.SpecialKey.Home:
-            case KeyboardHookService.SpecialKey.End:
-            case KeyboardHookService.SpecialKey.PageUp:
-            case KeyboardHookService.SpecialKey.PageDown:
-            case KeyboardHookService.SpecialKey.Delete:
+            case InputListenerService.SpecialKey.LeftArrow:
+            case InputListenerService.SpecialKey.RightArrow:
+            case InputListenerService.SpecialKey.UpArrow:
+            case InputListenerService.SpecialKey.DownArrow:
+            case InputListenerService.SpecialKey.Home:
+            case InputListenerService.SpecialKey.End:
+            case InputListenerService.SpecialKey.PageUp:
+            case InputListenerService.SpecialKey.PageDown:
+            case InputListenerService.SpecialKey.Delete:
                 if (_isEnabled && !_typingBuffer.IsEmpty)
                 {
                     var oldBuffer = _typingBuffer.CurrentText;
@@ -87,7 +87,7 @@ public partial class App
                 }
                 break;
 
-            case KeyboardHookService.SpecialKey.CtrlDownArrow:
+            case InputListenerService.SpecialKey.CtrlDownArrow:
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     Interlocked.Increment(ref _cycleDepth);
@@ -97,7 +97,7 @@ public partial class App
                 }
                 break;
 
-            case KeyboardHookService.SpecialKey.CtrlUpArrow:
+            case InputListenerService.SpecialKey.CtrlUpArrow:
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     Interlocked.Increment(ref _cycleDepth);
@@ -107,12 +107,12 @@ public partial class App
                 }
                 break;
 
-            case KeyboardHookService.SpecialKey.CtrlShiftK:
+            case InputListenerService.SpecialKey.CtrlShiftK:
                 ToggleEnabled();
                 args.ShouldSwallow = true;
                 break;
 
-            case KeyboardHookService.SpecialKey.ShiftTab:
+            case InputListenerService.SpecialKey.ShiftTab:
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     AcceptNextWord("Shift+Tab");
@@ -120,7 +120,7 @@ public partial class App
                 }
                 break;
 
-            case KeyboardHookService.SpecialKey.CtrlRight:
+            case InputListenerService.SpecialKey.CtrlRight:
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     AcceptNextWord("Ctrl+Right");
@@ -128,7 +128,7 @@ public partial class App
                 }
                 break;
 
-            case KeyboardHookService.SpecialKey.Tab:
+            case InputListenerService.SpecialKey.Tab:
                 if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
                 {
                     var buffer   = _typingBuffer.CurrentText;
@@ -164,7 +164,7 @@ public partial class App
                     // Delay the disk write by the post-edit watch window (1500ms) so we can
                     // include editedAfter in the quality score. StyleProfileService is notified
                     // immediately — it only increments a counter, so timing doesn't matter.
-                    var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
+                    var (procName, winTitle) = AppContextService.GetActiveWindow();
                     if (_config.LearningEnabled)
                     {
                         if (_config.StyleProfileEnabled)
@@ -182,6 +182,13 @@ public partial class App
                         var capturedLatency    = latencyMs;
                         var capturedDepth      = cycleDepth;
 
+                        // Compute an initial quality score without post-edit signal.
+                        // This lets us gate the session buffer immediately (before the
+                        // 1500ms post-edit window completes). The full quality score
+                        // (with editedAfter) still goes to the tracker on disk.
+                        var initialQuality = CompletionFeedbackService.ComputeQualityScore(
+                            capturedLatency, capturedDepth, editedAfter: false);
+
                         _postEditDetector.StartWatching(editedAfter =>
                         {
                             _acceptanceTracker.LogAccepted(
@@ -191,16 +198,17 @@ public partial class App
 
                             LogToDebug($"Tracked: latency={capturedLatency}ms " +
                                        $"cycle={capturedDepth} edited={editedAfter} " +
-                                       $"quality={AcceptanceTracker.ComputeQualityScore(capturedLatency, capturedDepth, editedAfter):F2}");
+                                       $"quality={CompletionFeedbackService.ComputeQualityScore(capturedLatency, capturedDepth, editedAfter):F2}");
                         });
 
                         // Sub-Phase C: feed the in-memory session buffer immediately so
                         // the next prediction can use this completion as context without
                         // waiting for the 5-second JSONL file refresh cycle.
+                        // Quality-gated: only high-confidence accepts enter the buffer.
                         var sessionCategory = Services.AppCategory
                             .GetEffectiveCategory(capturedProc, capturedTitle).ToString();
-                        _learningService.AddToSession(capturedBuffer, capturedCompletion, sessionCategory);
-                        LogToDebug($"Session buffer updated ({sessionCategory})");
+                        _learningService.AddToSession(capturedBuffer, capturedCompletion, sessionCategory, initialQuality);
+                        LogToDebug($"Session buffer updated ({sessionCategory}, quality={initialQuality:F2})");
                     }
 
                     // Update rolling context with the full accepted text (buffer + completion)
@@ -262,7 +270,7 @@ public partial class App
 
         InjectText(nextWord);
 
-        var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
+        var (procName, winTitle) = AppContextService.GetActiveWindow();
 
         // Intentionally not logged to the learning system — a single accepted word
         // carries no meaningful signal about what the user wanted the completion to be.
