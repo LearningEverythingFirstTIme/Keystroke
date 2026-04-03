@@ -1,12 +1,12 @@
 # Keystroke
 
-A system-wide AI autocomplete for Windows. Keystroke runs in the background, watches what you type in any application, and suggests completions powered by your choice of AI engine — Google Gemini, Anthropic Claude, OpenAI GPT, OpenRouter, or local models via Ollama.
+A system-wide AI autocomplete for Windows. Keystroke runs in the background, listens for your input in any application, and suggests completions powered by your choice of AI engine — Google Gemini, Anthropic Claude, OpenAI GPT, OpenRouter, or local models via Ollama.
 
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-purple) ![Windows](https://img.shields.io/badge/platform-Windows-blue) ![Gemini](https://img.shields.io/badge/AI-Gemini%203.1-orange) ![Claude](https://img.shields.io/badge/AI-Claude%20Haiku%204.5-blueviolet) ![GPT](https://img.shields.io/badge/AI-GPT--5.4-green) ![OpenRouter](https://img.shields.io/badge/AI-OpenRouter-red) ![Ollama](https://img.shields.io/badge/AI-Ollama%20(local)-gray)
 
 ## How it works
 
-1. A low-level keyboard hook captures your keystrokes across all applications
+1. An input listener detects your typing across all applications
 2. After a brief debounce, your typed text is sent to the AI engine along with context from the active window
 3. A suggestion panel appears near your cursor with the predicted completion
 4. Press **Tab** to accept, **Shift+Tab** to accept one word at a time, **Esc** to dismiss, or just keep typing
@@ -24,15 +24,16 @@ A system-wide AI autocomplete for Windows. Keystroke runs in the background, wat
 - **5 color themes** — Midnight, Ember, Forest, Rose, and Slate panel themes
 
 ### Intelligence
-- **OCR screen reading** — captures visible text on screen for better context (GPU-accelerated via Windows built-in OCR)
+- **OCR screen reading** — reads visible text on screen for better context (GPU-accelerated via Windows built-in OCR)
 - **App-aware tone** — adjusts prediction style based on the active application (casual in Discord, professional in Outlook, syntax-aware in VS Code)
 - **Acceptance-based learning** — learns from completions you accept to match your style using few-shot conversation turns
 - **Adjacent category matching** — learning examples from stylistically similar apps (Chat/Email, Code/Terminal) improve suggestions even in new contexts
 - **Style profiling** — LLM-powered analysis of your accepted completions to build a natural-language description of your writing style, per app category
 - **Vocabulary fingerprinting** — deterministic analysis of your word choices, preferred phrases, sentence structure, and formality level to guide predictions
 - **Intelligence scoring** — per-category 0-100 score tracking learning quality across Volume, Quality, Accept Rate, and Richness, with drift detection
-- **Post-edit detection** — detects when you immediately backspace after accepting a suggestion to signal unwanted completions
+- **Correction detection** — detects when you immediately backspace after accepting a suggestion to signal unwanted completions
 - **Rolling context window** — remembers your last 500 characters of accepted text for topic continuity across multiple completions
+- **Feedback loop hardening** — quality gates, staleness suppression, contamination filtering, and context-continuity checks prevent the learning system from amplifying bad patterns
 
 ### Performance
 - **Smart debounce** — triggers instantly on word boundaries (space, period), fast 100ms debounce mid-word
@@ -46,9 +47,9 @@ A system-wide AI autocomplete for Windows. Keystroke runs in the background, wat
 ### Security and privacy
 - **DPAPI-encrypted API keys** — keys are encrypted at rest using Windows Data Protection API, never stored in plaintext
 - **PII filtering** — Luhn-validated credit card redaction, SSN/email/phone scrubbing before data leaves the device
-- **No telemetry** — all data stays on your machine; acceptance tracking is local-only JSONL
-- **Consent-first** — keystroke monitoring only activates after explicit user consent on first launch
-- **Auto-pruning logs** — log files and tracking data are automatically pruned to prevent unbounded disk usage
+- **No telemetry** — all data stays on your machine; completion feedback is local-only JSONL
+- **Consent-first** — input processing only activates after explicit user consent on first launch
+- **Auto-pruning** — log files and completion data are automatically pruned to prevent unbounded disk usage
 
 ## Requirements
 
@@ -148,10 +149,10 @@ The Settings window provides an intuitive interface to customize Keystroke:
 src/KeystrokeApp/
   App.xaml.cs                        # App startup, service wiring, consent dialog
   App.KeyboardHandlers.cs            # Key input, text injection, word-by-word acceptance
-  App.Prediction.cs                  # Prediction pipeline, debounce, streaming, OCR
+  App.Prediction.cs                  # Prediction pipeline, debounce, streaming, screen reading
   App.TrayIcon.cs                    # System tray icon, context menu, global toggle
   Services/
-    KeyboardHookService.cs           # Low-level keyboard hook (WH_KEYBOARD_LL)
+    InputListenerService.cs          # System-wide input listener for autocomplete
     IPredictionEngine.cs             # Engine interface with streaming + alternatives
     PredictionEngineBase.cs          # Shared engine logic: prompts, rate limits, post-processing
     GeminiPredictionEngine.cs        # Google Gemini API
@@ -160,21 +161,22 @@ src/KeystrokeApp/
     OpenRouterPredictionEngine.cs    # OpenRouter API (hundreds of models)
     OpenRouterModelService.cs        # Fetches and caches the OpenRouter model catalog
     OllamaPredictionEngine.cs        # Local Ollama (instruct + base model support)
-    OcrService.cs                    # Windows.Media.Ocr screen capture
-    ActiveWindowService.cs           # Foreground window detection via P/Invoke
+    ScreenReaderService.cs           # Windows.Media.Ocr screen text reading
+    AppContextService.cs             # Foreground window detection via P/Invoke
     AppCategory.cs                   # App classification and tone hints
     AppConfig.cs                     # Configuration with DPAPI-encrypted key storage
-    KeyProtection.cs                 # Windows DPAPI encryption/decryption for API keys
+    ApiKeyEncryption.cs              # Windows DPAPI encryption/decryption for API keys
     PiiFilter.cs                     # PII scrubbing with Luhn-validated credit card detection
-    TypingBuffer.cs                  # Keystroke accumulation buffer
+    ContaminationFilter.cs           # Shared prompt-leakage and contamination detection
+    TypingBuffer.cs                  # Input accumulation buffer
     DebounceTimer.cs                 # Configurable debounce with cancellation
     PredictionCache.cs               # LRU cache (50 entries)
-    AcceptanceTracker.cs             # JSONL logging of accepted/dismissed predictions
+    CompletionFeedbackService.cs     # JSONL logging of accepted/dismissed predictions
     AcceptanceLearningService.cs     # Few-shot prompting from accepted completions
     StyleProfileService.cs           # LLM-powered writing style analysis per category
     VocabularyProfileService.cs      # Deterministic vocabulary and structure fingerprinting
     LearningScoreService.cs          # Per-category intelligence scoring with drift detection
-    PostEditDetector.cs              # Detects immediate backspace after acceptance
+    CorrectionDetector.cs            # Detects immediate backspace after acceptance
     RollingContextService.cs         # Tracks recently accepted text for continuity
     CursorPositionHelper.cs          # Mouse cursor position for panel placement
     ThemeDefinitions.cs              # Panel color themes (Midnight, Ember, Forest, Rose, Slate)
@@ -188,9 +190,21 @@ src/KeystrokeApp/
 
 - **API keys** are encrypted at rest using Windows DPAPI (Data Protection API) — they are never stored in plaintext on disk. Legacy plaintext keys from older versions are automatically detected and re-encrypted on startup.
 - **PII filtering** scrubs credit card numbers (Luhn-validated), SSNs, email addresses, and phone numbers before any data is sent to the AI engine. API key patterns (`sk-`, `AIzaSy`, `ghp_`, `AKIA`, AWS keys) are also stripped from outgoing text.
-- **No telemetry** — all data stays on your machine. Acceptance tracking is local-only JSONL, auto-pruned to 2,000 entries.
-- **Consent-first** — keystroke monitoring only activates after explicit user consent on first launch.
+- **Contamination filtering** — prompt-leakage patterns are detected and excluded from all learning data so the model never trains on its own system prompt artifacts.
+- **No telemetry** — all data stays on your machine. Completion feedback is local-only JSONL, auto-pruned to 2,000 entries.
+- **Consent-first** — input processing only activates after explicit user consent on first launch.
 - **Local-only option** — use Ollama to run predictions entirely on your machine with zero cloud API calls.
+
+## Learning system
+
+Keystroke's adaptive learning system improves predictions based on your writing patterns. Several safeguards prevent the feedback loop from amplifying bad patterns:
+
+- **Quality-gated session buffer** — only high-confidence accepts (fast acceptance, no cycling, no immediate correction) influence real-time predictions
+- **Staleness suppression** — style and vocabulary profiles older than 7 days are suppressed until refreshed, preventing outdated patterns from fighting your current writing style
+- **Relative phrase thresholds** — vocabulary phrases must appear in at least 15% of samples (not a flat count), preventing early lock-in on small data sets
+- **Short-prefix suppression** — ambiguous openings (< 3 words) receive at most 1 few-shot example to preserve completion diversity
+- **Context-continuity filtering** — dismissed completions only become negative examples when you continued typing in the same app within 60 seconds, proving the dismissal was about quality
+- **Shared contamination filter** — a single centralized filter prevents prompt-leakage and known noise patterns from entering any learning pipeline
 
 ## License
 
