@@ -290,6 +290,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             bool isFirstChunk   = true;
             int  rawChunkCount  = 0;
             int  reasoningChunks = 0;
+            var degenDetector   = CreateDegenerationDetector();
 
             using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var reader = new System.IO.StreamReader(stream);
@@ -330,6 +331,13 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                                 text = " " + text;
                             isFirstChunk = false;
                         }
+
+                        if (degenDetector.IsDegenerate(text))
+                        {
+                            Log($"Stream aborted: degeneration detected after {fullCompletion.Length} chars");
+                            break;
+                        }
+
                         fullCompletion.Append(text);
                         onChunk(text);
                     }

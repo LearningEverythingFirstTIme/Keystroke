@@ -22,6 +22,7 @@ public partial class App : Application
     private TaskbarIcon?              _trayIcon;
     private DebugWindow?              _debugWindow;
     private SuggestionPanel?         _suggestionPanel;
+    private GhostTextWindow?         _ghostTextWindow;
     private SettingsWindow?          _settingsWindow;
     private IPredictionEngine?       _predictionEngine;
     private ScreenReaderService?              _ocrService;
@@ -195,6 +196,13 @@ public partial class App : Application
             _suggestionPanel.ApplyTheme(ThemeDefinitions.Get(_config.ThemeId));
             Log("Suggestion panel created.");
 
+            // Beta: create ghost text overlay if enabled
+            if (_config.GhostTextEnabled)
+            {
+                _ghostTextWindow = new GhostTextWindow();
+                Log("Ghost text overlay created (beta).");
+            }
+
             // Initialize OCR service with periodic capture (every 3 seconds)
             if (_config.OcrEnabled)
             {
@@ -232,6 +240,7 @@ public partial class App : Application
         _inputListener?.Dispose();
         (_predictionEngine as IDisposable)?.Dispose();
         _trayIcon?.Dispose();
+        _ghostTextWindow?.Close();
         _suggestionPanel?.Close();
         _debounceTimer?.Dispose();
         _fastDebounceTimer?.Dispose();
@@ -421,6 +430,19 @@ public partial class App : Application
         _fastDebounceTimer?.Dispose();
         _fastDebounceTimer = new DebounceTimer(_config.FastDebounceMs);
         _fastDebounceTimer.DebounceComplete += OnDebounceComplete;
+
+        // Toggle ghost text on/off based on settings
+        if (_config.GhostTextEnabled && _ghostTextWindow == null)
+        {
+            _ghostTextWindow = new GhostTextWindow();
+            Log("Ghost text overlay enabled (beta).");
+        }
+        else if (!_config.GhostTextEnabled && _ghostTextWindow != null)
+        {
+            _ghostTextWindow.Close();
+            _ghostTextWindow = null;
+            Log("Ghost text overlay disabled.");
+        }
 
         // Toggle OCR on/off based on settings
         if (_config.OcrEnabled && _ocrService == null)

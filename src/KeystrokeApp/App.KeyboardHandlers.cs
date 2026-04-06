@@ -63,6 +63,7 @@ public partial class App
 
                     _typingBuffer.Clear();
                     _suggestionPanel?.HideSuggestion();
+                    _ghostTextWindow?.HideGhostText();
                     CancelPendingPrediction();
                     LogToDebug($"{key} → Buffer cleared (was: \"{oldBuffer}\")");
                 }
@@ -82,6 +83,7 @@ public partial class App
                     var oldBuffer = _typingBuffer.CurrentText;
                     _typingBuffer.Clear();
                     _suggestionPanel?.HideSuggestion();
+                    _ghostTextWindow?.HideGhostText();
                     CancelPendingPrediction();
                     LogToDebug($"{key} → Buffer cleared (cursor moved, was: \"{oldBuffer}\")");
                 }
@@ -148,6 +150,7 @@ public partial class App
 
                     // Show confirmation flash
                     _suggestionPanel?.AcceptSuggestion();
+                    _ghostTextWindow?.FlashAccept();
                     _sessionAcceptCount++;
                     UpdateTraySessionInfo();
 
@@ -219,6 +222,7 @@ public partial class App
 
                     _typingBuffer.Clear();
                     _suggestionPanel?.HideSuggestion();
+                    _ghostTextWindow?.HideGhostText();
                     CancelPendingPrediction();
 
                     // Swallow the Tab key so it doesn't insert a tab character
@@ -237,15 +241,119 @@ public partial class App
 
     private void InjectText(string text)
     {
-        // Inject text directly via SendInput (VK_PACKET) — no clipboard involved.
-        // TextEntry sends each character as a Unicode keystroke, which works reliably
-        // across virtually all Windows apps without touching clipboard state.
-        Task.Run(async () =>
+        // Clipboard-paste injection: set clipboard → Ctrl+V → restore clipboard.
+        //
+        // We originally used InputSimulator.TextEntry() which sends each character
+        // as a VK_PACKET keystroke via SendInput. This works in many apps but causes
+        // severe character repetition and corruption in Windows 11 Notepad (WinUI),
+        // and other apps with high-latency input handling. The SendInput approach
+        // fires dozens of synthetic keydown/keyup events that overwhelm the target
+        // app's message pump, producing garbled output ("dddddddespite", "........").
+        //
+        // Clipboard paste is a single atomic operation every app handles correctly.
+        // The brief clipboard disruption (~15ms) is invisible to the user.
+        Dispatcher.BeginInvoke(() =>
         {
-            await Task.Delay(30); // Let the accepting key (Tab/Shift+Tab) release first
-            var simulator = new WindowsInput.InputSimulator();
-            simulator.Keyboard.TextEntry(text);
+            try
+            {
+                // Save whatever is currently on the clipboard
+                var backup = System.Windows.Clipboard.GetDataObject();
+                var savedData = CloneClipboardData(backup);
+
+                // Set our text and paste it
+                System.Windows.Clipboard.SetText(text);
+
+                // Brief delay to let the clipboard update propagate, then Ctrl+V
+                Task.Run(async () =>
+                {
+                    await Task.Delay(30); // Let Tab release + clipboard settle
+                    var sim = new WindowsInput.InputSimulator();
+                    sim.Keyboard.ModifiedKeyStroke(
+                        WindowsInput.Native.VirtualKeyCode.CONTROL,
+                        WindowsInput.Native.VirtualKeyCode.VK_V);
+
+                    // Restore the original clipboard after a brief delay so the paste
+                    // completes before we overwrite. 100ms is safe for all apps.
+                    await Task.Delay(100);
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        try
+                        {
+                            if (savedData != null)
+                                System.Windows.Clipboard.SetDataObject(savedData, true);
+                            else
+                                System.Windows.Clipboard.Clear();
+                        }
+                        catch { /* Clipboard contention — non-fatal, user just loses prior clipboard */ }
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                // Clipboard access can fail if another app has it locked.
+                // Fall back to SendInput as a last resort.
+                LogToDebug($"Clipboard injection failed ({ex.Message}), falling back to SendInput");
+                Task.Run(async () =>
+                {
+                    await Task.Delay(30);
+                    new WindowsInput.InputSimulator().Keyboard.TextEntry(text);
+                });
+            }
         });
+    }
+
+    /// <summary>
+    /// Clone clipboard data so we can restore it after pasting our text.
+    /// Returns a DataObject with the most common formats preserved, or null
+    /// if the clipboard is empty or inaccessible.
+    /// </summary>
+    private static System.Windows.DataObject? CloneClipboardData(System.Windows.IDataObject? source)
+    {
+        if (source == null) return null;
+
+        try
+        {
+            var clone = new System.Windows.DataObject();
+            bool hasAnything = false;
+
+            // Preserve the formats most likely to matter to the user
+            if (source.GetDataPresent(System.Windows.DataFormats.UnicodeText))
+            {
+                clone.SetData(System.Windows.DataFormats.UnicodeText,
+                    source.GetData(System.Windows.DataFormats.UnicodeText));
+                hasAnything = true;
+            }
+            if (source.GetDataPresent(System.Windows.DataFormats.Text))
+            {
+                clone.SetData(System.Windows.DataFormats.Text,
+                    source.GetData(System.Windows.DataFormats.Text));
+                hasAnything = true;
+            }
+            if (source.GetDataPresent(System.Windows.DataFormats.Html))
+            {
+                clone.SetData(System.Windows.DataFormats.Html,
+                    source.GetData(System.Windows.DataFormats.Html));
+                hasAnything = true;
+            }
+            if (source.GetDataPresent(System.Windows.DataFormats.Bitmap))
+            {
+                clone.SetData(System.Windows.DataFormats.Bitmap,
+                    source.GetData(System.Windows.DataFormats.Bitmap));
+                hasAnything = true;
+            }
+            if (source.GetDataPresent(System.Windows.DataFormats.FileDrop))
+            {
+                clone.SetData(System.Windows.DataFormats.FileDrop,
+                    source.GetData(System.Windows.DataFormats.FileDrop));
+                hasAnything = true;
+            }
+
+            return hasAnything ? clone : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // ==================== Word-by-word acceptance ====================
@@ -287,9 +395,15 @@ public partial class App
         // Show the remaining completion, or hide if nothing left
         var remaining = completion[nextWord.Length..];
         if (string.IsNullOrWhiteSpace(remaining))
+        {
             _suggestionPanel.HideSuggestion();
+            _ghostTextWindow?.HideGhostText();
+        }
         else
+        {
             _suggestionPanel.ShowSuggestion(newBuffer, remaining);
+            _ghostTextWindow?.ShowGhostText(remaining);
+        }
     }
 
     /// <summary>

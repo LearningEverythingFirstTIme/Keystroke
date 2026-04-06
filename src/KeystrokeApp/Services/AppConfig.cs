@@ -64,6 +64,11 @@ public class AppConfig
     // First-launch consent: must be true before the app activates input processing.
     public bool ConsentAccepted { get; set; } = false;
 
+    // Beta: inline ghost text overlay (renders suggestion at the caret position)
+    // When enabled, shows faded inline text alongside the standard suggestion panel.
+    // Experimental — works best in apps with a standard Win32 caret (Notepad, Word, etc.).
+    public bool GhostTextEnabled { get; set; } = false;
+
     // Suggestion panel color theme ("midnight", "ember", "forest", "rose", "slate")
     public string ThemeId { get; set; } = "midnight";
 

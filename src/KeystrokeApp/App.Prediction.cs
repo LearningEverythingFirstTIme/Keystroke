@@ -45,6 +45,7 @@ public partial class App
     {
         CancelPendingPrediction();
         _suggestionPanel?.HideSuggestion();
+        _ghostTextWindow?.HideGhostText();
         LogToDebug("Buffer cleared");
     }
 
@@ -73,6 +74,7 @@ public partial class App
                     Interlocked.Exchange(ref _cycleDepth, 0);
                     Interlocked.Exchange(ref _suggestionShownAtTicks, DateTime.UtcNow.Ticks);
                     _suggestionPanel?.ShowSuggestion(buffer, cached);
+                    _ghostTextWindow?.ShowGhostText(cached);
                 });
                 LogToDebug($"Cache hit: \"{buffer}\" + \"{cached}\"");
             }
@@ -126,7 +128,11 @@ public partial class App
         // Show the loading animation immediately rather than waiting for the first streamed
         // chunk. This gives instant visual feedback that a new prediction is in progress and
         // clears any stale result that was anchored to an older prefix.
-        Dispatcher.BeginInvoke(() => _suggestionPanel?.BeginStreamingSuggestion(buffer));
+        Dispatcher.BeginInvoke(() =>
+        {
+            _suggestionPanel?.BeginStreamingSuggestion(buffer);
+            _ghostTextWindow?.BeginStreaming();
+        });
 
         // Run prediction on background using streaming for progressive display
         _ = Task.Run(async () =>
@@ -154,6 +160,7 @@ public partial class App
                                     chunk = " " + chunk;
                             }
                             _suggestionPanel?.AppendSuggestion(buffer, chunk);
+                            _ghostTextWindow?.AppendGhostText(chunk);
                         });
                     },
                     linkedCts.Token);
@@ -164,7 +171,11 @@ public partial class App
                 if (ct.IsCancellationRequested)
                 {
                     // Prediction was superseded by a newer keystroke — stop any loading animation.
-                    Dispatcher.BeginInvoke(() => _suggestionPanel?.HideSuggestion());
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _suggestionPanel?.HideSuggestion();
+                        _ghostTextWindow?.HideGhostText();
+                    });
                     return;
                 }
 
@@ -192,12 +203,20 @@ public partial class App
             catch (OperationCanceledException)
             {
                 // Cancelled by a newer keystroke — stop any in-progress loading animation.
-                Dispatcher.BeginInvoke(() => _suggestionPanel?.HideSuggestion());
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _suggestionPanel?.HideSuggestion();
+                    _ghostTextWindow?.HideGhostText();
+                });
             }
             catch (Exception ex)
             {
                 LogToDebug($"Prediction error: {ex.Message}");
-                Dispatcher.BeginInvoke(() => _suggestionPanel?.HideSuggestion());
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _suggestionPanel?.HideSuggestion();
+                    _ghostTextWindow?.HideGhostText();
+                });
             }
             finally
             {

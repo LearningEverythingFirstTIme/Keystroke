@@ -97,6 +97,99 @@ public abstract class PredictionEngineBase
         return string.Join(" ", words[^wordCount..]).ToLowerInvariant();
     }
 
+    // ── Streaming degeneration detection ────────────────────────────────────
+
+    /// <summary>
+    /// Creates a new degeneration detector for use in a streaming prediction loop.
+    /// Call <see cref="StreamingDegenerationDetector.IsDegenerate"/> on each chunk;
+    /// if it returns true, abort the stream — the model is stuck in a repetition loop.
+    /// </summary>
+    protected static StreamingDegenerationDetector CreateDegenerationDetector()
+        => new();
+
+    /// <summary>
+    /// Detects when a streaming model degenerates into repeating the same character
+    /// or short pattern (e.g. ".........", "!!!!!", "aaaa"). Tracks the trailing
+    /// characters of the accumulated output and fires when a single character repeats
+    /// 5+ times consecutively, or when a short pattern (2-4 chars) repeats 3+ times.
+    ///
+    /// Usage: create one per streaming call, feed every chunk via IsDegenerate().
+    /// </summary>
+    protected class StreamingDegenerationDetector
+    {
+        private readonly StringBuilder _tail = new();
+        private const int TailSize = 40; // Only need the trailing window
+
+        /// <summary>
+        /// Feed a new streaming chunk. Returns true if the accumulated output
+        /// shows degeneration and the stream should be aborted.
+        /// </summary>
+        public bool IsDegenerate(string chunk)
+        {
+            if (string.IsNullOrEmpty(chunk)) return false;
+
+            _tail.Append(chunk);
+
+            // Keep only the trailing window to avoid unbounded growth
+            if (_tail.Length > TailSize)
+                _tail.Remove(0, _tail.Length - TailSize);
+
+            if (_tail.Length < 5) return false;
+
+            // Check 1: single character repeated 5+ times at the tail
+            char last = _tail[^1];
+            int sameCount = 0;
+            for (int i = _tail.Length - 1; i >= 0 && _tail[i] == last; i--)
+                sameCount++;
+
+            if (sameCount >= 5)
+                return true;
+
+            // Check 2: short pattern (2-4 chars) repeated 3+ times at the tail
+            // e.g. ". ." repeating, or "ha" repeating
+            for (int patLen = 2; patLen <= 4 && patLen * 3 <= _tail.Length; patLen++)
+            {
+                var pattern = _tail.ToString(_tail.Length - patLen, patLen);
+                int repeats = 1;
+                int pos = _tail.Length - patLen * 2;
+                while (pos >= 0)
+                {
+                    var segment = _tail.ToString(pos, patLen);
+                    if (segment != pattern) break;
+                    repeats++;
+                    pos -= patLen;
+                }
+                if (repeats >= 3)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns the clean portion of the accumulated text (everything before the
+        /// degenerate trailing run). Call after IsDegenerate() returns true.
+        /// </summary>
+        public string GetCleanTail()
+        {
+            var text = _tail.ToString();
+
+            // Walk backwards to find where the repetition started
+            if (text.Length < 2) return text;
+
+            char last = text[^1];
+            int runStart = text.Length - 1;
+            while (runStart > 0 && text[runStart - 1] == last)
+                runStart--;
+
+            // If the run is ≥5 chars, return everything before it
+            if (text.Length - runStart >= 5)
+                return text[..runStart];
+
+            return text;
+        }
+    }
+
     /// <summary>
     /// Injected by the caller (App.xaml.cs) after construction.
     /// Not initialised here to avoid a wasted file read on every engine creation.
@@ -446,12 +539,21 @@ public abstract class PredictionEngineBase
     /// Trims trailing partial words so completions always end on a word boundary.
     /// A "complete" ending is: trailing punctuation, trailing whitespace, or a full
     /// word with no trailing character (even without punctuation).
+    /// Also strips degenerate repeated punctuation (e.g. "........." or "!!!!!!!")
+    /// that models sometimes produce when they fail to stop cleanly.
     /// </summary>
     protected static string TrimToWholeWords(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return text;
         var trimmed = text.TrimEnd();
         if (trimmed.Length == 0) return trimmed;
+
+        // Strip trailing runs of repeated punctuation (3+ of the same character).
+        // Keep up to the natural count: "..." stays as "...", "?!" stays, but
+        // ".........." becomes "..." and "!!!!!" becomes "!".
+        trimmed = TrimRepeatedTrailingPunctuation(trimmed);
+        if (trimmed.Length == 0) return trimmed;
+
         char last = trimmed[^1];
         if (char.IsPunctuation(last) || char.IsWhiteSpace(last)) return trimmed;
         int lastSpace = trimmed.LastIndexOf(' ');
@@ -460,5 +562,32 @@ public abstract class PredictionEngineBase
         if (lastWord.Length == 1 && lastWord != "I" && lastWord != "a" && lastWord != "A")
             return trimmed[..lastSpace].TrimEnd();
         return trimmed;
+    }
+
+    /// <summary>
+    /// Collapses trailing runs of the same punctuation character to a sensible length.
+    /// "........" → "..." (ellipsis is the natural form for periods)
+    /// "!!!!!!"  → "!"   (single is natural for exclamation/question)
+    /// "???"     → "?"   (single is natural)
+    /// Mixed punctuation like "?!" is left alone.
+    /// </summary>
+    private static string TrimRepeatedTrailingPunctuation(string text)
+    {
+        if (text.Length < 3) return text;
+
+        // Find where the trailing run of the same character starts
+        char last = text[^1];
+        if (!char.IsPunctuation(last)) return text;
+
+        int runStart = text.Length - 1;
+        while (runStart > 0 && text[runStart - 1] == last)
+            runStart--;
+
+        int runLength = text.Length - runStart;
+        if (runLength < 3) return text; // "." or ".." — leave as-is
+
+        // Periods get collapsed to "..." (ellipsis); everything else to a single char
+        int keepCount = last == '.' ? 3 : 1;
+        return text[..runStart] + new string(last, keepCount);
     }
 }

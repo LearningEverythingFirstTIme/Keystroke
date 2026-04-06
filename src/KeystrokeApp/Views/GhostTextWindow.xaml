@@ -1,0 +1,35 @@
+<Window x:Class="KeystrokeApp.Views.GhostTextWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        Background="Transparent"
+        Opacity="0"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize">
+
+    <!--
+        Ghost Text Overlay (Beta)
+
+        Renders inline autocomplete suggestions as semi-transparent text directly
+        at the text caret position. The window is fully click-through — mouse events
+        pass straight to the app underneath. No border, no chrome, no background.
+
+        This is intentionally minimal: just the ghost text, nothing else.
+    -->
+
+    <TextBlock x:Name="GhostText"
+               FontFamily="Cascadia Code, Consolas, Courier New"
+               FontSize="14"
+               Foreground="#60A0A8C0"
+               FontStyle="Italic"
+               Padding="0"
+               Margin="0"
+               TextWrapping="NoWrap"
+               MaxWidth="500"/>
+</Window>

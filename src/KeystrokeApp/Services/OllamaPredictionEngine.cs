@@ -417,6 +417,7 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
         if (!response.IsSuccessStatusCode) { Log($"Chat stream error {response.StatusCode}"); return null; }
 
         var rawCompletion = new StringBuilder();
+        var degenDetector = CreateDegenerationDetector();
         using var stream  = await response.Content.ReadAsStreamAsync(ct);
         using var reader  = new System.IO.StreamReader(stream);
 
@@ -430,6 +431,11 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 var text  = chunk?.Message?.Content;
                 if (!string.IsNullOrEmpty(text))
                 {
+                    if (degenDetector.IsDegenerate(text))
+                    {
+                        Log($"Chat stream aborted: degeneration detected after {rawCompletion.Length} chars");
+                        break;
+                    }
                     rawCompletion.Append(text);
                     onChunk(text);
                 }
@@ -523,6 +529,7 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
         var fullCompletion = new StringBuilder();
         bool isFirstChunk  = true;
+        var degenDetector  = CreateDegenerationDetector();
         using var stream   = await response.Content.ReadAsStreamAsync(ct);
         using var reader   = new System.IO.StreamReader(stream);
 
@@ -545,6 +552,13 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                         text = " " + text;
                     isFirstChunk = false;
                 }
+
+                if (degenDetector.IsDegenerate(text))
+                {
+                    Log($"Generate stream aborted: degeneration detected after {fullCompletion.Length} chars");
+                    break;
+                }
+
                 fullCompletion.Append(text);
                 onChunk(text);
             }

@@ -49,6 +49,12 @@ public class InputListenerService : IDisposable
 
     private const int WH_KEYBOARD_LL = 13;
 
+    // KBDLLHOOKSTRUCT.flags bit that marks keystrokes injected by SendInput/keybd_event.
+    // We MUST ignore these — our own text injection (InputSimulator.TextEntry) uses SendInput,
+    // and without this filter every injected character re-enters the hook, corrupts the typing
+    // buffer, and triggers new predictions mid-injection.
+    private const uint LLKHF_INJECTED = 0x10;
+
     // Modifier key virtual codes — WH_KEYBOARD_LL reports the specific
     // left/right variants (0xA0/0xA1 for Shift, 0xA2/0xA3 for Ctrl),
     // not the generic 0x10/0x11 codes used by WM_KEYDOWN messages.
@@ -204,18 +210,24 @@ public class InputListenerService : IDisposable
         if (nCode < 0)
             return CallNextHookEx(_listenerId, nCode, wParam, lParam);
 
+        // Ignore keystrokes injected by SendInput (our own text injection, other automation).
+        // Without this, every character we inject via InjectText() re-enters this hook and
+        // corrupts the typing buffer, triggers spurious predictions, and causes garbled output.
+        var hookData = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+        if ((hookData.flags & LLKHF_INJECTED) != 0)
+            return CallNextHookEx(_listenerId, nCode, wParam, lParam);
+
         int msgType = wParam.ToInt32();
-        
+
         if (msgType == WM_KEYDOWN || msgType == WM_SYSKEYDOWN)
         {
-            var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            int vkCode = (int)hookStruct.vkCode;
+            int vkCode = (int)hookData.vkCode;
 
             if (!_keysDown.Contains(vkCode))
             {
                 _keysDown.Add(vkCode);
 
-                bool shouldSwallow = ProcessKeyDown(vkCode, hookStruct.scanCode);
+                bool shouldSwallow = ProcessKeyDown(vkCode, hookData.scanCode);
 
                 if (shouldSwallow)
                 {
@@ -226,8 +238,7 @@ public class InputListenerService : IDisposable
         }
         else if (msgType == WM_KEYUP || msgType == WM_SYSKEYUP)
         {
-            var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            _keysDown.Remove((int)hookStruct.vkCode);
+            _keysDown.Remove((int)hookData.vkCode);
         }
 
         return CallNextHookEx(_listenerId, nCode, wParam, lParam);

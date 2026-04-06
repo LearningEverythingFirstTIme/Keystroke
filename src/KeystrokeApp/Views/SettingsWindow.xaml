@@ -1041,7 +1041,24 @@
             <TabItem Header="⚙️ Advanced">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="8,8,8,16">
-                        
+
+                        <!-- Beta Features -->
+                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="Beta Features" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Experimental features that may not work in all apps."
+                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
+
+                                <CheckBox x:Name="GhostTextCheck" Content="Inline ghost text"
+                                          Foreground="{StaticResource TextPrimary}" FontSize="13"
+                                          Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                                <TextBlock Text="Show faded autocomplete text directly at the cursor position (like VS Code Copilot). Works best in traditional Win32 apps — Notepad, Word, Outlook. Falls back to mouse position in Chromium-based apps."
+                                           Foreground="{StaticResource TextMuted}" FontSize="11"
+                                           TextWrapping="Wrap" Margin="20,4,0,0"/>
+                            </StackPanel>
+                        </Border>
+
                         <Border Style="{StaticResource CardStyle}" Padding="16">
                             <StackPanel>
                                 <Grid Margin="0,0,0,8">

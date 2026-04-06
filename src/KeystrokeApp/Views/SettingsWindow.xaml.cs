@@ -120,7 +120,8 @@ public partial class SettingsWindow : Window
         LoadStyleProfileStatus();
         LoadStyleProfileProgress();
 
-        // Advanced
+        // Advanced / Beta
+        GhostTextCheck.IsChecked = _config.GhostTextEnabled;
         PromptBox.Text = _config.EffectiveSystemPrompt;
     }
 
@@ -918,6 +919,7 @@ public partial class SettingsWindow : Window
         _config.StyleProfileEnabled = StyleProfileCheck.IsChecked == true;
         _config.StyleProfileInterval = (int)StyleProfileIntervalSlider.Value;
         _config.MaxSuggestions = (int)SuggestionsSlider.Value;
+        _config.GhostTextEnabled = GhostTextCheck.IsChecked == true;
 
         var promptText = PromptBox.Text.Trim();
         _config.CustomSystemPrompt = (promptText == AppConfig.DefaultSystemPrompt) ? null : promptText;
