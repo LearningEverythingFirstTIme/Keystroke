@@ -15,35 +15,16 @@ public partial class App
         LogToDebug($"Buffer: \"{newText}\" ({newText.Length} chars)");
         TraceBufferChanged(newText);
 
-        // Only cancel in-flight predictions if the user backspaced or the text diverged.
-        // If they're just extending (typing forward), let the current prediction finish —
-        // it may still be relevant, and cancelling it creates dead air.
-        bool isExtending;
-        lock (_predictionCtsLock)
-        {
-            isExtending = newText.Length > _lastPredictionPrefix.Length
-                && newText.StartsWith(_lastPredictionPrefix);
-        }
+        // Treat any new keystroke as invalidating the current suggestion/request.
+        // This keeps the model from racing ahead on stale context while the user is
+        // still actively composing their sentence.
+        CancelPendingPrediction();
+        _suggestionPanel?.HideSuggestion();
 
-        if (!isExtending)
-        {
-            CancelPendingPrediction();
-        }
-
-        // On word boundaries (space, period, etc.), trigger prediction immediately
-        if (newText.Length > 0 && _wordBoundaryChars.Contains(newText[^1]))
-        {
-            _debounceTimer?.Cancel();
-            _fastDebounceTimer?.Cancel();
-            OnDebounceComplete();
-        }
-        else
-        {
-            // Use the fast debounce (100ms) so predictions fire while typing,
-            // not just after a long pause
-            _debounceTimer?.Cancel();
-            _fastDebounceTimer?.Restart();
-        }
+        // Only predict after the user has paused long enough for the buffer to settle.
+        _fastDebounceTimer?.Cancel();
+        _debounceTimer?.Cancel();
+        _debounceTimer?.Restart();
     }
 
     private void OnBufferCleared()
@@ -92,6 +73,8 @@ public partial class App
                 {
                     if (!IsPredictionRequestCurrent(cacheRequestId))
                         return;
+                    if (_typingBuffer.CurrentText != buffer)
+                        return;
 
                     // Reset cycle depth and stamp the suggestion-shown time so the Tab
                     // latency measurement is accurate even for cache hits.
@@ -108,19 +91,6 @@ public partial class App
                 });
             }
             return;
-        }
-
-        // If a prediction is already in-flight for a prefix the user is still extending,
-        // let it finish rather than cancelling. Cloud models respond in <500ms so this
-        // rarely matters there, but local models can take 3-8 seconds — without this,
-        // every keystroke cancels the previous request and nothing ever completes.
-        lock (_predictionCtsLock)
-        {
-            if (_predictionCts != null && buffer.StartsWith(_lastPredictionPrefix, StringComparison.Ordinal))
-            {
-                LogToDebug("Prediction in-flight for extending prefix, skipping restart");
-                return;
-            }
         }
 
         // Cancel any previous prediction request and track what we're predicting for
@@ -190,6 +160,8 @@ public partial class App
                         {
                             if (!IsPredictionRequestCurrent(requestId))
                                 return;
+                            if (_typingBuffer.CurrentText != buffer)
+                                return;
 
                             // Add leading space on the very first chunk if needed
                             if (firstChunk)
@@ -227,6 +199,8 @@ public partial class App
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (!IsPredictionRequestCurrent(requestId))
+                        return;
+                    if (_typingBuffer.CurrentText != buffer)
                         return;
 
                     Interlocked.Exchange(ref _suggestionShownAtTicks, DateTime.UtcNow.Ticks);
@@ -287,22 +261,6 @@ public partial class App
                         _predictionCts = null;
                         if (IsPredictionRequestCurrent(requestId))
                             Interlocked.CompareExchange(ref _activePredictionRequestId, 0, requestId);
-                    }
-                }
-
-                // If the buffer advanced while this prediction was in-flight, do NOT
-                // immediately issue a second request for the same typing burst.
-                // That follow-up often lands just after the first visible suggestion and
-                // overwrites it, which feels jittery and wastes tokens. Instead, keep the
-                // first suggestion on screen and let any *future* keystrokes trigger the
-                // next prediction naturally via the normal debounce path.
-                if (!ct.IsCancellationRequested)
-                {
-                    var currentBuffer = _typingBuffer.CurrentText;
-                    if (currentBuffer.Length > buffer.Length
-                        && currentBuffer.StartsWith(buffer, StringComparison.Ordinal))
-                    {
-                        LogToDebug($"Buffer advanced (\"{buffer}\" → \"{currentBuffer}\"), keeping current suggestion until next keystroke");
                     }
                 }
 

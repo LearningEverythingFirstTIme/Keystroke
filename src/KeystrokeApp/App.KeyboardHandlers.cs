@@ -53,10 +53,10 @@ public partial class App
                     if (_config.LearningEnabled && _suggestionPanel?.HasSuggestion == true)
                     {
                         var fullSuggDismiss = _suggestionPanel.GetFullSuggestion();
-                        if (oldBuffer.Length <= fullSuggDismiss.Length)
+                        var dismissed = SuggestionAcceptance.GetRemainingCompletion(oldBuffer, fullSuggDismiss);
+                        if (!string.IsNullOrEmpty(dismissed))
                         {
                             var (pn, wt) = AppContextService.GetActiveWindow();
-                            var dismissed = fullSuggDismiss.Substring(oldBuffer.Length);
                             _acceptanceTracker.LogDismissed(oldBuffer, dismissed, pn, wt);
                         }
                     }
@@ -136,13 +136,12 @@ public partial class App
                     var buffer   = _typingBuffer.CurrentText;
                     var fullText = _suggestionPanel.GetFullSuggestion();
 
-                    if (buffer.Length > fullText.Length) { _suggestionPanel.HideSuggestion(); break; }
-
                     LogToDebug($"Tab → Buffer: \"{buffer}\" ({buffer.Length} chars)");
                     LogToDebug($"Tab → Buffer ends with space: {buffer.EndsWith(" ")}");
                     LogToDebug($"Tab → Full suggestion: \"{fullText}\" ({fullText.Length} chars)");
 
-                    var completion = fullText.Substring(buffer.Length);
+                    var completion = SuggestionAcceptance.GetRemainingCompletion(buffer, fullText);
+                    if (string.IsNullOrEmpty(completion)) { _suggestionPanel.HideSuggestion(); break; }
                     LogToDebug($"Tab → Injecting: \"{completion}\" ({completion.Length} chars)");
                     LogToDebug($"Tab → First char code: {(int)completion.FirstOrDefault()}");
 
@@ -315,9 +314,8 @@ public partial class App
 
         var buffer   = _typingBuffer.CurrentText;
         var fullSugg = _suggestionPanel.GetFullSuggestion();
-        if (buffer.Length > fullSugg.Length) { _suggestionPanel.HideSuggestion(); return; }
-
-        var completion = fullSugg.Substring(buffer.Length);
+        var completion = SuggestionAcceptance.GetRemainingCompletion(buffer, fullSugg);
+        if (string.IsNullOrEmpty(completion)) { _suggestionPanel.HideSuggestion(); return; }
         var nextWord   = GetNextWord(completion);
 
         LogToDebug($"{keyLabel} → Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");

@@ -209,10 +209,9 @@ public partial class App : Application
             _typingBuffer.BufferCleared += OnBufferCleared;
 
             // Initialize debounce timers
-            // Normal debounce: user's configured delay (used for word boundaries as fallback)
+            // Predictions now wait for settled text instead of firing mid-composition.
             _debounceTimer = new DebounceTimer(_config.DebounceMs);
             _debounceTimer.DebounceComplete += OnDebounceComplete;
-            // Fast debounce: short delay for mid-word typing so predictions fire while typing
             _fastDebounceTimer = new DebounceTimer(_config.FastDebounceMs);
             _fastDebounceTimer.DebounceComplete += OnDebounceComplete;
 
