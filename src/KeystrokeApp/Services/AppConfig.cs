@@ -51,6 +51,10 @@ public class AppConfig
     // Learning: opt-in logging of accepted/dismissed completions for few-shot learning.
     // Off by default — user must explicitly enable in settings.
     public bool LearningEnabled { get; set; } = false;
+    public bool LearningV2Enabled { get; set; } = true;
+    public bool LearningContextV2Enabled { get; set; } = true;
+    public bool LearningRerankerEnabled { get; set; } = true;
+    public bool LearningUiV2Enabled { get; set; } = true;
 
     // Style profile: periodically analyzes accepted completions to generate a writing
     // style summary injected into the system prompt. Only active when LearningEnabled is true.

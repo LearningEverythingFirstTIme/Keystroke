@@ -43,9 +43,14 @@ public partial class App : Application
     private DebounceTimer?           _debounceTimer;
     private DebounceTimer?           _fastDebounceTimer;
     private PredictionCache          _predictionCache  = new(50);
-    private CompletionFeedbackService        _acceptanceTracker = new();
+    private readonly LearningContextPreferencesService _contextPreferencesService = new();
+    private readonly LearningContextMaintenanceService _contextMaintenanceService;
+    private CompletionFeedbackService        _acceptanceTracker;
     private RollingContextService    _rollingContext   = new(maxChars: 2000, timeoutMinutes: 5);
-    private AcceptanceLearningService  _learningService          = new();
+    private AcceptanceLearningService  _learningService;
+    private readonly ContextFingerprintService _contextFingerprintService = new();
+    private readonly LearningEventService _learningEventService;
+    private readonly LearningCaptureCoordinator _learningCaptureCoordinator;
     private readonly OutboundPrivacyService _outboundPrivacy = new();
     private StyleProfileService        _styleProfileService       = new();
     private VocabularyProfileService   _vocabularyProfileService  = new();
@@ -83,9 +88,14 @@ public partial class App : Application
     private readonly ITextInjector _textInjector;
     private long _predictionRequestCounter;
     private long _activePredictionRequestId;
+    private long _suggestionIdCounter;
     private long _lastBufferTraceTicks;
     private int _lastTracedBufferLength;
     private volatile string _predictionState = "Idle";
+    private readonly object _activeSuggestionLock = new();
+    private string _activeSuggestionId = "";
+    private long _activeSuggestionRequestId;
+    private ContextSnapshot? _activeSuggestionContext;
 
     private string _logPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -95,7 +105,21 @@ public partial class App : Application
 
     public App()
     {
+        _acceptanceTracker = new CompletionFeedbackService(
+            preferences: _contextPreferencesService,
+            fingerprints: _contextFingerprintService);
+        _learningEventService = new LearningEventService(
+            preferences: _contextPreferencesService);
+        _contextMaintenanceService = new LearningContextMaintenanceService(
+            fingerprints: _contextFingerprintService,
+            eventWriteLock: _learningEventService.WriteLock,
+            legacyWriteLock: _acceptanceTracker.WriteLock);
+        _learningService = new AcceptanceLearningService(
+            new LearningRepository(_contextFingerprintService, _contextPreferencesService),
+            new LearningRetrievalService(new LearningReranker()),
+            _contextPreferencesService);
         _textInjector = new ClipboardTextInjector(new InputSimulator(), _reliabilityTrace);
+        _learningCaptureCoordinator = new LearningCaptureCoordinator(_learningEventService);
         _reliabilityTrace.EventRecorded += evt => LogToDebug(
             $"[reliability:{evt.Area}] {evt.EventName} - {evt.Message}");
     }
@@ -159,6 +183,7 @@ public partial class App : Application
 
             // Prune completions file if it's grown too large
             _acceptanceTracker.PruneIfNeeded(maxLines: 2000);
+            _learningEventService.PruneIfNeeded(maxLines: 4000);
 
             // Sub-Phase D: wire LearningScoreService to the learning stack.
             // It holds references to all three services so Recompute() can pull
@@ -395,7 +420,14 @@ public partial class App : Application
     {
         if (_settingsWindow == null || !_settingsWindow.IsLoaded)
         {
-            _settingsWindow = new SettingsWindow(_config, _learningService, _styleProfileService, _vocabularyProfileService, _learningScoreService);
+            _settingsWindow = new SettingsWindow(
+                _config,
+                _learningService,
+                _styleProfileService,
+                _vocabularyProfileService,
+                _learningScoreService,
+                _contextPreferencesService,
+                _contextMaintenanceService);
             _settingsWindow.ThemeChanged += themeId =>
                 _suggestionPanel?.ApplyTheme(ThemeDefinitions.Get(themeId));
             _settingsWindow.Closed += (s, e) =>
@@ -468,6 +500,71 @@ public partial class App : Application
     }
 
     // ==================== Helpers ====================
+
+    private ContextSnapshot CreateContextSnapshot(string typedText, string processName, string windowTitle)
+    {
+        var screenText = _outboundPrivacy.SanitizeForPrompt(_ocrService?.CachedText);
+        var rollingContext = _config.RollingContextEnabled
+            ? _outboundPrivacy.SanitizeForPrompt(_rollingContext.GetContext(processName, windowTitle))
+            : null;
+        var fingerprint = _contextFingerprintService.Create(processName, windowTitle, screenText, rollingContext);
+
+        return new ContextSnapshot
+        {
+            TypedText = typedText,
+            ProcessName = processName,
+            WindowTitle = windowTitle,
+            SafeContextLabel = fingerprint.SafeContextLabel,
+            Category = fingerprint.Category,
+            ProcessKey = fingerprint.ProcessKey,
+            WindowKey = fingerprint.WindowKey,
+            SubcontextKey = fingerprint.SubcontextKey,
+            ProcessLabel = fingerprint.ProcessLabel,
+            WindowLabel = fingerprint.WindowLabel,
+            SubcontextLabel = fingerprint.SubcontextLabel,
+            ContextConfidence = fingerprint.Confidence,
+            ScreenText = screenText,
+            RollingContext = rollingContext
+        };
+    }
+
+    private void RegisterVisibleSuggestion(long requestId, ContextSnapshot context, string prefix, string completion)
+    {
+        var suggestionId = $"sugg-{Interlocked.Increment(ref _suggestionIdCounter)}";
+        lock (_activeSuggestionLock)
+        {
+            _activeSuggestionId = suggestionId;
+            _activeSuggestionRequestId = requestId;
+            _activeSuggestionContext = context;
+        }
+        _learningCaptureCoordinator.OnSuggestionShown(suggestionId, requestId, context, prefix, completion);
+    }
+
+    private void ClearActiveSuggestion()
+    {
+        string idToClear;
+        lock (_activeSuggestionLock)
+        {
+            idToClear = _activeSuggestionId;
+            _activeSuggestionId = "";
+            _activeSuggestionRequestId = 0;
+            _activeSuggestionContext = null;
+        }
+        if (!string.IsNullOrWhiteSpace(idToClear))
+            _learningCaptureCoordinator.ClearSuggestion(idToClear);
+    }
+
+    /// <summary>
+    /// Atomically snapshots the current active suggestion state for use in closures
+    /// that may execute after the suggestion has changed.
+    /// </summary>
+    private (string SuggestionId, long RequestId, ContextSnapshot? Context) SnapshotActiveSuggestion()
+    {
+        lock (_activeSuggestionLock)
+        {
+            return (_activeSuggestionId, _activeSuggestionRequestId, _activeSuggestionContext);
+        }
+    }
 
     private void LogToDebug(string message)
     {

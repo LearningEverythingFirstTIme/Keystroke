@@ -38,12 +38,14 @@ public class VocabularyProfileService
     private readonly string _profilePath;
     private readonly string _dataPath;
     private readonly string _logPath;
+    private readonly LearningRepository _repository;
 
     // ── State ─────────────────────────────────────────────────────────────────
     private VocabularyProfile? _profile;
     private int  _acceptCount;
     private int  _profileInterval;
     private bool _isGenerating;
+    private CancellationTokenSource? _generateCts;
     private readonly object _lock = new();
 
     // ── Constructor ───────────────────────────────────────────────────────────
@@ -54,6 +56,7 @@ public class VocabularyProfileService
         _profilePath    = Path.Combine(appData, "vocabulary-profile.json");
         _dataPath   = Path.Combine(appData, "completions.jsonl");
         _logPath        = Path.Combine(appData, "vocabulary-profile.log");
+        _repository     = new LearningRepository();
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -92,7 +95,7 @@ public class VocabularyProfileService
     /// Returns a compact, structured prompt block for the given category,
     /// or null if no profile exists yet for that category.
     /// </summary>
-    public string? GetVocabularyHint(string category)
+    public string? GetVocabularyHint(string category, string? subcontextKey = null)
     {
         lock (_lock)
         {
@@ -103,10 +106,24 @@ public class VocabularyProfileService
             if ((DateTime.UtcNow - _profile.LastUpdated) > MaxProfileAge)
                 return null;
 
-            if (!_profile.Categories.TryGetValue(category, out var vocab)) return null;
+            CategoryVocabulary? vocab = null;
+            string heading = category;
+
+            if (!string.IsNullOrWhiteSpace(subcontextKey) &&
+                _profile.Contexts.TryGetValue(subcontextKey, out var contextVocab))
+            {
+                vocab = contextVocab;
+                heading = _profile.ContextLabels.GetValueOrDefault(subcontextKey, category);
+            }
+            else if (_profile.Categories.TryGetValue(category, out var categoryVocab))
+            {
+                vocab = categoryVocab;
+            }
+
+            if (vocab == null) return null;
 
             var sb = new StringBuilder();
-            sb.AppendLine($"User's vocabulary fingerprint ({category}):");
+            sb.AppendLine($"User's vocabulary fingerprint ({heading}):");
 
             if (vocab.TopWords.Count > 0)
                 sb.AppendLine($"- Preferred words: {string.Join(", ", vocab.TopWords.Take(8))}");
@@ -132,11 +149,45 @@ public class VocabularyProfileService
         lock (_lock) return _profile?.Categories.Count ?? 0;
     }
 
+    public void InvalidateProfile()
+    {
+        lock (_lock)
+        {
+            // Cancel any in-flight generation so it doesn't write back a stale profile
+            // after we delete the file.
+            _generateCts?.Cancel();
+            _profile = null;
+            _acceptCount = 0;
+
+            try
+            {
+                if (File.Exists(_profilePath))
+                    File.Delete(_profilePath);
+            }
+            catch (Exception ex)
+            {
+                Log($"Invalidate error: {ex.Message}");
+            }
+        }
+    }
+
     // ── Generation ────────────────────────────────────────────────────────────
+
+    public void CancelGeneration()
+    {
+        lock (_lock) { _generateCts?.Cancel(); }
+    }
 
     private async Task GenerateAsync()
     {
-        lock (_lock) { _isGenerating = true; }
+        lock (_lock)
+        {
+            _isGenerating = true;
+            _generateCts?.Cancel();
+            _generateCts?.Dispose();
+            _generateCts = new CancellationTokenSource();
+        }
+        var ct = _generateCts!.Token;
         try
         {
             var entries = LoadAcceptedEntries();
@@ -154,7 +205,11 @@ public class VocabularyProfileService
 
             foreach (var group in groups)
             {
-                var samples     = group.OrderByDescending(e => e.Timestamp).Take(MaxSamplesPerCategory).ToList();
+                var samples     = group
+                    .OrderByDescending(e => e.SourceWeight)
+                    .ThenByDescending(e => e.Timestamp)
+                    .Take(MaxSamplesPerCategory)
+                    .ToList();
                 var completions = samples.Select(s => s.Completion).ToList();
                 var vocab       = AnalyzeCategory(completions);
                 newProfile.Categories[group.Key] = vocab;
@@ -162,10 +217,38 @@ public class VocabularyProfileService
                     $"{vocab.OpeningPhrases.Count} openings, {vocab.ClosingPhrases.Count} closings");
             }
 
-            lock (_lock) { _profile = newProfile; }
-            SaveProfile();
+            var contextGroups = entries
+                .Where(e => e.SourceType == LearningSourceType.NativeWriting && !string.IsNullOrWhiteSpace(e.SubcontextKey))
+                .GroupBy(e => e.SubcontextKey)
+                .Where(g => g.Count() >= 8)
+                .OrderByDescending(g => g.Count())
+                .Take(6);
+
+            foreach (var group in contextGroups)
+            {
+                var samples = group
+                    .OrderByDescending(e => e.SourceWeight)
+                    .ThenByDescending(e => e.Timestamp)
+                    .Take(30)
+                    .ToList();
+                var vocab = AnalyzeCategory(samples.Select(s => s.Completion).ToList());
+                newProfile.Contexts[group.Key] = vocab;
+                newProfile.ContextLabels[group.Key] = samples.FirstOrDefault()?.ContextLabel ?? group.Key;
+            }
+
+            lock (_lock)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    Log("Generation cancelled.");
+                    return;
+                }
+                _profile = newProfile;
+                SaveProfile(newProfile);
+            }
             Log("Vocabulary profile generation complete.");
         }
+        catch (OperationCanceledException) { Log("Generation cancelled"); }
         catch (Exception ex)
         {
             Log($"Generate error: {ex.Message}");
@@ -421,12 +504,12 @@ public class VocabularyProfileService
         catch (Exception ex) { Log($"Load error: {ex}"); }
     }
 
-    private void SaveProfile()
+    private void SaveProfile(VocabularyProfile profile)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_profilePath)!);
-            var json     = JsonSerializer.Serialize(_profile, new JsonSerializerOptions { WriteIndented = true });
+            var json     = JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true });
             var tempPath = _profilePath + ".tmp";
             File.WriteAllText(tempPath, json);
             File.Move(tempPath, _profilePath, overwrite: true);
@@ -439,19 +522,26 @@ public class VocabularyProfileService
         var entries = new List<VocabEntry>();
         try
         {
-            if (!File.Exists(_dataPath)) return entries;
-            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            foreach (var line in File.ReadLines(_dataPath))
+            var snapshot = _repository.GetSnapshot(forceRefresh: true);
+            foreach (var evidence in snapshot.PositiveEvidence)
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                try
+                if (string.IsNullOrWhiteSpace(evidence.Completion) || IsCompletionContaminated(evidence.Completion))
+                    continue;
+
+                if (evidence.SourceWeight < 0.3f)
+                    continue;
+
+                entries.Add(new VocabEntry
                 {
-                    var e = JsonSerializer.Deserialize<VocabEntry>(line, opts);
-                    if (e?.Action == "accepted" && !string.IsNullOrWhiteSpace(e.Completion)
-                        && !IsCompletionContaminated(e.Completion))
-                        entries.Add(e);
-                }
-                catch { /* malformed line — skip */ }
+                    Timestamp = evidence.TimestampUtc,
+                    Action = "accepted",
+                    Completion = evidence.Completion,
+                    Category = evidence.Category,
+                    SourceType = evidence.SourceType,
+                    SourceWeight = evidence.SourceWeight,
+                    SubcontextKey = evidence.SubcontextKey,
+                    ContextLabel = evidence.SubcontextLabel
+                });
             }
         }
         catch (Exception ex) { Log($"Read error: {ex}"); }
@@ -479,6 +569,10 @@ public class VocabularyProfileService
         public string   Action     { get; set; } = "";
         public string   Completion { get; set; } = "";
         public string   Category   { get; set; } = "";
+        public LearningSourceType SourceType { get; set; } = LearningSourceType.LegacyAccepted;
+        public float SourceWeight { get; set; } = 0.5f;
+        public string SubcontextKey { get; set; } = "";
+        public string ContextLabel { get; set; } = "";
     }
 
     // ── Common-English word baseline ──────────────────────────────────────────

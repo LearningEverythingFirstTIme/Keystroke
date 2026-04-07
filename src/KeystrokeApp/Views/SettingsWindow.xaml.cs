@@ -16,6 +16,8 @@ public partial class SettingsWindow : Window
     private StyleProfileService?        _styleProfileService;
     private VocabularyProfileService?   _vocabularyProfileService;
     private LearningScoreService?       _learningScoreService;
+    private readonly LearningContextPreferencesService _contextPreferencesService;
+    private readonly LearningContextMaintenanceService _contextMaintenanceService;
     private bool _loading = true;
     private DispatcherTimer? _saveDebounceTimer;
     private CancellationTokenSource? _modelFetchCts;
@@ -35,7 +37,9 @@ public partial class SettingsWindow : Window
         AcceptanceLearningService? learningService          = null,
         StyleProfileService?      styleProfileService      = null,
         VocabularyProfileService? vocabularyProfileService = null,
-        LearningScoreService?     learningScoreService     = null)
+        LearningScoreService?     learningScoreService     = null,
+        LearningContextPreferencesService? contextPreferencesService = null,
+        LearningContextMaintenanceService? contextMaintenanceService = null)
     {
         InitializeComponent();
         _config                   = config;
@@ -43,6 +47,8 @@ public partial class SettingsWindow : Window
         _vocabularyProfileService = vocabularyProfileService;
         _learningScoreService     = learningScoreService;
         _learningService          = learningService;
+        _contextPreferencesService = contextPreferencesService ?? new LearningContextPreferencesService();
+        _contextMaintenanceService = contextMaintenanceService ?? new LearningContextMaintenanceService();
         LoadValues();
         LoadLearningStats();
         LoadVocabularyProfileStatus();
@@ -293,6 +299,7 @@ public partial class SettingsWindow : Window
             var scores = _learningScoreService?.Recompute() ?? new LearningScores();
 
             CategoryBreakdownPanel.Children.Clear();
+            ContextBreakdownPanel.Children.Clear();
             if (stats.TotalAccepted > 0)
             {
                 var allCategories = stats.ByCategory.Keys
@@ -315,6 +322,40 @@ public partial class SettingsWindow : Window
                                                      accepted, dismissed, avgQuality);
                     CategoryBreakdownPanel.Children.Add(card);
                 }
+
+                if (_config.LearningUiV2Enabled && stats.ContextSummaries.Count > 0)
+                {
+                    if (stats.LegacyEvidenceCount > 0)
+                    {
+                        ContextBreakdownPanel.Children.Add(new TextBlock
+                        {
+                            Text = stats.DedupedLegacyCount > 0
+                                ? $"Imported {stats.LegacyEvidenceCount} legacy learning records at lower confidence. Filtered {stats.DedupedLegacyCount} dual-written duplicates from the V2 rollout."
+                                : $"Imported {stats.LegacyEvidenceCount} legacy learning records at lower confidence while the V2 event log builds up.",
+                            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                            FontSize = 11,
+                            TextWrapping = TextWrapping.Wrap,
+                            Margin = new Thickness(0, 0, 0, 8)
+                        });
+                    }
+
+                    foreach (var summary in stats.ContextSummaries)
+                        ContextBreakdownPanel.Children.Add(CreateContextCard(summary));
+                }
+                else
+                {
+                    ContextBreakdownPanel.Children.Add(new TextBlock
+                    {
+                        Text = _config.LearningUiV2Enabled
+                            ? "Context summaries will appear after Keystroke sees repeated patterns in a specific thread, document, or workspace."
+                            : "Context-aware learning UI is disabled.",
+                        Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                        FontSize = 12,
+                        FontStyle = FontStyles.Italic,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 8, 0, 0)
+                    });
+                }
             }
             else
             {
@@ -326,6 +367,24 @@ public partial class SettingsWindow : Window
                     FontStyle  = FontStyles.Italic,
                     Margin     = new Thickness(0, 8, 0, 0)
                 });
+
+                if (_config.LearningUiV2Enabled && stats.ContextSummaries.Count > 0)
+                {
+                    foreach (var summary in stats.ContextSummaries)
+                        ContextBreakdownPanel.Children.Add(CreateContextCard(summary));
+                }
+                else
+                {
+                    ContextBreakdownPanel.Children.Add(new TextBlock
+                    {
+                        Text = "No context data yet. Keystroke will start grouping repeated patterns after a few committed suggestions or manual continuations.",
+                        Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                        FontSize = 12,
+                        FontStyle = FontStyles.Italic,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 8, 0, 0)
+                    });
+                }
             }
         }
         catch (Exception) { /* Learning stats display is non-critical — failure is safe to ignore */ }
@@ -898,6 +957,246 @@ public partial class SettingsWindow : Window
         return card;
     }
 
+    private UIElement CreateContextCard(LearningContextSummary summary)
+    {
+        var confidencePercent = (int)Math.Round(summary.Confidence * 100);
+        var matchRatePercent = (int)Math.Round(summary.MatchRate * 100);
+        var qualityPercent = (int)Math.Round(summary.AverageQuality * 100);
+        var accent = summary.IsDisabled
+            ? Color.FromRgb(139, 148, 158)
+            : confidencePercent >= 75
+                ? Color.FromRgb(63, 185, 80)
+                : confidencePercent >= 50
+                    ? Color.FromRgb(47, 129, 247)
+                    : confidencePercent >= 30
+                        ? Color.FromRgb(240, 136, 62)
+                        : Color.FromRgb(139, 148, 158);
+
+        var card = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(22, 27, 34)),
+            CornerRadius = new CornerRadius(8),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(96, accent.R, accent.G, accent.B)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, 8),
+            Opacity = summary.IsDisabled ? 0.82 : 1.0
+        };
+
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = summary.ContextLabel,
+            Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"{summary.Category} context · {FormatRelativeTime(summary.LastActivity)}",
+            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+            FontSize = 11,
+            Margin = new Thickness(0, 2, 0, 8)
+        });
+
+        var actionRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        actionRow.Children.Add(CreateContextActionButton(
+            summary.IsPinned ? "Unpin" : "Pin",
+            accent,
+            (_, _) => ToggleContextPinned(summary)));
+        actionRow.Children.Add(CreateContextActionButton(
+            summary.IsDisabled ? "Enable" : "Disable",
+            accent,
+            (_, _) => ToggleContextDisabled(summary)));
+        actionRow.Children.Add(CreateContextActionButton(
+            "Clear",
+            Color.FromRgb(240, 136, 62),
+            (_, _) => ClearContextData(summary)));
+        panel.Children.Add(actionRow);
+
+        if (summary.IsDisabled)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Learning is paused here. Keystroke will not log new evidence or use this context to shape suggestions until you re-enable it.",
+                Foreground = new SolidColorBrush(Color.FromRgb(173, 181, 189)),
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 0, 8),
+                TextWrapping = TextWrapping.Wrap
+            });
+        }
+
+        var pillRow = new WrapPanel { Orientation = Orientation.Horizontal };
+        if (summary.IsPinned)
+        {
+            AddPill(
+                pillRow,
+                "Pinned",
+                Color.FromArgb(40, 47, 129, 247),
+                Color.FromRgb(79, 172, 254),
+                "Pinned contexts stay at the top of the learning dashboard.");
+        }
+        if (summary.IsDisabled)
+        {
+            AddPill(
+                pillRow,
+                "Learning off",
+                Color.FromArgb(40, 139, 148, 158),
+                Color.FromRgb(139, 148, 158),
+                "New evidence from this context is ignored until you re-enable it.");
+        }
+        AddPill(
+            pillRow,
+            $"{confidencePercent}% confidence",
+            Color.FromArgb(40, accent.R, accent.G, accent.B),
+            accent,
+            "How strongly Keystroke trusts this context-specific pattern set.");
+        AddPill(
+            pillRow,
+            $"{matchRatePercent}% match rate",
+            Color.FromArgb(40, 47, 129, 247),
+            Color.FromRgb(79, 172, 254),
+            "Accepted and committed evidence versus rejected patterns in this context.");
+        AddPill(
+            pillRow,
+            $"{summary.NativeCount} native / {summary.AssistCount} assist",
+            Color.FromArgb(40, 99, 110, 123),
+            Color.FromRgb(201, 209, 217),
+            "Native writing is weighted more heavily than accepted model text.");
+        if (summary.LegacyCount > 0)
+        {
+            AddPill(
+                pillRow,
+                $"{summary.LegacyCount} legacy",
+                Color.FromArgb(40, 139, 148, 158),
+                Color.FromRgb(173, 181, 189),
+                "Imported from completions.jsonl at lower confidence during the V2 migration.");
+        }
+        if (summary.NegativeCount > 0)
+        {
+            AddPill(
+                pillRow,
+                $"{summary.NegativeCount} rejected",
+                Color.FromArgb(40, 240, 136, 62),
+                Color.FromRgb(240, 136, 62),
+                "Dismissed or typed-past suggestions are tracked as negative evidence.");
+        }
+        if (summary.AverageQuality > 0)
+        {
+            AddPill(
+                pillRow,
+                $"{qualityPercent}% quality",
+                Color.FromArgb(40, 63, 185, 80),
+                Color.FromRgb(63, 185, 80),
+                "Average quality of positive evidence kept for this context.");
+        }
+
+        panel.Children.Add(pillRow);
+        card.Child = panel;
+        return card;
+    }
+
+    private Button CreateContextActionButton(string text, Color accent, RoutedEventHandler onClick)
+    {
+        var button = new Button
+        {
+            Content = text,
+            Background = new SolidColorBrush(Color.FromArgb(24, accent.R, accent.G, accent.B)),
+            Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(90, accent.R, accent.G, accent.B)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10, 4, 10, 4),
+            Margin = new Thickness(6, 0, 0, 0),
+            FontSize = 11,
+            MinWidth = 56,
+            Cursor = System.Windows.Input.Cursors.Hand
+        };
+        button.Click += onClick;
+        return button;
+    }
+
+    private void ToggleContextPinned(LearningContextSummary summary)
+    {
+        _contextPreferencesService.SetPinned(
+            summary.ContextKey,
+            summary.ContextLabel,
+            summary.Category,
+            !summary.IsPinned);
+        RefreshLearningViews();
+    }
+
+    private void ToggleContextDisabled(LearningContextSummary summary)
+    {
+        var isDisabling = !summary.IsDisabled;
+        if (isDisabling)
+        {
+            var result = MessageBox.Show(
+                $"Pause learning for \"{summary.ContextLabel}\"?\n\nKeystroke will stop logging new evidence here until you re-enable it.",
+                "Disable Context Learning",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (result != MessageBoxResult.Yes)
+                return;
+        }
+
+        _contextPreferencesService.SetDisabled(
+            summary.ContextKey,
+            summary.ContextLabel,
+            summary.Category,
+            isDisabling);
+        RefreshLearningViews(invalidateDerivedArtifacts: true);
+    }
+
+    private void ClearContextData(LearningContextSummary summary)
+    {
+        var result = MessageBox.Show(
+            $"Clear everything Keystroke has learned for \"{summary.ContextLabel}\"?\n\nThis removes stored examples for that context but keeps the rest of your learning history.",
+            "Clear Context Data",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        _contextMaintenanceService.ClearContext(summary.ContextKey);
+        RefreshLearningViews(invalidateDerivedArtifacts: true);
+    }
+
+    private void RefreshLearningViews(bool invalidateDerivedArtifacts = false)
+    {
+        if (invalidateDerivedArtifacts)
+        {
+            _contextMaintenanceService.InvalidateDerivedArtifacts();
+            _styleProfileService?.InvalidateProfile();
+            _vocabularyProfileService?.InvalidateProfile();
+        }
+
+        _learningService?.Refresh();
+        LoadLearningStats();
+        LoadStyleProfileStatus();
+        LoadStyleProfileProgress();
+        LoadVocabularyProfileStatus();
+        ShowSaveIndicator();
+    }
+
+    private static string FormatRelativeTime(DateTime timestampUtc)
+    {
+        var delta = DateTime.UtcNow - timestampUtc;
+        if (delta.TotalMinutes < 1)
+            return "active just now";
+        if (delta.TotalHours < 1)
+            return $"active {(int)delta.TotalMinutes}m ago";
+        if (delta.TotalDays < 1)
+            return $"active {(int)delta.TotalHours}h ago";
+        return $"active {(int)delta.TotalDays}d ago";
+    }
+
     /// <summary>Adds a styled pill (badge) to a container panel.</summary>
     private static void AddPill(Panel parent, string text,
         Color bgColor, Color fgColor, string? tooltip = null)
@@ -1133,19 +1432,34 @@ public partial class SettingsWindow : Window
         {
             try
             {
-                var dataPath = Path.Combine(
+                var appDataPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "Keystroke", "completions.jsonl");
-                var styleProfilePath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "Keystroke", "style-profile.json");
+                    "Keystroke");
+                var resetTargets = new[]
+                {
+                    Path.Combine(appDataPath, "completions.jsonl"),
+                    Path.Combine(appDataPath, "learning-events.v2.jsonl"),
+                    Path.Combine(appDataPath, "learning-context-preferences.json"),
+                    Path.Combine(appDataPath, "style-profile.json"),
+                    Path.Combine(appDataPath, "vocabulary-profile.json"),
+                    Path.Combine(appDataPath, "learning-scores.json")
+                };
 
-                if (File.Exists(dataPath))
-                    File.WriteAllText(dataPath, "");
-                if (File.Exists(styleProfilePath))
-                    File.Delete(styleProfilePath);
+                foreach (var path in resetTargets)
+                {
+                    if (!File.Exists(path))
+                        continue;
+
+                    if (Path.GetExtension(path).Equals(".jsonl", StringComparison.OrdinalIgnoreCase))
+                        File.WriteAllText(path, "");
+                    else
+                        File.Delete(path);
+                }
 
                 LoadLearningStats();
+                LoadStyleProfileStatus();
+                LoadStyleProfileProgress();
+                LoadVocabularyProfileStatus();
                 MessageBox.Show("Learning data has been reset.", "Reset Complete",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }

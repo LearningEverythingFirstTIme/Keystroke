@@ -11,6 +11,8 @@ public class VocabularyProfile
 
     /// <summary>Per-category extracted fingerprints. Key = category name (e.g. "Email").</summary>
     public Dictionary<string, CategoryVocabulary> Categories { get; set; } = new();
+    public Dictionary<string, CategoryVocabulary> Contexts { get; set; } = new();
+    public Dictionary<string, string> ContextLabels { get; set; } = new();
 }
 
 /// <summary>

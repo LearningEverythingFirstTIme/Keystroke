@@ -741,6 +741,8 @@
                                         </Grid>
                                         <TextBlock Text="By category" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,18,0,8"/>
                                         <StackPanel x:Name="CategoryBreakdownPanel"/>
+                                        <TextBlock Text="Top contexts" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,18,0,8"/>
+                                        <StackPanel x:Name="ContextBreakdownPanel"/>
                                     </StackPanel>
                                 </Border>
 

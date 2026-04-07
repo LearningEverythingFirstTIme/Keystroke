@@ -15,13 +15,20 @@ namespace KeystrokeApp.Services;
 public class CompletionFeedbackService
 {
     private readonly string _dataPath;
-    private readonly object _writeLock = new();
+    private readonly LearningContextPreferencesService _preferences;
+    private readonly ContextFingerprintService _fingerprints;
+    internal readonly object WriteLock = new();
 
-    public CompletionFeedbackService()
+    public CompletionFeedbackService(
+        string? dataPath = null,
+        LearningContextPreferencesService? preferences = null,
+        ContextFingerprintService? fingerprints = null)
     {
-        _dataPath = Path.Combine(
+        _dataPath = dataPath ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke", "completions.jsonl");
+        _preferences = preferences ?? new LearningContextPreferencesService();
+        _fingerprints = fingerprints ?? new ContextFingerprintService();
     }
 
     // ── Public logging API ────────────────────────────────────────────────────
@@ -130,6 +137,10 @@ public class CompletionFeedbackService
     {
         try
         {
+            var fingerprint = _fingerprints.Create(processName, windowTitle);
+            if (_preferences.IsDisabled(fingerprint.SubcontextKey))
+                return;
+
             Directory.CreateDirectory(Path.GetDirectoryName(_dataPath)!);
 
             var entry = new
@@ -140,7 +151,7 @@ public class CompletionFeedbackService
                 completion   = PiiFilter.Scrub(completion),
                 app          = processName,
                 window       = StripWindowDetail(windowTitle),
-                category     = AppCategory.GetEffectiveCategory(processName, windowTitle).ToString(),
+                category     = fingerprint.Category,
                 // Sub-Phase A signal fields (always written; -1/0/false/0.5 for non-accepted entries)
                 latencyMs,
                 cycleDepth,
@@ -150,7 +161,7 @@ public class CompletionFeedbackService
 
             var json = JsonSerializer.Serialize(entry);
 
-            lock (_writeLock)
+            lock (WriteLock)
             {
                 File.AppendAllText(_dataPath, json + "\n");
             }

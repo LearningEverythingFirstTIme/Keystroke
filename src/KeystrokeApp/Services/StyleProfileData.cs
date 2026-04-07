@@ -9,6 +9,8 @@ public class StyleProfileData
     public int EntriesProcessed { get; set; }
     public string GeneralProfile { get; set; } = "";
     public Dictionary<string, string> CategoryProfiles { get; set; } = new();
+    public Dictionary<string, string> ContextProfiles { get; set; } = new();
+    public Dictionary<string, string> ContextLabels { get; set; } = new();
 
     /// <summary>
     /// Rolling quality snapshots pushed after each profile generation (Sub-Phase D).

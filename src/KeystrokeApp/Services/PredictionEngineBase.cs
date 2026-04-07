@@ -411,20 +411,6 @@ public abstract class PredictionEngineBase
     }
 
     /// <summary>
-    /// Minimum number of clean (non-contaminated) accepted entries required before
-    /// style and vocabulary hints are injected. Below this threshold, the learning
-    /// system stays silent and lets the model work from screen context alone.
-    /// </summary>
-    private const int MinEntriesForHints = 30;
-
-    /// <summary>
-    /// Minimum average quality score (0–1) required before style/vocab hints are
-    /// injected. Quality below this indicates the model's completions are frequently
-    /// being dismissed or edited, so the learned patterns are unreliable.
-    /// </summary>
-    private const float MinQualityForHints = 0.55f;
-
-    /// <summary>
     /// Builds the optional learning-derived hints block. These are soft signals about
     /// the user's writing style, vocabulary, and recent session activity. Placed in the
     /// user prompt so the model treats them as context to weigh, not rules to obey.
@@ -436,45 +422,33 @@ public abstract class PredictionEngineBase
     private string? BuildLearningHints(ContextSnapshot context)
     {
         var parts = new List<string>();
+        var bundle = LearningHintBundleBuilder.Build(LearningService, StyleProfileService, VocabularyProfileService, context);
 
-        if (context.HasAppContext)
+        if (bundle.IsContextDisabled)
+            return null;
+
+        if (bundle.Confidence > 0)
         {
-            var category = AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle);
-            var categoryStr = category.ToString();
+            if (bundle.Confidence >= 0.45 && !string.IsNullOrWhiteSpace(bundle.StyleHint))
+                parts.Add($"Writing style ({bundle.Confidence:P0} confidence): {OutboundPrivacy.SanitizeForPrompt(bundle.StyleHint)}");
 
-            // Check if we have enough high-quality data to trust style/vocab hints.
-            var stats = LearningService?.GetStats();
-            bool hasEnoughData = stats != null
-                && stats.TotalAccepted >= MinEntriesForHints
-                && stats.OverallAvgQuality >= MinQualityForHints;
+            if (bundle.Confidence >= 0.45 && !string.IsNullOrWhiteSpace(bundle.VocabularyHint))
+                parts.Add(OutboundPrivacy.SanitizeForPrompt(bundle.VocabularyHint) ?? "");
 
-            // Style profile (LLM-generated summary) — only when data is trustworthy
-            if (hasEnoughData && StyleProfileService != null)
-            {
-                var styleHint = StyleProfileService.GetStyleHint(categoryStr);
-                if (!string.IsNullOrEmpty(styleHint))
-                    parts.Add($"Writing style: {OutboundPrivacy.SanitizeForPrompt(styleHint)}");
-            }
+            if (!string.IsNullOrWhiteSpace(bundle.PreferredClosings))
+                parts.Add(OutboundPrivacy.SanitizeForPrompt(bundle.PreferredClosings) ?? "");
 
-            // Vocabulary fingerprint (deterministic) — only when data is trustworthy
-            if (hasEnoughData && VocabularyProfileService != null)
-            {
-                var vocabHint = VocabularyProfileService.GetVocabularyHint(categoryStr);
-                if (!string.IsNullOrEmpty(vocabHint))
-                    parts.Add(OutboundPrivacy.SanitizeForPrompt(vocabHint) ?? "");
-            }
+            if (!string.IsNullOrWhiteSpace(bundle.AvoidPatterns))
+                parts.Add(OutboundPrivacy.SanitizeForPrompt(bundle.AvoidPatterns) ?? "");
 
-            // Session hint — always available since it's real-time signal, not historical.
-            if (LearningService != null)
-            {
-                var sessionHint = LearningService.GetSessionModeHint(categoryStr);
-                if (!string.IsNullOrEmpty(sessionHint))
-                    parts.Add(OutboundPrivacy.SanitizeForPrompt(sessionHint) ?? "");
-            }
+            if (!string.IsNullOrWhiteSpace(bundle.SessionHint))
+                parts.Add(OutboundPrivacy.SanitizeForPrompt(bundle.SessionHint) ?? "");
+
+            parts = parts.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+            if (parts.Count > 0)
+                return string.Join("\n", parts);
         }
-
-        parts = parts.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
-        return parts.Count > 0 ? string.Join("\n", parts) : null;
+        return null;
     }
 
     // ── Temperature and token sizing ──────────────────────────────────────────

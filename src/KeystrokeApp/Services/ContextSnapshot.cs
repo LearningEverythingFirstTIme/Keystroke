@@ -28,6 +28,31 @@ public class ContextSnapshot
     public string SafeContextLabel { get; init; } = "";
 
     /// <summary>
+    /// Effective app category used by learning and retrieval.
+    /// </summary>
+    public string Category { get; init; } = AppCategory.Category.Unknown.ToString();
+
+    /// <summary>
+    /// Stable local-only context keys for hierarchical learning.
+    /// </summary>
+    public string ProcessKey { get; init; } = "";
+    public string WindowKey { get; init; } = "";
+    public string SubcontextKey { get; init; } = "";
+
+    /// <summary>
+    /// Human-readable local labels for the context explorer and diagnostics.
+    /// These never leave the machine unless explicitly surfaced in local UI.
+    /// </summary>
+    public string ProcessLabel { get; init; } = "";
+    public string WindowLabel { get; init; } = "";
+    public string SubcontextLabel { get; init; } = "";
+
+    /// <summary>
+    /// How specific and trustworthy the derived context identity is.
+    /// </summary>
+    public double ContextConfidence { get; init; }
+
+    /// <summary>
     /// OCR-captured text from the screen. Null if OCR hasn't run yet or failed.
     /// </summary>
     public string? ScreenText { get; init; }
@@ -44,4 +69,5 @@ public class ContextSnapshot
     public bool HasAppContext => !string.IsNullOrEmpty(ProcessName);
     public bool HasScreenContext => !string.IsNullOrEmpty(ScreenText);
     public bool HasRollingContext => !string.IsNullOrEmpty(RollingContext);
+    public bool HasSubcontext => !string.IsNullOrEmpty(SubcontextKey);
 }

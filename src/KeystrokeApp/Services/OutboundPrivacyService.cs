@@ -35,7 +35,11 @@ public sealed class OutboundPrivacyService
             Prefix = PiiFilter.Scrub(example.Prefix) ?? "",
             Completion = PiiFilter.Scrub(example.Completion) ?? "",
             Context = example.Context,
-            IsNegative = example.IsNegative
+            IsNegative = example.IsNegative,
+            SourceType = example.SourceType,
+            ContextMatchLevel = example.ContextMatchLevel,
+            Confidence = example.Confidence,
+            WasUntouched = example.WasUntouched
         };
     }
 

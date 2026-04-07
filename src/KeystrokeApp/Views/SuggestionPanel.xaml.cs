@@ -288,6 +288,7 @@ public partial class SuggestionPanel : Window
     }
 
     public string GetFullSuggestion() => _currentPrefix + _currentSuggestion;
+    public string CurrentCompletion => _currentSuggestion;
     public bool HasSuggestion => IsVisible && !string.IsNullOrEmpty(_currentSuggestion);
 
     public void ApplyTheme(PanelTheme theme)

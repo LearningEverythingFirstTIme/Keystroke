@@ -26,6 +26,7 @@ public class StyleProfileService
     private readonly string _profilePath;
     private readonly string _dataPath;
     private readonly string _logPath;
+    private readonly LearningRepository _repository;
     private StyleProfileData? _profile;
     private int _newAcceptCount;
     private int _profileInterval;
@@ -55,6 +56,7 @@ public class StyleProfileService
         _profilePath  = Path.Combine(appData, "style-profile.json");
         _dataPath = Path.Combine(appData, "completions.jsonl");
         _logPath      = Path.Combine(appData, "style-profile.log");
+        _repository = new LearningRepository();
     }
 
     public void Start(int interval)
@@ -91,7 +93,7 @@ public class StyleProfileService
         }
     }
 
-    public string? GetStyleHint(string category)
+    public string? GetStyleHint(string category, string? subcontextKey = null)
     {
         lock (_lock)
         {
@@ -106,7 +108,11 @@ public class StyleProfileService
             }
 
             string? hint = null;
-            if (_profile.CategoryProfiles.TryGetValue(category, out var catProfile)
+            if (!string.IsNullOrWhiteSpace(subcontextKey) &&
+                _profile.ContextProfiles.TryGetValue(subcontextKey, out var contextProfile)
+                && !string.IsNullOrWhiteSpace(contextProfile))
+                hint = contextProfile;
+            else if (_profile.CategoryProfiles.TryGetValue(category, out var catProfile)
                 && !string.IsNullOrWhiteSpace(catProfile))
                 hint = catProfile;
             else if (!string.IsNullOrWhiteSpace(_profile.GeneralProfile))
@@ -147,6 +153,28 @@ public class StyleProfileService
         }
     }
 
+    public void InvalidateProfile()
+    {
+        lock (_lock)
+        {
+            // Cancel any in-flight generation so it doesn't write back a stale profile
+            // after we delete the file.
+            _generateCts?.Cancel();
+            _profile = null;
+            _newAcceptCount = 0;
+
+            try
+            {
+                if (File.Exists(_profilePath))
+                    File.Delete(_profilePath);
+            }
+            catch (Exception ex)
+            {
+                Log($"Invalidate error: {ex.Message}");
+            }
+        }
+    }
+
     private void LoadProfile()
     {
         try
@@ -159,12 +187,12 @@ public class StyleProfileService
         catch (Exception ex) { Log($"Load error: {ex}"); }
     }
 
-    private void SaveProfile()
+    private void SaveProfile(StyleProfileData profile)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_profilePath)!);
-            var json = JsonSerializer.Serialize(_profile, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(profile, new JsonSerializerOptions { WriteIndented = true });
             var tempPath = _profilePath + ".tmp";
             File.WriteAllText(tempPath, json);
             File.Move(tempPath, _profilePath, overwrite: true);
@@ -214,7 +242,11 @@ public class StyleProfileService
             {
                 if (ct.IsCancellationRequested) break;
 
-                var samples = group.OrderByDescending(e => e.Timestamp).Take(MaxSamplesPerCategory).ToList();
+                var samples = group
+                    .OrderByDescending(e => e.SourceWeight)
+                    .ThenByDescending(e => e.Timestamp)
+                    .Take(MaxSamplesPerCategory)
+                    .ToList();
                 var category = group.Key;
                 Log($"Generating for {category} ({samples.Count} samples)");
 
@@ -228,6 +260,37 @@ public class StyleProfileService
             }
 
             if (ct.IsCancellationRequested) return;
+
+            var contextGroups = entries
+                .Where(e => e.SourceType == LearningSourceType.NativeWriting && !string.IsNullOrWhiteSpace(e.SubcontextKey))
+                .GroupBy(e => e.SubcontextKey)
+                .Where(g => g.Count() >= 6)
+                .OrderByDescending(g => g.Count())
+                .Take(6)
+                .ToList();
+
+            foreach (var group in contextGroups)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                var samples = group
+                    .OrderByDescending(e => e.SourceWeight)
+                    .ThenByDescending(e => e.Timestamp)
+                    .Take(18)
+                    .ToList();
+                var contextKey = group.Key;
+                var firstSample = samples.FirstOrDefault();
+                if (firstSample == null) continue;
+                var contextLabel = firstSample.ContextLabel;
+                var userPrompt = BuildCategoryPrompt($"{firstSample.Category} / {contextLabel}", samples);
+                var result = await engine.GenerateTextAsync(systemPrompt, userPrompt, 180, ct);
+                if (!string.IsNullOrWhiteSpace(result))
+                {
+                    newProfile.ContextProfiles[contextKey] = result.Trim();
+                    newProfile.ContextLabels[contextKey] = contextLabel;
+                    Log($"Context {contextLabel}: {result[..Math.Min(80, result.Length)]}...");
+                }
+            }
 
             var allSamples = entries.OrderByDescending(e => e.Timestamp).Take(MaxSamplesForGeneral).ToList();
             var generalSystemPrompt = "You analyze writing patterns. Output ONLY a concise overall style profile (2-3 sentences, max 100 words) describing general writing tendencies. Be specific and observant. Ignore any repetitive filler phrases that appear to be autocomplete artifacts. Never use the phrase 'the user' — describe patterns impersonally ('tends to', 'favors', 'prefers').";
@@ -257,8 +320,12 @@ public class StyleProfileService
 
             Log($"Quality snapshot: avg={avgQuality:F2} samples={entries.Count}");
 
-            lock (_lock) { _profile = newProfile; }
-            SaveProfile();
+            lock (_lock)
+            {
+                if (ct.IsCancellationRequested) return;
+                _profile = newProfile;
+                SaveProfile(newProfile);
+            }
             Log("Profile generation complete");
 
             // Notify subscribers (e.g. LearningScoreService) so they can recompute scores.
@@ -300,19 +367,30 @@ public class StyleProfileService
         var entries = new List<StyleTrackingEntry>();
         try
         {
-            if (!File.Exists(_dataPath)) return entries;
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            foreach (var line in File.ReadLines(_dataPath))
+            var snapshot = _repository.GetSnapshot(forceRefresh: true);
+            foreach (var evidence in snapshot.PositiveEvidence)
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                try
+                if (string.IsNullOrWhiteSpace(evidence.Completion) || IsCompletionContaminated(evidence.Completion))
+                    continue;
+
+                if (evidence.SourceWeight < 0.35f)
+                    continue;
+
+                entries.Add(new StyleTrackingEntry
                 {
-                    var entry = JsonSerializer.Deserialize<StyleTrackingEntry>(line, options);
-                    if (entry != null && entry.Action == "accepted" && !string.IsNullOrWhiteSpace(entry.Completion)
-                        && !IsCompletionContaminated(entry.Completion))
-                        entries.Add(entry);
-                }
-                catch { }
+                    Timestamp = evidence.TimestampUtc,
+                    Action = "accepted",
+                    Prefix = evidence.Prefix,
+                    Completion = evidence.Completion,
+                    App = evidence.ProcessName,
+                    Window = evidence.WindowLabel,
+                    Category = evidence.Category,
+                    QualityScore = evidence.QualityScore,
+                    SourceWeight = evidence.SourceWeight,
+                    SourceType = evidence.SourceType,
+                    SubcontextKey = evidence.SubcontextKey,
+                    ContextLabel = evidence.SubcontextLabel
+                });
             }
         }
         catch (Exception ex) { Log($"Read error: {ex}"); }
@@ -337,5 +415,9 @@ public class StyleProfileService
         public string   Category     { get; set; } = "";
         /// <summary>Sub-Phase A signal — safe default 0.5 for legacy entries.</summary>
         public float    QualityScore { get; set; } = 0.5f;
+        public float    SourceWeight { get; set; } = 0.5f;
+        public LearningSourceType SourceType { get; set; } = LearningSourceType.LegacyAccepted;
+        public string   SubcontextKey { get; set; } = "";
+        public string   ContextLabel { get; set; } = "";
     }
 }

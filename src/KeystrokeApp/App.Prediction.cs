@@ -3,7 +3,7 @@ using KeystrokeApp.Services;
 namespace KeystrokeApp;
 
 /// <summary>
-/// Prediction pipeline — buffer events, debounce, streaming, OCR capture, and
+/// Prediction pipeline â€” buffer events, debounce, streaming, OCR capture, and
 /// alternative suggestion fetching. Split from App.xaml.cs as a partial class.
 /// </summary>
 public partial class App
@@ -15,13 +15,9 @@ public partial class App
         LogToDebug($"Buffer: \"{newText}\" ({newText.Length} chars)");
         TraceBufferChanged(newText);
 
-        // Treat any new keystroke as invalidating the current suggestion/request.
-        // This keeps the model from racing ahead on stale context while the user is
-        // still actively composing their sentence.
         CancelPendingPrediction();
         _suggestionPanel?.HideSuggestion();
 
-        // Only predict after the user has paused long enough for the buffer to settle.
         _fastDebounceTimer?.Cancel();
         _debounceTimer?.Cancel();
         _debounceTimer?.Restart();
@@ -40,10 +36,6 @@ public partial class App
 
     // ==================== Prediction ====================
 
-    /// <summary>
-    /// Called after debounce pause - fetch a prediction from the engine.
-    /// Fires on a background thread from DebounceTimer.
-    /// </summary>
     private void OnDebounceComplete()
     {
         var buffer = _typingBuffer.CurrentText;
@@ -58,7 +50,9 @@ public partial class App
             return;
         }
 
-        // Check cache first — instant result for repeated/backspaced prefixes
+        var (processName, windowTitle) = AppContextService.GetActiveWindow();
+        var context = CreateContextSnapshot(sanitizedTyped.Text, processName, windowTitle);
+
         if (_predictionCache.TryGet(buffer, out var cached))
         {
             if (cached != null)
@@ -69,6 +63,7 @@ public partial class App
                 {
                     ["bufferLength"] = buffer.Length.ToString()
                 });
+
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (!IsPredictionRequestCurrent(cacheRequestId))
@@ -76,13 +71,12 @@ public partial class App
                     if (_typingBuffer.CurrentText != buffer)
                         return;
 
-                    // Reset cycle depth and stamp the suggestion-shown time so the Tab
-                    // latency measurement is accurate even for cache hits.
                     Interlocked.Exchange(ref _cycleDepth, 0);
                     Interlocked.Exchange(ref _suggestionShownAtTicks, DateTime.UtcNow.Ticks);
                     _suggestionPanel?.ShowSuggestion(buffer, cached);
-
+                    RegisterVisibleSuggestion(cacheRequestId, context, buffer, cached);
                 });
+
                 LogToDebug($"Cache hit: \"{buffer}\" + \"{cached}\"");
                 _reliabilityTrace.Trace("prediction", "cache_hit", "Served prediction from cache.", new Dictionary<string, string>
                 {
@@ -90,10 +84,10 @@ public partial class App
                     ["completionLength"] = cached.Length.ToString()
                 });
             }
+
             return;
         }
 
-        // Cancel any previous prediction request and track what we're predicting for
         CancellationToken ct;
         var requestId = NextPredictionRequestId();
         lock (_predictionCtsLock)
@@ -105,33 +99,15 @@ public partial class App
             _activePredictionRequestId = requestId;
             _lastPredictionPrefix = buffer;
         }
+
         SetPredictionState("Predicting", requestId, new Dictionary<string, string>
         {
             ["bufferLength"] = buffer.Length.ToString()
         });
 
-        // Build context snapshot — app detection is instant, OCR uses cached result
-        var (processName, windowTitle) = AppContextService.GetActiveWindow();
-        var context = new ContextSnapshot
-        {
-            TypedText = sanitizedTyped.Text,
-            ProcessName = processName,
-            WindowTitle = windowTitle,
-            SafeContextLabel = _outboundPrivacy.BuildSafeContextLabel(processName, windowTitle),
-            ScreenText = _outboundPrivacy.SanitizeForPrompt(_ocrService?.CachedText),
-            RollingContext = _config.RollingContextEnabled
-                ? _outboundPrivacy.SanitizeForPrompt(_rollingContext.GetContext(processName, windowTitle))
-                : null
-        };
-
-        // New prediction starting — clear the stale suggestion timestamp and cycle count
-        // so they don't bleed into the latency measurement for the incoming suggestion.
         Interlocked.Exchange(ref _suggestionShownAtTicks, 0);
         Interlocked.Exchange(ref _cycleDepth, 0);
 
-        // Show the loading animation immediately rather than waiting for the first streamed
-        // chunk. This gives instant visual feedback that a new prediction is in progress and
-        // clears any stale result that was anchored to an older prefix.
         Dispatcher.BeginInvoke(() =>
         {
             if (!IsPredictionRequestCurrent(requestId))
@@ -140,21 +116,21 @@ public partial class App
             _suggestionPanel?.BeginStreamingSuggestion(buffer);
         });
 
-        // Run prediction on background using streaming for progressive display
         _ = Task.Run(async () =>
         {
             try
             {
                 using var timeoutCts = new CancellationTokenSource(_predictionEngine!.TimeoutMs);
-                using var linkedCts  = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
                 bool firstChunk = true;
 
-                var completion = await _predictionEngine!.PredictStreamingAsync(
+                var completion = await _predictionEngine.PredictStreamingAsync(
                     context,
                     chunk =>
                     {
-                        if (ct.IsCancellationRequested) return;
+                        if (ct.IsCancellationRequested)
+                            return;
 
                         Dispatcher.BeginInvoke(() =>
                         {
@@ -163,25 +139,22 @@ public partial class App
                             if (_typingBuffer.CurrentText != buffer)
                                 return;
 
-                            // Add leading space on the very first chunk if needed
                             if (firstChunk)
                             {
                                 firstChunk = false;
                                 if (!buffer.EndsWith(" ") && !chunk.StartsWith(" "))
                                     chunk = " " + chunk;
                             }
-                            _suggestionPanel?.AppendSuggestion(buffer, chunk);
 
+                            _suggestionPanel?.AppendSuggestion(buffer, chunk);
                         });
                     },
                     linkedCts.Token);
 
-                // Cache the final result
                 _predictionCache.Put(buffer, completion);
 
                 if (ct.IsCancellationRequested)
                 {
-                    // Prediction was superseded by a newer keystroke — stop any loading animation.
                     Dispatcher.BeginInvoke(() =>
                     {
                         if (!IsPredictionRequestCurrent(requestId))
@@ -193,9 +166,6 @@ public partial class App
                     return;
                 }
 
-                // Signal that streaming is complete — triggers the completion flash animation.
-                // Also stamp the suggestion-shown time NOW (not when streaming started) because
-                // the user cannot meaningfully accept until the full suggestion is visible.
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (!IsPredictionRequestCurrent(requestId))
@@ -205,7 +175,10 @@ public partial class App
 
                     Interlocked.Exchange(ref _suggestionShownAtTicks, DateTime.UtcNow.Ticks);
                     _suggestionPanel?.OnStreamingComplete();
+                    if (completion != null)
+                        RegisterVisibleSuggestion(requestId, context, buffer, completion);
                 });
+
                 SetPredictionState("ShowingSuggestion", requestId, new Dictionary<string, string>
                 {
                     ["hasCompletion"] = (completion != null).ToString()
@@ -218,14 +191,12 @@ public partial class App
                         : "[no rolling context]";
                     LogToDebug($"Streamed: \"{buffer}\" + \"{completion}\" [app={processName}] {rollingInfo}");
 
-                    // Fire background request for alternatives (skip if user only wants 1 suggestion)
                     if (_config.MaxSuggestions > 1)
                         _ = FetchAlternativesAsync(context, buffer, requestId, ct);
                 }
             }
             catch (OperationCanceledException)
             {
-                // Cancelled by a newer keystroke — stop any in-progress loading animation.
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (!IsPredictionRequestCurrent(requestId))
@@ -252,7 +223,6 @@ public partial class App
             }
             finally
             {
-                // Clear the CTS so the in-flight check above doesn't block the next prediction.
                 lock (_predictionCtsLock)
                 {
                     if (_predictionCts != null && _predictionCts.Token == ct)
@@ -272,36 +242,39 @@ public partial class App
 
     // ==================== OCR ====================
 
-    /// <summary>
-    /// Periodic screen read. Only re-reads when the active window has changed.
-    /// </summary>
     private void OnOcrTimerTick(object? state)
     {
-        if (!_isEnabled || _ocrService == null) return;
+        if (!_isEnabled || _ocrService == null)
+            return;
 
         if (_ocrService.ShouldRefresh())
         {
             _ = Task.Run(async () =>
             {
-                try { await _ocrService.ReadScreenAsync(); }
-                catch (Exception ex) { LogToDebug($"Screen read error: {ex.Message}"); }
+                try
+                {
+                    await _ocrService.ReadScreenAsync();
+                }
+                catch (Exception ex)
+                {
+                    LogToDebug($"Screen read error: {ex.Message}");
+                }
             });
         }
     }
 
     // ==================== Alternatives ====================
 
-    /// <summary>
-    /// Fetch alternative suggestions in the background and push them to the panel.
-    /// </summary>
     private async Task FetchAlternativesAsync(ContextSnapshot context, string buffer, long requestId, CancellationToken ct)
     {
         try
         {
-            if (_predictionEngine == null) return;
+            if (_predictionEngine == null)
+                return;
 
             var alternatives = await _predictionEngine.FetchAlternativesAsync(context, _config.MaxSuggestions, ct);
-            if (ct.IsCancellationRequested || alternatives.Count == 0) return;
+            if (ct.IsCancellationRequested || alternatives.Count == 0)
+                return;
 
             Dispatcher.BeginInvoke(() =>
             {
@@ -310,6 +283,7 @@ public partial class App
 
                 _suggestionPanel?.SetAlternatives(buffer, alternatives);
             });
+
             LogToDebug($"Loaded {alternatives.Count} alternatives for \"{buffer}\"");
             _reliabilityTrace.Trace("prediction", "alternatives_loaded", "Loaded alternative suggestions.", new Dictionary<string, string>
             {
@@ -317,7 +291,9 @@ public partial class App
                 ["count"] = alternatives.Count.ToString()
             });
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
             LogToDebug($"Alternatives error: {ex.Message}");
@@ -338,6 +314,7 @@ public partial class App
             _predictionCts = null;
             Interlocked.Exchange(ref _activePredictionRequestId, 0);
         }
+
         _predictionState = "Idle";
     }
 
