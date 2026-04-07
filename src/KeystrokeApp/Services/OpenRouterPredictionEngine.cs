@@ -33,7 +33,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
 
         // Reasoning-first models (MiniMax, Kimi) are given 45s — they must complete a full
         // reasoning chain before producing output, which takes several seconds longer.
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
+        _httpClient = CreatePooledHttpClient(TimeSpan.FromSeconds(45));
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
         // OpenRouter asks apps to identify themselves so they can show usage stats per app
         _httpClient.DefaultRequestHeaders.Add("HTTP-Referer", "https://github.com/nickklos/keystroke");
@@ -65,7 +65,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             return result?.Choices?[0]?.Message?.Content?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
     }
 
     // ── Token sizing (override: reasoning models need a larger budget) ─────────
@@ -144,13 +144,13 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 : (IsReasoningFirstModel() ? msg?.Reasoning?.Trim() : null);
 
             Log($"Completion: {completion ?? "(null)"}");
-            var processed = PostProcess(prefix, completion);
+            var processed = PostProcessCompletion(prefix, completion);
             if (!string.IsNullOrWhiteSpace(processed))
                 RecordRecentCompletion(processed);
             return processed;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Exception: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"Exception: {ex}"); return null; }
     }
 
     // ── Reasoning-first model path (non-streaming) ───────────────────────────
@@ -218,7 +218,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             }
 
             var raw        = !string.IsNullOrWhiteSpace(msg?.Content) ? msg!.Content!.Trim() : msg?.Reasoning?.Trim();
-            var completion = PostProcess(prefix, raw);
+            var completion = PostProcessCompletion(prefix, raw);
             if (!string.IsNullOrWhiteSpace(completion))
             {
                 onChunk(completion!);
@@ -231,7 +231,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             return completion;
         }
         catch (OperationCanceledException) { Log($"Reasoning-model #{requestId} timed out"); return null; }
-        catch (Exception ex) { Log($"Reasoning-model #{requestId} exception: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"Reasoning-model #{requestId} exception: {ex}"); return null; }
     }
 
     // ── IPredictionEngine — streaming ─────────────────────────────────────────
@@ -286,78 +286,30 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 return null;
             }
 
-            var fullCompletion  = new StringBuilder();
-            bool isFirstChunk   = true;
-            int  rawChunkCount  = 0;
-            int  reasoningChunks = 0;
-            var degenDetector   = CreateDegenerationDetector();
+            int rawChunkCount   = 0;
+            int reasoningChunks = 0;
 
-            using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var reader = new System.IO.StreamReader(stream);
-
-            while (!reader.EndOfStream && !ct.IsCancellationRequested)
+            var result = await ParseSseStreamAsync(response, prefix, dataJson =>
             {
-                var line = await reader.ReadLineAsync(ct);
-                if (line == null) break;
-                if (!line.StartsWith("data: ")) continue;
-                var dataJson = line[6..];
-                if (dataJson == "[DONE]") break;
-
-                // Log the first 3 raw chunks so we can see what field the model actually uses
                 if (rawChunkCount < 3)
                 {
                     Log($"[raw#{rawChunkCount}] {dataJson}");
                     rawChunkCount++;
                 }
-
-                try
-                {
-                    var chunk = JsonSerializer.Deserialize<StreamChunk>(dataJson);
-                    var delta = chunk?.Choices?[0]?.Delta;
-
-                    if (!string.IsNullOrEmpty(delta?.Reasoning) && string.IsNullOrEmpty(delta?.Content))
-                        reasoningChunks++;
-
-                    var text = delta?.Content ?? delta?.ReasoningContent;
-
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        if (isFirstChunk)
-                        {
-                            text = text.TrimStart('"');
-                            if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                                text = text[prefix.Length..];
-                            if (text.Length > 0 && !prefix.EndsWith(" ") && !text.StartsWith(" "))
-                                text = " " + text;
-                            isFirstChunk = false;
-                        }
-
-                        if (degenDetector.IsDegenerate(text))
-                        {
-                            Log($"Stream aborted: degeneration detected after {fullCompletion.Length} chars");
-                            break;
-                        }
-
-                        fullCompletion.Append(text);
-                        onChunk(text);
-                    }
-                }
-                catch (JsonException) { /* malformed chunk — skip */ }
-            }
+                var chunk = JsonSerializer.Deserialize<StreamChunk>(dataJson);
+                var delta = chunk?.Choices?[0]?.Delta;
+                if (!string.IsNullOrEmpty(delta?.Reasoning) && string.IsNullOrEmpty(delta?.Content))
+                    reasoningChunks++;
+                return delta?.Content ?? delta?.ReasoningContent;
+            }, onChunk, ct);
 
             if (reasoningChunks > 0)
                 Log($"[reasoning-capture] Captured {reasoningChunks} reasoning chunks as completion text");
 
-            var raw    = fullCompletion.ToString().TrimEnd('"').Trim();
-            var result = TrimToWholeWords(StripThinkTags(raw));
-            result     = RejectDuplicate(prefix, result) ?? "";
-            Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected)" : "")}");
-            if (!string.IsNullOrWhiteSpace(result))
-                RecordRecentCompletion(result);
-            return string.IsNullOrWhiteSpace(result) ? null : result;
+            return result;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Stream exception: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"Stream exception: {ex}"); return null; }
     }
 
     // ── IPredictionEngine — alternatives ──────────────────────────────────────
@@ -403,16 +355,15 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             var completions = await Task.WhenAll(tasks);
             foreach (var text in completions)
             {
-                if (string.IsNullOrWhiteSpace(text)) continue;
-                var processed = PostProcess(prefix, text);
+                var processed = PostProcessCompletion(prefix, text);
                 if (!string.IsNullOrWhiteSpace(processed) && !results.Contains(processed))
-                    results.Add(processed!);
+                    results.Add(processed);
             }
 
             Log($"Got {results.Count} alternatives");
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Log($"Alternatives error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Alternatives error: {ex}"); }
 
         return results;
     }
@@ -440,30 +391,6 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             Log($"Included {examples.Count} few-shot turns for {context.ProcessName}");
 
         return messages.ToArray();
-    }
-
-    // ── Post-processing ───────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Full post-processing pipeline: strip think tags → trim artifacts →
-    /// strip prefix duplication → ensure leading space → trim to whole words → dedup check.
-    /// </summary>
-    private string? PostProcess(string prefix, string? completion)
-    {
-        if (string.IsNullOrWhiteSpace(completion)) return null;
-
-        // Some OpenRouter models (DeepSeek R1, etc.) emit chain-of-thought blocks
-        completion = StripThinkTags(completion);
-        completion = completion.Trim('"').Trim();
-        if (string.IsNullOrWhiteSpace(completion)) return null;
-
-        if (completion.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            completion = completion[prefix.Length..].TrimStart();
-        if (completion.Length > 0 && !prefix.EndsWith(" ") && !completion.StartsWith(" "))
-            completion = " " + completion;
-
-        completion = TrimToWholeWords(completion);
-        return RejectDuplicate(prefix, completion!);
     }
 
     // Delegate to the centralized list in OpenRouterModelService so Settings UI and

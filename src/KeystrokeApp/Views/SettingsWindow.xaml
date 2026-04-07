@@ -2,65 +2,78 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Keystroke Settings"
-        Height="680" Width="640"
+        Height="760"
+        Width="1180"
+        MinHeight="720"
+        MinWidth="1080"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanMinimize"
-        Background="#0D1117">
+        Background="#0B1220">
 
     <Window.Resources>
-        <!-- Override System Colors for ComboBox -->
         <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="White"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#1A1A2E"/>
-        
-        <!-- Colors -->
-        <SolidColorBrush x:Key="BgDark" Color="#0D1117"/>
-        <SolidColorBrush x:Key="BgCard" Color="#161B22"/>
-        <SolidColorBrush x:Key="BgInput" Color="#21262D"/>
-        <SolidColorBrush x:Key="BgHover" Color="#30363D"/>
-        <SolidColorBrush x:Key="Accent" Color="#2F81F7"/>
-        <SolidColorBrush x:Key="AccentHover" Color="#58A6FF"/>
-        <SolidColorBrush x:Key="Success" Color="#238636"/>
-        <SolidColorBrush x:Key="Warning" Color="#F0883E"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#F0F6FC"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#8B949E"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#6E7681"/>
-        <SolidColorBrush x:Key="Border" Color="#30363D"/>
-        <SolidColorBrush x:Key="BorderLight" Color="#484F58"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#111827"/>
 
-        <!-- Styles -->
-        <Style TargetType="TabControl">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
+        <SolidColorBrush x:Key="BgWindow" Color="#0B1220"/>
+        <SolidColorBrush x:Key="BgSidebar" Color="#0F172A"/>
+        <SolidColorBrush x:Key="BgCard" Color="#111C2E"/>
+        <SolidColorBrush x:Key="BgCardSoft" Color="#172338"/>
+        <SolidColorBrush x:Key="BgInput" Color="#17263B"/>
+        <SolidColorBrush x:Key="BgHover" Color="#223551"/>
+        <SolidColorBrush x:Key="BgPreview" Color="#0F1A2B"/>
+        <SolidColorBrush x:Key="Accent" Color="#5EA6FF"/>
+        <SolidColorBrush x:Key="Success" Color="#34C38F"/>
+        <SolidColorBrush x:Key="Warning" Color="#F3A74F"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#F8FAFC"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#CBD5E1"/>
+        <SolidColorBrush x:Key="TextMuted" Color="#8CA0BB"/>
+        <SolidColorBrush x:Key="Border" Color="#22324A"/>
+        <SolidColorBrush x:Key="BorderStrong" Color="#39506E"/>
+        <SolidColorBrush x:Key="PrivacyTint" Color="#3B2A20"/>
+        <SolidColorBrush x:Key="PrivacyBorder" Color="#6A4C3B"/>
+        <SolidColorBrush x:Key="LearningTint" Color="#182E2B"/>
+        <SolidColorBrush x:Key="LearningBorder" Color="#245D50"/>
+        <SolidColorBrush x:Key="ExperimentalTint" Color="#33250F"/>
+        <SolidColorBrush x:Key="ExperimentalBorder" Color="#7A5922"/>
+
+        <Style TargetType="TextBlock" x:Key="SectionTitleStyle">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
 
-        <Style TargetType="TabItem">
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+        <Style TargetType="TextBlock" x:Key="SectionIntroStyle">
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-                        <DockPanel>
-                            <Border Name="Border" Background="Transparent" CornerRadius="6,6,0,0" Padding="{TemplateBinding Padding}" DockPanel.Dock="Top">
-                                <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <Border Name="Underline" Background="Transparent" Height="2" DockPanel.Dock="Bottom"/>
-                        </DockPanel>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="{StaticResource BgCard}"/>
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
-                                <Setter TargetName="Underline" Property="Background" Value="{StaticResource Accent}"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="{StaticResource BgHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style TargetType="Border" x:Key="CardStyle">
+            <Setter Property="Background" Value="{StaticResource BgCard}"/>
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="20"/>
+        </Style>
+
+        <Style TargetType="Border" x:Key="SoftCardStyle" BasedOn="{StaticResource CardStyle}">
+            <Setter Property="Background" Value="{StaticResource BgCardSoft}"/>
+        </Style>
+
+        <Style TargetType="Border" x:Key="PrivacyCardStyle" BasedOn="{StaticResource CardStyle}">
+            <Setter Property="Background" Value="{StaticResource PrivacyTint}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PrivacyBorder}"/>
+        </Style>
+
+        <Style TargetType="Border" x:Key="LearningCardStyle" BasedOn="{StaticResource CardStyle}">
+            <Setter Property="Background" Value="{StaticResource LearningTint}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LearningBorder}"/>
+        </Style>
+
+        <Style TargetType="Border" x:Key="ExperimentalCardStyle" BasedOn="{StaticResource CardStyle}">
+            <Setter Property="Background" Value="{StaticResource ExperimentalTint}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ExperimentalBorder}"/>
         </Style>
 
         <Style TargetType="TextBox">
@@ -68,7 +81,7 @@
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
             <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Padding" Value="12,10"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontFamily" Value="Segoe UI"/>
             <Setter Property="CaretBrush" Value="{StaticResource TextPrimary}"/>
@@ -96,27 +109,23 @@
                                           ClickMode="Press">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="Border"
+                                        <Border x:Name="ComboBorder"
                                                 Background="{TemplateBinding Background}"
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="4">
+                                                CornerRadius="10">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="32"/>
                                                 </Grid.ColumnDefinitions>
-                                                <!-- Selected item text -->
-                                                <TextBlock x:Name="ContentText"
-                                                           Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                <TextBlock Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                                            Foreground="{StaticResource TextPrimary}"
                                                            FontSize="13"
                                                            VerticalAlignment="Center"
-                                                           Margin="10,0,0,0"
+                                                           Margin="12,0,0,0"
                                                            TextTrimming="CharacterEllipsis"/>
-                                                <!-- Dropdown arrow -->
                                                 <Path Grid.Column="1"
-                                                      x:Name="Arrow"
                                                       Fill="{StaticResource TextSecondary}"
                                                       HorizontalAlignment="Center"
                                                       VerticalAlignment="Center"
@@ -125,17 +134,16 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BorderLight}"/>
+                                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
                                             </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
-                                                <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{StaticResource Accent}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
                             </ToggleButton>
-                            
-                            <!-- Popup for dropdown items -->
+
                             <Popup x:Name="PART_Popup"
                                    Placement="Bottom"
                                    IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
@@ -143,18 +151,14 @@
                                    Focusable="False"
                                    PopupAnimation="Fade"
                                    StaysOpen="False">
-                                <Border x:Name="DropDownBorder"
-                                        Background="White"
-                                        BorderBrush="{StaticResource BorderLight}"
+                                <Border Background="White"
+                                        BorderBrush="{StaticResource BorderStrong}"
                                         BorderThickness="1"
-                                        CornerRadius="6"
+                                        CornerRadius="10"
                                         MinWidth="{Binding ActualWidth, ElementName=MainGrid}"
-                                        MaxHeight="350">
-                                    <ScrollViewer x:Name="DropDownScrollViewer"
-                                                  Margin="4"
-                                                  Focusable="False">
-                                        <ItemsPresenter x:Name="ItemsPresenter"
-                                                        KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        MaxHeight="360">
+                                    <ScrollViewer Margin="4" Focusable="False">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>
                                 </Border>
                             </Popup>
@@ -166,7 +170,7 @@
 
         <Style TargetType="ComboBoxItem">
             <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#1A1A2E"/>
+            <Setter Property="Foreground" Value="#111827"/>
             <Setter Property="FontFamily" Value="Segoe UI"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="12,8"/>
@@ -174,21 +178,76 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="Bd"
+                        <Border x:Name="ComboItemBorder"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4"
+                                CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Left"
-                                              VerticalAlignment="Center"/>
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#E8F0FE"/>
+                                <Setter TargetName="ComboItemBorder" Property="Background" Value="#E8F0FE"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#D2E3FC"/>
+                                <Setter TargetName="ComboItemBorder" Property="Background" Value="#D2E3FC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Accent}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BgHover}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style x:Key="PillStyle" TargetType="Border">
+            <Setter Property="Background" Value="#203047"/>
+            <Setter Property="CornerRadius" Value="999"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+        </Style>
+
+        <Style x:Key="NavRadioStyle" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="NavBorder"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14,12">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="NavBorder" Property="Background" Value="#172338"/>
+                                <Setter TargetName="NavBorder" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavBorder" Property="Background" Value="#142238"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -201,908 +260,793 @@
             <Setter Property="FontSize" Value="13"/>
         </Style>
 
-        <Style TargetType="Slider">
-            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
-            <Setter Property="Background" Value="{StaticResource Border}"/>
+        <Style x:Key="SwitchCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Width="52" Height="30">
+                            <Border x:Name="Track"
+                                    Background="#415A77"
+                                    CornerRadius="15"
+                                    BorderBrush="#5A7696"
+                                    BorderThickness="1"/>
+                            <Ellipse x:Name="Thumb"
+                                     Width="22"
+                                     Height="22"
+                                     Fill="White"
+                                     Margin="4,0,0,0"
+                                     HorizontalAlignment="Left"
+                                     VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.45"/>
+                                <Setter TargetName="Thumb" Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style x:Key="CardStyle" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource BgCard}"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+        <Style x:Key="FeatureCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+            <Setter Property="Padding" Value="18"/>
         </Style>
 
-        <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Accent}"/>
-            <Setter Property="Foreground" Value="White"/>
+        <Style x:Key="ThemeCardButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="16,8"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource AccentHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BgHover}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderLight}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource Border}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <Style x:Key="PresetButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BgInput}"/>
+            <Setter Property="Background" Value="#16263C"/>
             <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
             <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="Padding" Value="14,10"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                            <StackPanel>
-                                <ContentPresenter HorizontalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource BgHover}"/>
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="SwatchButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <ContentPresenter HorizontalAlignment="Center"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Grid Background="{StaticResource BgWindow}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <!-- Header -->
-        <Border Grid.Row="0" Background="{StaticResource BgCard}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
-            <Grid Margin="20,16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock Text="⚡ Keystroke" FontSize="20" FontWeight="Bold" 
-                               Foreground="{StaticResource TextPrimary}" FontFamily="Segoe UI"/>
-                    <TextBlock Text="Configure your AI autocomplete experience" 
-                               Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,2,0,0"/>
+        <Border Grid.Column="0"
+                Background="{StaticResource BgSidebar}"
+                BorderBrush="{StaticResource Border}"
+                BorderThickness="0,0,1,0">
+            <DockPanel Margin="18">
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="Keystroke"
+                               Foreground="{StaticResource TextPrimary}"
+                               FontSize="24"
+                               FontWeight="Bold"/>
+                    <TextBlock Text="Settings"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="13"
+                               Margin="0,4,0,24"/>
+
+                    <RadioButton x:Name="NavOverviewButton" GroupName="SettingsNav" IsChecked="True" Checked="NavigateSection_Checked" Tag="Overview" Style="{StaticResource NavRadioStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Overview"/>
+                            <TextBlock Text="Quick read on how Keystroke feels right now" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavSuggestionsButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="Suggestions" Style="{StaticResource NavRadioStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Suggestions"/>
+                            <TextBlock Text="Tune timing, length, and creativity" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavPersonalizationButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="Personalization" Style="{StaticResource NavRadioStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Personalization"/>
+                            <TextBlock Text="Context, learning, and privacy choices" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavAppearanceButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="Appearance" Style="{StaticResource NavRadioStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Appearance"/>
+                            <TextBlock Text="Theme and preview styling" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavAdvancedButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="Advanced" Style="{StaticResource NavRadioStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Advanced"/>
+                            <TextBlock Text="Engine setup, providers, and prompt" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </RadioButton>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="PresetMinimalBtn" Content="Minimal" Style="{StaticResource PresetButton}" 
-                            Margin="0,0,8,0" Click="PresetMinimal_Click"/>
-                    <Button x:Name="PresetBalancedBtn" Content="Balanced" Style="{StaticResource PresetButton}" 
-                            Margin="0,0,8,0" Click="PresetBalanced_Click"/>
-                    <Button x:Name="PresetMaxBtn" Content="Maximum" Style="{StaticResource PresetButton}" 
-                            Click="PresetMaximum_Click"/>
-                </StackPanel>
-            </Grid>
+
+                <Border DockPanel.Dock="Bottom" Style="{StaticResource SoftCardStyle}" Margin="0,18,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Auto-save is on" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                        <TextBlock Text="Every change updates immediately. Use Done when you are finished."
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="11"
+                                   Margin="0,6,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </DockPanel>
         </Border>
 
-        <!-- Tabbed Content -->
-        <TabControl Grid.Row="1" Margin="16,12,16,0">
-            
-            <!-- GENERAL TAB -->
-            <TabItem Header="🧠 General">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8,8,8,16">
-                        
-                        <!-- Engine Section -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Prediction Engine" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Choose which AI model powers your suggestions" 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
-                                
-                                <ComboBox x:Name="EngineCombo" Margin="0,0,0,12" SelectionChanged="EngineCombo_Changed">
-                                    <ComboBoxItem Content="🚀 Gemini (Recommended)"/>
-                                    <ComboBoxItem Content="⚡ GPT-5"/>
-                                    <ComboBoxItem Content="✨ Claude"/>
-                                    <ComboBoxItem Content="🧪 Ollama (Local, Experimental)"/>
-                                    <ComboBoxItem Content="🌐 OpenRouter (Any Model)"/>
-                                    <ComboBoxItem Content="🧪 Dummy (Testing)"/>
-                                </ComboBox>
+        <Grid Grid.Column="1" Margin="24,22,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-                                <!-- Gemini API Key -->
-                                <Grid x:Name="GeminiApiKeyPanel">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Text="Gemini API Key" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
-                                    <Grid Grid.Row="1">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="GeminiApiKeyBox" Grid.Column="0" Margin="0,0,8,0"
-                                                 TextChanged="Setting_Changed"/>
-                                        <TextBlock x:Name="GeminiApiKeyStatus" Grid.Column="1" Text="●" FontSize="16"
-                                                   VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"
-                                                   ToolTip="API key status"/>
-                                    </Grid>
-                                </Grid>
+            <Border Grid.Row="0" Style="{StaticResource CardStyle}" Padding="24" Margin="0,0,0,18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="330"/>
+                    </Grid.ColumnDefinitions>
 
-                                <!-- GPT-5 API Key -->
-                                <Grid x:Name="Gpt5ApiKeyPanel" Visibility="Collapsed">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Text="OpenAI API Key" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}" Margin="0,12,0,4"/>
-                                    <Grid Grid.Row="1">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="Gpt5ApiKeyBox" Grid.Column="0" Margin="0,0,8,0" 
-                                                 TextChanged="Setting_Changed"/>
-                                        <TextBlock x:Name="Gpt5ApiKeyStatus" Grid.Column="1" Text="●" FontSize="16"
-                                                   VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"
-                                                   ToolTip="API key status"/>
-                                    </Grid>
-                                </Grid>
+                    <StackPanel Margin="0,0,22,0">
+                        <TextBlock x:Name="HeroTitleText" Text="Keystroke is tuned for balanced suggestions" Foreground="{StaticResource TextPrimary}" FontSize="28" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="HeroSubtitleText" Text="Fast enough for flow, grounded enough to stay out of your way." Foreground="{StaticResource TextSecondary}" FontSize="14" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                        <WrapPanel Margin="0,18,0,18">
+                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroEngineStatusText" Text="Connected" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroLearningStatusText" Text="Learning off" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroContextStatusText" Text="Context on" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroThemeStatusText" Text="Theme: Midnight" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                        </WrapPanel>
+                        <WrapPanel>
+                            <Button x:Name="PresetMinimalBtn" Content="Minimal" Style="{StaticResource PresetButton}" Margin="0,0,10,0" Click="PresetMinimal_Click"/>
+                            <Button x:Name="PresetBalancedBtn" Content="Balanced" Style="{StaticResource PresetButton}" Margin="0,0,10,0" Click="PresetBalanced_Click"/>
+                            <Button x:Name="PresetMaxBtn" Content="Maximum" Style="{StaticResource PresetButton}" Click="PresetMaximum_Click"/>
+                        </WrapPanel>
+                    </StackPanel>
 
-                                <!-- Claude API Key -->
-                                <Grid x:Name="ClaudeApiKeyPanel" Visibility="Collapsed">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Text="Claude API Key" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}" Margin="0,12,0,4"/>
-                                    <Grid Grid.Row="1">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="ClaudeApiKeyBox" Grid.Column="0" Margin="0,0,8,0" 
-                                                 TextChanged="Setting_Changed"/>
-                                        <TextBlock x:Name="ClaudeApiKeyStatus" Grid.Column="1" Text="●" FontSize="16"
-                                                   VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"
-                                                   ToolTip="API key status"/>
-                                    </Grid>
-                                </Grid>
+                    <Border Grid.Column="1" x:Name="PreviewBorder" Background="{StaticResource BgPreview}" BorderBrush="{StaticResource BorderStrong}" BorderThickness="1" CornerRadius="18" Padding="16">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="PreviewAccentDot" Width="10" Height="10" Fill="{StaticResource Accent}" VerticalAlignment="Center"/>
+                                <TextBlock Text="Live preview" Foreground="{StaticResource TextSecondary}" FontSize="12" FontWeight="SemiBold" Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Margin="0,14,0,0">
+                                <Border Background="#132238" CornerRadius="12" Padding="14" BorderBrush="#263B5B" BorderThickness="1">
+                                    <TextBlock x:Name="PreviewInputText" Text="Can you send the latest draft when you have a minute" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" FontSize="13"/>
+                                </Border>
+                                <Border x:Name="PreviewSuggestionBubble" Margin="26,12,0,0" Background="#1C3150" CornerRadius="14" Padding="14" BorderBrush="#3B6293" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock x:Name="PreviewSuggestionText" Text=", I can tighten it up before we send it." Foreground="{StaticResource TextPrimary}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="PreviewMetaText" Text="Extended • 3 suggestions • Balanced creativity" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
 
-                                <!-- Gemini Model -->
-                                <StackPanel x:Name="GeminiModelPanel">
-                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
-                                               Margin="0,12,0,4"/>
-                                    <ComboBox x:Name="GeminiModelCombo" SelectionChanged="Setting_Changed">
-                                        <ComboBoxItem Content="gemini-3.1-flash-lite-preview (Fastest)" Tag="gemini-3.1-flash-lite-preview"/>
-                                        <ComboBoxItem Content="gemini-3-flash-preview (Fast)" Tag="gemini-3-flash-preview"/>
-                                        <ComboBoxItem Content="gemini-2.5-flash (Stable)" Tag="gemini-2.5-flash"/>
-                                        <ComboBoxItem Content="gemini-2.5-pro (Smart)" Tag="gemini-2.5-pro"/>
-                                    </ComboBox>
-                                </StackPanel>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <StackPanel x:Name="OverviewSection" Visibility="Visible">
+                        <TextBlock Text="Overview" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Start here for the simplest read on your current setup." Style="{StaticResource SectionIntroStyle}"/>
 
-                                <!-- GPT-5 Model -->
-                                <StackPanel x:Name="Gpt5ModelPanel" Visibility="Collapsed">
-                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
-                                               Margin="0,12,0,4"/>
-                                    <ComboBox x:Name="Gpt5ModelCombo" SelectionChanged="Setting_Changed">
-                                        <ComboBoxItem Content="gpt-5.4-nano (Fastest)" Tag="gpt-5.4-nano"/>
-                                        <ComboBoxItem Content="gpt-5.4-mini (Balanced)" Tag="gpt-5.4-mini"/>
-                                        <ComboBoxItem Content="gpt-5.4 (Smart)" Tag="gpt-5.4"/>
-                                    </ComboBox>
-                                </StackPanel>
+                        <Grid Margin="0,20,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="330"/>
+                            </Grid.ColumnDefinitions>
 
-                                <!-- Claude Model -->
-                                <StackPanel x:Name="ClaudeModelPanel" Visibility="Collapsed">
-                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
-                                               Margin="0,12,0,4"/>
-                                    <ComboBox x:Name="ClaudeModelCombo" SelectionChanged="Setting_Changed">
-                                        <ComboBoxItem Content="claude-haiku-4-5 (Fast)" Tag="claude-haiku-4-5-20251001"/>
-                                        <ComboBoxItem Content="claude-sonnet-4-5 (Smart)" Tag="claude-sonnet-4-5-20250214"/>
-                                    </ComboBox>
-                                </StackPanel>
+                            <StackPanel Margin="0,0,18,0">
+                                <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                    <StackPanel>
+                                        <TextBlock Text="How Keystroke feels" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="OverviewFeelText" Text="Balanced for fast, grounded suggestions." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                        <WrapPanel Margin="0,16,0,0">
+                                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="OverviewLengthSummaryText" Text="Extended completions" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="OverviewSpeedSummaryText" Text="300ms after words" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="OverviewSuggestionSummaryText" Text="3 suggestions shown" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
 
-                                <!-- Ollama Settings (no API key needed) -->
-                                <StackPanel x:Name="OllamaPanel" Visibility="Collapsed">
-                                    <!-- Experimental warning -->
-                                    <Border Background="#1AFFA500" BorderBrush="#80FFA500" BorderThickness="1"
-                                            CornerRadius="6" Padding="10,8" Margin="0,12,0,0">
-                                        <StackPanel>
-                                            <TextBlock Text="🧪 Experimental — Use at your own risk"
-                                                       FontSize="12" FontWeight="SemiBold"
-                                                       Foreground="#FFFFA500" Margin="0,0,0,4"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="11"
-                                                       Foreground="{StaticResource TextMuted}"
-                                                       Text="Local model quality varies significantly by model size and hardware. Completion accuracy is not guaranteed. Requires Ollama installed and running locally. Not recommended for general use."/>
-                                        </StackPanel>
-                                    </Border>
+                                <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                    <StackPanel>
+                                        <TextBlock Text="Current status" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <Grid Margin="0,16,0,0">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="180"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Engine" Foreground="{StaticResource TextMuted}" Margin="0,0,0,10"/>
+                                            <TextBlock x:Name="OverviewEngineStatusText" Grid.Column="1" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,10"/>
+                                            <TextBlock Grid.Row="1" Text="Learning" Foreground="{StaticResource TextMuted}" Margin="0,0,0,10"/>
+                                            <TextBlock x:Name="OverviewLearningStatusText" Grid.Row="1" Grid.Column="1" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,10"/>
+                                            <TextBlock Grid.Row="2" Text="Privacy" Foreground="{StaticResource TextMuted}"/>
+                                            <TextBlock x:Name="OverviewPrivacyStatusText" Grid.Row="2" Grid.Column="1" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
 
-                                    <TextBlock Text="Model" FontSize="12" Foreground="{StaticResource TextSecondary}"
-                                               Margin="0,12,0,4"/>
-                                    <ComboBox x:Name="OllamaModelCombo" SelectionChanged="Setting_Changed">
-                                        <ComboBoxItem Content="qwen3:30b-a3b ★ Best (MoE, 14B quality at 8B speed)" Tag="qwen3:30b-a3b"/>
-                                        <ComboBoxItem Content="qwen3:8b (8B dense, fast)" Tag="qwen3:8b"/>
-                                        <ComboBoxItem Content="mistral:7b (fast, great prose)" Tag="mistral:7b"/>
-                                        <ComboBoxItem Content="qwen2.5:7b (solid, well-tested)" Tag="qwen2.5:7b"/>
-                                        <ComboBoxItem Content="llama3.1:8b (Meta 8B)" Tag="llama3.1:8b"/>
-                                        <ComboBoxItem Content="llama3.2:latest (3B, fastest)" Tag="llama3.2:latest"/>
-                                        <ComboBoxItem Content="qwen2.5:0.5b-base (tiny base model)" Tag="qwen2.5:0.5b-base"/>
-                                    </ComboBox>
-                                    
-                                    <TextBlock Text="Ollama Endpoint" FontSize="12" Foreground="{StaticResource TextSecondary}"
-                                               Margin="0,12,0,4"/>
-                                    <TextBox x:Name="OllamaEndpointBox" TextChanged="Setting_Changed"/>
-                                    
-                                    <TextBlock x:Name="OllamaStatus" Text="● Checking..."
-                                               FontSize="12" Foreground="{StaticResource TextMuted}"
-                                               Margin="0,8,0,0"/>
-                                </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <Border Style="{StaticResource PrivacyCardStyle}" Margin="0,0,0,18">
+                                    <StackPanel>
+                                        <TextBlock Text="Privacy at a glance" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="OverviewPrivacyDetailText" Text="Screen reading is on. Learning is off." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
 
-                                <!-- OpenRouter Settings -->
-                                <StackPanel x:Name="OpenRouterPanel" Visibility="Collapsed">
-
-                                    <!-- API Key row -->
-                                    <TextBlock Text="OpenRouter API Key" FontSize="12"
-                                               Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
-                                    <Grid Margin="0,0,0,12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox x:Name="OpenRouterApiKeyBox" Grid.Column="0" Margin="0,0,8,0"
-                                                 TextChanged="Setting_Changed"/>
-                                        <TextBlock x:Name="OpenRouterApiKeyStatus" Grid.Column="1" Text="●"
-                                                   FontSize="16" VerticalAlignment="Center"
+                                <Border Style="{StaticResource SoftCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="What changes most often" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Use Suggestions when you want Keystroke faster, shorter, or more cautious. Use Personalization when you want it to feel more like you."
                                                    Foreground="{StaticResource TextMuted}"
-                                                   ToolTip="API key status"/>
-                                    </Grid>
-
-                                    <!-- Model selector header: label + refresh button -->
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Model" FontSize="12"
-                                                   Foreground="{StaticResource TextSecondary}"
-                                                   VerticalAlignment="Center"/>
-                                        <Button x:Name="OpenRouterRefreshBtn" Grid.Column="1"
-                                                Content="↻ Refresh" FontSize="11"
-                                                Background="Transparent" Foreground="{StaticResource Accent}"
-                                                BorderThickness="0" Padding="4,2" Cursor="Hand"
-                                                Click="OpenRouterRefresh_Click"/>
-                                    </Grid>
-
-                                    <!-- Dynamic model list — populated in code-behind -->
-                                    <!-- ⭐ = recommended for autocomplete; others work but vary in quality -->
-                                    <ComboBox x:Name="OpenRouterModelCombo" Margin="0,0,0,4"
-                                              SelectionChanged="OpenRouterModelCombo_SelectionChanged"/>
-
-                                    <!-- Loading / error state label -->
-                                    <TextBlock x:Name="OpenRouterModelStatus" FontSize="11"
-                                               Foreground="{StaticResource TextMuted}" Margin="0,2,0,0"/>
-
-                                    <!-- Warning shown when a reasoning-first model is selected -->
-                                    <TextBlock x:Name="OpenRouterReasoningWarning"
-                                               Text="⚠ Reasoning model selected. These models have higher latency and inconsistent completion quality for autocomplete use."
-                                               FontSize="11" TextWrapping="Wrap"
-                                               Foreground="#F08830"
-                                               Visibility="Collapsed" Margin="0,6,0,0"/>
-
-                                </StackPanel>
+                                                   FontSize="12"
+                                                   Margin="0,8,0,0"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
-                        </Border>
+                        </Grid>
+                    </StackPanel>
 
-                        <!-- Behavior Section -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
+                    <StackPanel x:Name="SuggestionsSection" Visibility="Collapsed">
+                        <TextBlock Text="Suggestions" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Tune when suggestions appear, how long they are, and how adventurous they feel." Style="{StaticResource SectionIntroStyle}"/>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,20,0,18">
                             <StackPanel>
-                                <TextBlock Text="Trigger Behavior" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Control when predictions appear" 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
-
-                                <Grid Margin="0,0,0,8">
-                                    <TextBlock Text="Completion Length" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
-                                </Grid>
-                                <ComboBox x:Name="LengthCombo" Margin="0,0,0,16" SelectionChanged="Setting_Changed">
-                                    <ComboBoxItem Content="📝 Brief (3-5 words)" Tag="brief"/>
-                                    <ComboBoxItem Content="📄 Standard (8-15 words)" Tag="standard"/>
-                                    <ComboBoxItem Content="📚 Extended (15-30 words)" Tag="extended"/>
-                                    <ComboBoxItem Content="🔮 Unlimited (30-50 words)" Tag="unlimited"/>
+                                <TextBlock Text="Suggestion length" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="Choose how much Keystroke should finish for you in one go." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"/>
+                                <ComboBox x:Name="LengthCombo" Margin="0,16,0,0" SelectionChanged="Setting_Changed">
+                                    <ComboBoxItem Content="Brief (3-5 words)" Tag="brief"/>
+                                    <ComboBoxItem Content="Standard (8-15 words)" Tag="standard"/>
+                                    <ComboBoxItem Content="Extended (15-30 words)" Tag="extended"/>
+                                    <ComboBoxItem Content="Unlimited (30-50 words)" Tag="unlimited"/>
                                 </ComboBox>
-
-                                <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="Min Characters Before Predicting" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}"/>
-                                    <TextBlock x:Name="MinCharsLabel" Text="3" 
-                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
-                                               FontSize="12" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Slider x:Name="MinCharsSlider" Minimum="1" Maximum="10" Value="3"
-                                        IsSnapToTickEnabled="True" TickFrequency="1"
-                                        ValueChanged="MinCharsSlider_Changed" Margin="0,0,0,12"/>
-
-                                <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="Delay After Word (space, period...)" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}"/>
-                                    <TextBlock x:Name="DebounceLabel" Text="300ms" 
-                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
-                                               FontSize="12" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Slider x:Name="DebounceSlider" Minimum="100" Maximum="1500" Value="300"
-                                        ValueChanged="DebounceSlider_Changed" Margin="0,0,0,12"/>
-
-                                <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="Delay While Typing (mid-word)" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}"/>
-                                    <TextBlock x:Name="FastDebounceLabel" Text="100ms" 
-                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
-                                               FontSize="12" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Slider x:Name="FastDebounceSlider" Minimum="50" Maximum="500" Value="100"
-                                        ValueChanged="FastDebounceSlider_Changed"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- QUALITY TAB -->
-            <TabItem Header="✨ Quality">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8,8,8,16">
-                        
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Smart Features" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Advanced features that improve suggestion quality" 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
-
-                                <!-- Rolling Context -->
-                                <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="🔄 Rolling Context" FontSize="13" 
-                                                       Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Remembers last 500 chars for topic continuity" 
-                                                       Foreground="{StaticResource TextMuted}" FontSize="11" 
-                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="RollingContextCheck" Grid.Column="1" IsChecked="True"
-                                                  Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged"
-                                                  VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Border>
-
-                                <!-- Acceptance Learning -->
-                                <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="🎓 Learn From Acceptances" FontSize="13" 
-                                                       Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Matches your style using accepted completions" 
-                                                       Foreground="{StaticResource TextMuted}" FontSize="11" 
-                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="LearningEnabledCheck" Grid.Column="1" IsChecked="True"
-                                                  Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged"
-                                                  VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Border>
-
-                                <!-- OCR -->
-                                <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="👁️ Screen Reading (OCR)" FontSize="13" 
-                                                       Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Captures visible text for better context" 
-                                                       Foreground="{StaticResource TextMuted}" FontSize="11" 
-                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="OcrEnabledCheck" Grid.Column="1" IsChecked="True"
-                                                  Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged"
-                                                  VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Border>
-
-                                <!-- App Detection -->
-                                <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="🎯 App-Aware Tone" FontSize="13" 
-                                                       Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Adjusts style: casual (chat), formal (email), precise (code)" 
-                                                       Foreground="{StaticResource TextMuted}" FontSize="11" 
-                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="1" Text="Always On" FontSize="11" 
-                                                   Foreground="{StaticResource Success}" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    </Grid>
-                                </Border>
                             </StackPanel>
                         </Border>
 
-                        <!-- Suggestions Per Request -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Suggestions Per Request" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="More suggestions = more choices (Ctrl+Up/Down) but costs more tokens" 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                                <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="1 = Fastest / Cheapest" FontSize="11" 
-                                               Foreground="{StaticResource TextMuted}" HorizontalAlignment="Left"/>
-                                    <TextBlock x:Name="SuggestionsLabel" Text="3" 
-                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
-                                               FontSize="14" HorizontalAlignment="Center"/>
-                                    <TextBlock Text="5 = Most Options" FontSize="11" 
-                                               Foreground="{StaticResource TextMuted}" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Slider x:Name="SuggestionsSlider" Minimum="1" Maximum="5" Value="3"
-                                        IsSnapToTickEnabled="True" TickFrequency="1"
-                                        ValueChanged="SuggestionsSlider_Changed"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Creativity Override -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Base Creativity (Temperature)" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Lower = more predictable, Higher = more creative. Auto-adjusts per app." 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
-                                
-                                <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="Conservative" FontSize="11" 
-                                               Foreground="{StaticResource TextMuted}" HorizontalAlignment="Left"/>
-                                    <TextBlock x:Name="TempLabel" Text="0.3" 
-                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
-                                               FontSize="14" HorizontalAlignment="Center"/>
-                                    <TextBlock Text="Creative" FontSize="11" 
-                                               Foreground="{StaticResource TextMuted}" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Slider x:Name="TempSlider" Minimum="0" Maximum="1.0" Value="0.3"
-                                        ValueChanged="TempSlider_Changed" TickFrequency="0.1"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- LEARNING TAB -->
-            <TabItem Header="📊 Learning">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8,8,8,16">
-                        
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Learning Statistics" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="How Keystroke has learned your writing style" 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,16"/>
-
-                                <!-- Stats Grid -->
-                                <Grid Margin="0,0,0,16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Border Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="8"
-                                            Padding="12" Margin="0,0,8,0">
-                                        <StackPanel>
-                                            <TextBlock x:Name="StatsTotalAccepted" Text="0" FontSize="28"
-                                                       FontWeight="Bold" Foreground="{StaticResource Accent}"/>
-                                            <TextBlock Text="Accepted" Foreground="{StaticResource TextMuted}"
-                                                       FontSize="11"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Accept Rate replaces the less-useful Categories count;
-                                         category breakdown is already visible in the bars below. -->
-                                    <Border Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="8"
-                                            Padding="12" Margin="4,0,4,0">
-                                        <StackPanel>
-                                            <TextBlock x:Name="StatsAcceptRate" Text="—" FontSize="28"
-                                                       FontWeight="Bold" Foreground="{StaticResource Success}"/>
-                                            <TextBlock Text="Accept Rate" Foreground="{StaticResource TextMuted}"
-                                                       FontSize="11"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <Border Grid.Column="2" Background="{StaticResource BgInput}" CornerRadius="8"
-                                            Padding="12" Margin="8,0,0,0">
-                                        <StackPanel>
-                                            <TextBlock x:Name="StatsLastActivity" Text="-" FontSize="14"
-                                                       FontWeight="Bold" Foreground="{StaticResource TextPrimary}"
-                                                       VerticalAlignment="Center" Margin="0,8,0,0"/>
-                                            <TextBlock Text="Last Activity" Foreground="{StaticResource TextMuted}"
-                                                       FontSize="11"/>
-                                        </StackPanel>
-                                    </Border>
-                                </Grid>
-
-                                <!-- Category Intelligence Cards (Sub-Phase D) -->
-                                <TextBlock Text="Learning Intelligence by Category" FontSize="12"
-                                           Foreground="{StaticResource TextSecondary}" Margin="0,0,0,8"/>
-                                <StackPanel x:Name="CategoryBreakdownPanel">
-                                    <!-- Dynamically populated with CreateIntelligenceCard() -->
+                            <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="When suggestions start" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <Grid Margin="0,16,0,4">
+                                        <TextBlock Text="Start predicting after" Foreground="{StaticResource TextSecondary}"/>
+                                        <TextBlock x:Name="MinCharsLabel" Text="3" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Slider x:Name="MinCharsSlider" Minimum="1" Maximum="10" Value="3" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="MinCharsSlider_Changed"/>
+                                    <TextBlock Text="Higher values make Keystroke wait for more context before it steps in."
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="11"
+                                               Margin="0,8,0,0"
+                                               TextWrapping="Wrap"/>
                                 </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="12,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="How many options to show" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <Grid Margin="0,16,0,4">
+                                        <TextBlock Text="1 = fastest" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                        <TextBlock x:Name="SuggestionsLabel" Text="3" HorizontalAlignment="Center" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="5 = most options" HorizontalAlignment="Right" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                    </Grid>
+                                    <Slider x:Name="SuggestionsSlider" Minimum="1" Maximum="5" Value="3" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="SuggestionsSlider_Changed"/>
+                                    <TextBlock Text="More options help when you like cycling choices. Fewer options keep latency and cost down."
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="11"
+                                               Margin="0,8,0,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="Timing after punctuation" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <Grid Margin="0,16,0,4">
+                                        <TextBlock Text="Pause after a word or sentence" Foreground="{StaticResource TextSecondary}"/>
+                                        <TextBlock x:Name="DebounceLabel" Text="300ms" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Slider x:Name="DebounceSlider" Minimum="100" Maximum="1500" Value="300" ValueChanged="DebounceSlider_Changed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="12,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Timing while typing" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <Grid Margin="0,16,0,4">
+                                        <TextBlock Text="Pause in the middle of a thought" Foreground="{StaticResource TextSecondary}"/>
+                                        <TextBlock x:Name="FastDebounceLabel" Text="100ms" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Slider x:Name="FastDebounceSlider" Minimum="50" Maximum="500" Value="100" ValueChanged="FastDebounceSlider_Changed"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="Creativity" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="Lower values stay safer. Higher values open up more expressive guesses." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"/>
+                                <Grid Margin="0,16,0,4">
+                                    <TextBlock Text="Conservative" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                    <TextBlock x:Name="TempLabel" Text="0.3" HorizontalAlignment="Center" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Creative" HorizontalAlignment="Right" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                </Grid>
+                                <Slider x:Name="TempSlider" Minimum="0" Maximum="1.0" Value="0.3" TickFrequency="0.1" ValueChanged="TempSlider_Changed"/>
                             </StackPanel>
                         </Border>
+                    </StackPanel>
 
-                        <!-- Data Management -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Data Management" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,12"/>
-                                
+                    <StackPanel x:Name="PersonalizationSection" Visibility="Collapsed">
+                        <TextBlock Text="Personalization" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Choose how much context Keystroke uses and how much it learns from your writing." Style="{StaticResource SectionIntroStyle}"/>
+
+                        <Grid Margin="0,20,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource FeatureCardStyle}" Margin="0,0,12,0">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock Text="Reset Learning Data" FontSize="13" 
-                                                   Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Clears all accepted completions and starts fresh" 
-                                                   Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                        <TextBlock Text="Remember recent text" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="RollingContextStatusText" Text="Keeps continuity across the latest part of what you were writing." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                     </StackPanel>
-                                    <Button Grid.Column="1" Content="Reset" Style="{StaticResource SecondaryButton}"
-                                            Click="ResetLearning_Click"/>
+                                    <CheckBox x:Name="RollingContextCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged" VerticalAlignment="Center"/>
                                 </Grid>
-                            </StackPanel>
-                        </Border>
+                            </Border>
 
-                        <!-- Style Profile -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Writing Style Profile" FontSize="14" FontWeight="SemiBold" 
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Periodically analyzes your accepted completions to learn your unique writing style" 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
+                            <Border Grid.Column="1" Style="{StaticResource PrivacyCardStyle}" Margin="12,0,0,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Use screen context" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="OcrStatusText" Text="Reads visible text on screen so suggestions stay grounded in what you are looking at." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="OcrEnabledCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
 
-                                <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" x:Name="LearningFeatureCard" Style="{StaticResource LearningCardStyle}" Margin="0,0,12,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Learn from accepted suggestions" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="LearningFeatureStatusText" Text="Keystroke can use your accepted completions to better match your writing." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="LearningEnabledCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="1" x:Name="StyleProfileCard" Style="{StaticResource CardStyle}" Margin="12,0,0,0">
+                                <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Text="✨ Style Profile" FontSize="13" 
-                                                       Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Learns your tone, vocabulary, and sentence structure" 
-                                                       Foreground="{StaticResource TextMuted}" FontSize="11" 
-                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Text="Style profile" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="StyleProfileFeatureText" Text="Builds a writing profile over time so phrasing and tone feel more like you." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
-                                        <CheckBox x:Name="StyleProfileCheck" Grid.Column="1" IsChecked="True"
-                                                  Checked="StyleProfileCheck_Changed" Unchecked="StyleProfileCheck_Changed"
-                                                  VerticalAlignment="Center"/>
+                                        <CheckBox x:Name="StyleProfileCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="StyleProfileCheck_Changed" Unchecked="StyleProfileCheck_Changed" VerticalAlignment="Center"/>
                                     </Grid>
+
+                                    <Grid Margin="0,16,0,4">
+                                        <TextBlock Text="Update after this many accepts" Foreground="{StaticResource TextSecondary}"/>
+                                        <TextBlock x:Name="StyleProfileIntervalLabel" Text="30" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Slider x:Name="StyleProfileIntervalSlider" Minimum="10" Maximum="100" Value="30" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="StyleProfileIntervalSlider_Changed"/>
+                                    <TextBlock x:Name="StyleProfileDependencyText" Text="Needs learning to be on." Foreground="{StaticResource Warning}" FontSize="11" Margin="0,10,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                            <StackPanel>
+                                <TextBlock Text="App-aware tone" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock Text="Keystroke always adapts across chat, email, code, browser, terminal, and document contexts." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                <Border Style="{StaticResource PillStyle}" Margin="0,14,0,0" HorizontalAlignment="Left">
+                                    <TextBlock Text="Always on" Foreground="{StaticResource Success}" FontSize="11" FontWeight="SemiBold"/>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="330"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,18,0">
+                                <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                    <StackPanel>
+                                        <TextBlock Text="Learning snapshot" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <Grid Margin="0,16,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="0,0,8,0">
+                                                <StackPanel>
+                                                    <TextBlock x:Name="StatsTotalAccepted" Text="0" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Accent}"/>
+                                                    <TextBlock Text="Accepted" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="4,0">
+                                                <StackPanel>
+                                                    <TextBlock x:Name="StatsAcceptRate" Text="-" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Success}"/>
+                                                    <TextBlock Text="Accept rate" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="2" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="8,0,0,0">
+                                                <StackPanel>
+                                                    <TextBlock x:Name="StatsLastActivity" Text="Never" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,5,0,0"/>
+                                                    <TextBlock Text="Last activity" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Text="By category" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,18,0,8"/>
+                                        <StackPanel x:Name="CategoryBreakdownPanel"/>
+                                    </StackPanel>
                                 </Border>
 
-                                <Grid Margin="0,0,0,4">
-                                    <TextBlock Text="Update Frequency (acceptances between updates)" FontSize="12" 
-                                               Foreground="{StaticResource TextSecondary}"/>
-                                    <TextBlock x:Name="StyleProfileIntervalLabel" Text="30" 
-                                               Foreground="{StaticResource Accent}" FontWeight="SemiBold"
-                                               FontSize="12" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Slider x:Name="StyleProfileIntervalSlider" Minimum="10" Maximum="100" Value="30"
-                                        IsSnapToTickEnabled="True" TickFrequency="5"
-                                        ValueChanged="StyleProfileIntervalSlider_Changed"/>
-
-                                 <TextBlock x:Name="StyleProfileStatus" Text="" FontSize="11"
-                                            Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
-
-                                 <!-- Progress Ring -->
-                                 <Grid x:Name="StyleProgressPanel" Margin="0,16,0,12"
-                                       HorizontalAlignment="Center" Visibility="Collapsed">
-                                     <Grid.ColumnDefinitions>
-                                         <ColumnDefinition Width="Auto"/>
-                                         <ColumnDefinition Width="*"/>
-                                     </Grid.ColumnDefinitions>
-
-                                     <!-- Ring -->
-                                     <Grid Width="80" Height="80">
-                                         <Ellipse Width="80" Height="80"
-                                                  Stroke="#30363D" StrokeThickness="6"
-                                                  Fill="Transparent"/>
-                                         <Ellipse x:Name="ProgressArc"
-                                                  Width="80" Height="80"
-                                                  Stroke="#2F81F7" StrokeThickness="6"
-                                                  Fill="Transparent"
-                                                  StrokeDashArray="0 38.746"
-                                                  StrokeDashOffset="0"
-                                                  RenderTransformOrigin="0.5,0.5">
-                                             <Ellipse.RenderTransform>
-                                                 <RotateTransform Angle="-90"/>
-                                             </Ellipse.RenderTransform>
-                                         </Ellipse>
-                                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                             <TextBlock x:Name="ProgressCount" Text="0/30"
-                                                        FontSize="14" FontWeight="SemiBold"
-                                                        Foreground="#F0F6FC" HorizontalAlignment="Center"/>
-                                             <TextBlock x:Name="ProgressLabel" Text="acceptances"
-                                                        FontSize="9" Foreground="#6E7681"
-                                                        HorizontalAlignment="Center"/>
-                                         </StackPanel>
-                                     </Grid>
-
-                                     <!-- Legend -->
-                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
-                                         <TextBlock x:Name="ProgressMessage" Text="until next profile update"
-                                                    FontSize="12" Foreground="#8B949E"/>
-                                         <TextBlock x:Name="ProgressGenerated" Text=""
-                                                    FontSize="11" Foreground="#238636" Margin="0,4,0,0"/>
-                                     </StackPanel>
-                                 </Grid>
-
-                                 <!-- Category Badges -->
-                                 <WrapPanel x:Name="CategoryBadgesPanel" Margin="0,0,0,8" Orientation="Horizontal"/>
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Data management" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                            <Button Grid.Column="1" Content="Reset learning data" Style="{StaticResource SecondaryButton}" Click="ResetLearning_Click"/>
+                                        </Grid>
+                                        <TextBlock Text="Clear saved completions and rebuild your profile from scratch if Keystroke has drifted." Foreground="{StaticResource TextMuted}" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
-                        </Border>
 
-                        <!-- Vocabulary Fingerprint -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Vocabulary Fingerprint" FontSize="14" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Analyses your accepted completions to learn your personal word choices, phrase patterns, and sentence structure — no AI call required"
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"
-                                           TextWrapping="Wrap"/>
+                            <StackPanel Grid.Column="1">
+                                <Border Style="{StaticResource LearningCardStyle}" Margin="0,0,0,18">
+                                    <StackPanel>
+                                        <TextBlock Text="Style profile progress" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="StyleProfileStatus" Text="" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                        <Grid x:Name="StyleProgressPanel" Margin="0,16,0,12" Visibility="Collapsed">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid Width="88" Height="88">
+                                                <Ellipse Width="88" Height="88" Stroke="#29405D" StrokeThickness="7" Fill="Transparent"/>
+                                                <Ellipse x:Name="ProgressArc" Width="88" Height="88" Stroke="{StaticResource Accent}" StrokeThickness="7" Fill="Transparent" StrokeDashArray="0 38.746" RenderTransformOrigin="0.5,0.5">
+                                                    <Ellipse.RenderTransform>
+                                                        <RotateTransform Angle="-90"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <TextBlock x:Name="ProgressCount" Text="0/30" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="ProgressLabel" Text="accepts" FontSize="9" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Grid>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
+                                                <TextBlock x:Name="ProgressMessage" Text="until next profile update" Foreground="{StaticResource TextSecondary}" FontSize="12" TextWrapping="Wrap"/>
+                                                <TextBlock x:Name="ProgressGenerated" Text="" Foreground="{StaticResource Success}" FontSize="11" Margin="0,6,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <WrapPanel x:Name="CategoryBadgesPanel"/>
+                                    </StackPanel>
+                                </Border>
 
-                                <!-- Status row -->
-                                <TextBlock x:Name="VocabProfileStatus" Text="No fingerprint generated yet."
-                                           Foreground="{StaticResource TextMuted}" FontSize="11"
-                                           Margin="0,0,0,10" TextWrapping="Wrap"/>
-
-                                <!-- Per-category badges -->
-                                <WrapPanel x:Name="VocabCategoryBadgesPanel" Orientation="Horizontal"/>
+                                <Border Style="{StaticResource SoftCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="Vocabulary fingerprint" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="VocabProfileStatus" Text="No fingerprint generated yet." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,10" TextWrapping="Wrap"/>
+                                        <WrapPanel x:Name="VocabCategoryBadgesPanel"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
-                        </Border>
-
+                        </Grid>
                     </StackPanel>
-                </ScrollViewer>
-            </TabItem>
 
-            <!-- APPEARANCE TAB -->
-            <TabItem Header="🎨 Appearance">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8,8,8,16">
-                        <Border Style="{StaticResource CardStyle}" Padding="16">
+                    <StackPanel x:Name="AppearanceSection" Visibility="Collapsed">
+                        <TextBlock Text="Appearance" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Pick the panel theme and see how it changes the preview." Style="{StaticResource SectionIntroStyle}"/>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,20,0,18">
                             <StackPanel>
-                                <TextBlock Text="Panel Theme" FontSize="14" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Sets the accent color of the autocomplete suggestion panel"
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,24"/>
+                                <TextBlock Text="Panel theme" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="These themes change the suggestion panel accent and glow without affecting your settings." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"/>
 
-                                <UniformGrid Columns="5" HorizontalAlignment="Left">
-
-                                    <!-- Midnight -->
-                                    <Button Tag="midnight" Click="Swatch_Click"
-                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
-                                        <StackPanel>
-                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
-                                                <Ellipse x:Name="SwatchRingMidnight"
-                                                         Stroke="Transparent" StrokeThickness="3"/>
-                                                <Ellipse Fill="#5050E8" Width="38" Height="38"/>
-                                            </Grid>
-                                            <TextBlock Text="Midnight" FontSize="11" FontFamily="Segoe UI"
-                                                       Foreground="{StaticResource TextSecondary}"
-                                                       HorizontalAlignment="Center"/>
-                                        </StackPanel>
+                                <UniformGrid Columns="5" Margin="0,18,0,0">
+                                    <Button Tag="midnight" Click="Swatch_Click" Style="{StaticResource ThemeCardButtonStyle}" Margin="0,0,16,0">
+                                        <Border Style="{StaticResource SoftCardStyle}" Padding="14">
+                                            <StackPanel>
+                                                <Grid Width="60" Height="60" HorizontalAlignment="Center">
+                                                    <Ellipse x:Name="SwatchRingMidnight" Stroke="Transparent" StrokeThickness="3"/>
+                                                    <Ellipse Fill="#5050E8" Width="42" Height="42"/>
+                                                </Grid>
+                                                <TextBlock Text="Midnight" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
                                     </Button>
-
-                                    <!-- Ember -->
-                                    <Button Tag="ember" Click="Swatch_Click"
-                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
-                                        <StackPanel>
-                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
-                                                <Ellipse x:Name="SwatchRingEmber"
-                                                         Stroke="Transparent" StrokeThickness="3"/>
-                                                <Ellipse Fill="#D06010" Width="38" Height="38"/>
-                                            </Grid>
-                                            <TextBlock Text="Ember" FontSize="11" FontFamily="Segoe UI"
-                                                       Foreground="{StaticResource TextSecondary}"
-                                                       HorizontalAlignment="Center"/>
-                                        </StackPanel>
+                                    <Button Tag="ember" Click="Swatch_Click" Style="{StaticResource ThemeCardButtonStyle}" Margin="0,0,16,0">
+                                        <Border Style="{StaticResource SoftCardStyle}" Padding="14">
+                                            <StackPanel>
+                                                <Grid Width="60" Height="60" HorizontalAlignment="Center">
+                                                    <Ellipse x:Name="SwatchRingEmber" Stroke="Transparent" StrokeThickness="3"/>
+                                                    <Ellipse Fill="#D06010" Width="42" Height="42"/>
+                                                </Grid>
+                                                <TextBlock Text="Ember" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
                                     </Button>
-
-                                    <!-- Forest -->
-                                    <Button Tag="forest" Click="Swatch_Click"
-                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
-                                        <StackPanel>
-                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
-                                                <Ellipse x:Name="SwatchRingForest"
-                                                         Stroke="Transparent" StrokeThickness="3"/>
-                                                <Ellipse Fill="#209A50" Width="38" Height="38"/>
-                                            </Grid>
-                                            <TextBlock Text="Forest" FontSize="11" FontFamily="Segoe UI"
-                                                       Foreground="{StaticResource TextSecondary}"
-                                                       HorizontalAlignment="Center"/>
-                                        </StackPanel>
+                                    <Button Tag="forest" Click="Swatch_Click" Style="{StaticResource ThemeCardButtonStyle}" Margin="0,0,16,0">
+                                        <Border Style="{StaticResource SoftCardStyle}" Padding="14">
+                                            <StackPanel>
+                                                <Grid Width="60" Height="60" HorizontalAlignment="Center">
+                                                    <Ellipse x:Name="SwatchRingForest" Stroke="Transparent" StrokeThickness="3"/>
+                                                    <Ellipse Fill="#209A50" Width="42" Height="42"/>
+                                                </Grid>
+                                                <TextBlock Text="Forest" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
                                     </Button>
-
-                                    <!-- Rose -->
-                                    <Button Tag="rose" Click="Swatch_Click"
-                                            Style="{StaticResource SwatchButton}" Margin="0,0,20,0">
-                                        <StackPanel>
-                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
-                                                <Ellipse x:Name="SwatchRingRose"
-                                                         Stroke="Transparent" StrokeThickness="3"/>
-                                                <Ellipse Fill="#C83898" Width="38" Height="38"/>
-                                            </Grid>
-                                            <TextBlock Text="Rose" FontSize="11" FontFamily="Segoe UI"
-                                                       Foreground="{StaticResource TextSecondary}"
-                                                       HorizontalAlignment="Center"/>
-                                        </StackPanel>
+                                    <Button Tag="rose" Click="Swatch_Click" Style="{StaticResource ThemeCardButtonStyle}" Margin="0,0,16,0">
+                                        <Border Style="{StaticResource SoftCardStyle}" Padding="14">
+                                            <StackPanel>
+                                                <Grid Width="60" Height="60" HorizontalAlignment="Center">
+                                                    <Ellipse x:Name="SwatchRingRose" Stroke="Transparent" StrokeThickness="3"/>
+                                                    <Ellipse Fill="#C83898" Width="42" Height="42"/>
+                                                </Grid>
+                                                <TextBlock Text="Rose" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
                                     </Button>
-
-                                    <!-- Slate -->
-                                    <Button Tag="slate" Click="Swatch_Click"
-                                            Style="{StaticResource SwatchButton}">
-                                        <StackPanel>
-                                            <Grid Width="52" Height="52" Margin="0,0,0,8">
-                                                <Ellipse x:Name="SwatchRingSlate"
-                                                         Stroke="Transparent" StrokeThickness="3"/>
-                                                <Ellipse Fill="#586878" Width="38" Height="38"/>
-                                            </Grid>
-                                            <TextBlock Text="Slate" FontSize="11" FontFamily="Segoe UI"
-                                                       Foreground="{StaticResource TextSecondary}"
-                                                       HorizontalAlignment="Center"/>
-                                        </StackPanel>
+                                    <Button Tag="slate" Click="Swatch_Click" Style="{StaticResource ThemeCardButtonStyle}">
+                                        <Border Style="{StaticResource SoftCardStyle}" Padding="14">
+                                            <StackPanel>
+                                                <Grid Width="60" Height="60" HorizontalAlignment="Center">
+                                                    <Ellipse x:Name="SwatchRingSlate" Stroke="Transparent" StrokeThickness="3"/>
+                                                    <Ellipse Fill="#586878" Width="42" Height="42"/>
+                                                </Grid>
+                                                <TextBlock Text="Slate" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
                                     </Button>
-
                                 </UniformGrid>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
 
-            <!-- ADVANCED TAB -->
-            <TabItem Header="⚙️ Advanced">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8,8,8,16">
-
-                        <!-- Beta Features -->
-                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,8">
+                        <Border Style="{StaticResource SoftCardStyle}">
                             <StackPanel>
-                                <TextBlock Text="Beta Features" FontSize="14" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Experimental features that may not work in all apps."
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
+                                <TextBlock Text="Preview notes" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="The preview card at the top updates live so you can see how the active theme, suggestion length, and pace feel together."
+                                           Foreground="{StaticResource TextMuted}"
+                                           FontSize="12"
+                                           Margin="0,8,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
 
-                                <CheckBox x:Name="GhostTextCheck" Content="Inline ghost text"
-                                          Foreground="{StaticResource TextPrimary}" FontSize="13"
-                                          Checked="Setting_Changed" Unchecked="Setting_Changed"/>
-                                <TextBlock Text="Show faded autocomplete text directly at the cursor position (like VS Code Copilot). Works best in traditional Win32 apps — Notepad, Word, Outlook. Falls back to mouse position in Chromium-based apps."
-                                           Foreground="{StaticResource TextMuted}" FontSize="11"
-                                           TextWrapping="Wrap" Margin="20,4,0,0"/>
+                    <StackPanel x:Name="AdvancedSection" Visibility="Collapsed">
+                        <TextBlock Text="Advanced" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Provider setup, model choices, and prompt controls for advanced tuning." Style="{StaticResource SectionIntroStyle}"/>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,20,0,18">
+                            <StackPanel>
+                                <TextBlock Text="Engine" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="Choose the provider that powers Keystroke, then fine-tune its details below." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"/>
+                                <ComboBox x:Name="EngineCombo" Margin="0,16,0,0" SelectionChanged="EngineCombo_Changed">
+                                    <ComboBoxItem Content="Gemini (recommended)"/>
+                                    <ComboBoxItem Content="GPT-5"/>
+                                    <ComboBoxItem Content="Claude"/>
+                                    <ComboBoxItem Content="Ollama (local, experimental)"/>
+                                    <ComboBoxItem Content="OpenRouter (many models)"/>
+                                    <ComboBoxItem Content="Dummy (testing)"/>
+                                </ComboBox>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource CardStyle}" Padding="16">
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                            <StackPanel>
+                                <TextBlock Text="Provider details" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="ProviderDetailIntroText" Text="Only the active provider is shown." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"/>
+
+                                <StackPanel x:Name="GeminiApiKeyPanel" Margin="0,16,0,0">
+                                    <TextBlock Text="Gemini API key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="GeminiApiKeyBox" Margin="0,0,8,0" TextChanged="Setting_Changed"/>
+                                        <TextBlock x:Name="GeminiApiKeyStatus" Grid.Column="1" Text="●" FontSize="16" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <StackPanel x:Name="Gpt5ApiKeyPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                    <TextBlock Text="OpenAI API key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="Gpt5ApiKeyBox" Margin="0,0,8,0" TextChanged="Setting_Changed"/>
+                                        <TextBlock x:Name="Gpt5ApiKeyStatus" Grid.Column="1" Text="●" FontSize="16" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <StackPanel x:Name="ClaudeApiKeyPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                    <TextBlock Text="Claude API key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ClaudeApiKeyBox" Margin="0,0,8,0" TextChanged="Setting_Changed"/>
+                                        <TextBlock x:Name="ClaudeApiKeyStatus" Grid.Column="1" Text="●" FontSize="16" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <StackPanel x:Name="GeminiModelPanel" Margin="0,16,0,0">
+                                    <TextBlock Text="Gemini model" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="GeminiModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="gemini-3.1-flash-lite-preview (fastest)" Tag="gemini-3.1-flash-lite-preview"/>
+                                        <ComboBoxItem Content="gemini-3-flash-preview (fast)" Tag="gemini-3-flash-preview"/>
+                                        <ComboBoxItem Content="gemini-2.5-flash (stable)" Tag="gemini-2.5-flash"/>
+                                        <ComboBoxItem Content="gemini-2.5-pro (smart)" Tag="gemini-2.5-pro"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <StackPanel x:Name="Gpt5ModelPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                    <TextBlock Text="GPT-5 model" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="Gpt5ModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="gpt-5.4-nano (fastest)" Tag="gpt-5.4-nano"/>
+                                        <ComboBoxItem Content="gpt-5.4-mini (balanced)" Tag="gpt-5.4-mini"/>
+                                        <ComboBoxItem Content="gpt-5.4 (smart)" Tag="gpt-5.4"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <StackPanel x:Name="ClaudeModelPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                    <TextBlock Text="Claude model" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="ClaudeModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="claude-haiku-4-5 (fast)" Tag="claude-haiku-4-5-20251001"/>
+                                        <ComboBoxItem Content="claude-sonnet-4-5 (smart)" Tag="claude-sonnet-4-5-20250214"/>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <StackPanel x:Name="OllamaPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                    <Border Style="{StaticResource ExperimentalCardStyle}" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="Experimental local engine" Foreground="{StaticResource Warning}" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Ollama can be excellent when your local model and hardware are a good fit, but results vary more than hosted providers." Foreground="{StaticResource TextSecondary}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock Text="Ollama model" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="OllamaModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="qwen3:30b-a3b (best)" Tag="qwen3:30b-a3b"/>
+                                        <ComboBoxItem Content="qwen3:8b (fast)" Tag="qwen3:8b"/>
+                                        <ComboBoxItem Content="mistral:7b (great prose)" Tag="mistral:7b"/>
+                                        <ComboBoxItem Content="qwen2.5:7b (well-tested)" Tag="qwen2.5:7b"/>
+                                        <ComboBoxItem Content="llama3.1:8b (Meta 8B)" Tag="llama3.1:8b"/>
+                                        <ComboBoxItem Content="llama3.2:latest (fastest)" Tag="llama3.2:latest"/>
+                                        <ComboBoxItem Content="qwen2.5:0.5b-base (tiny)" Tag="qwen2.5:0.5b-base"/>
+                                    </ComboBox>
+                                    <TextBlock Text="Endpoint" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,14,0,6"/>
+                                    <TextBox x:Name="OllamaEndpointBox" TextChanged="Setting_Changed"/>
+                                    <TextBlock x:Name="OllamaStatus" Text="Checking..." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,10,0,0"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="OpenRouterPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                    <TextBlock Text="OpenRouter API key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="OpenRouterApiKeyBox" Margin="0,0,8,0" TextChanged="Setting_Changed"/>
+                                        <TextBlock x:Name="OpenRouterApiKeyStatus" Grid.Column="1" Text="●" FontSize="16" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="OpenRouter model" Foreground="{StaticResource TextSecondary}" FontSize="12" VerticalAlignment="Center"/>
+                                        <Button x:Name="OpenRouterRefreshBtn" Grid.Column="1" Content="Refresh" Style="{StaticResource SecondaryButton}" Click="OpenRouterRefresh_Click"/>
+                                    </Grid>
+                                    <ComboBox x:Name="OpenRouterModelCombo" SelectionChanged="OpenRouterModelCombo_SelectionChanged"/>
+                                    <TextBlock x:Name="OpenRouterModelStatus" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0"/>
+                                    <TextBlock x:Name="OpenRouterReasoningWarning" Text="Reasoning-first models tend to be slower and less consistent for autocomplete." Foreground="{StaticResource Warning}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardStyle}">
                             <StackPanel>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="System Prompt" FontSize="14" FontWeight="SemiBold" 
-                                               Foreground="{StaticResource TextPrimary}"/>
-                                    <Button Grid.Column="1" Content="Reset to Default" Style="{StaticResource SecondaryButton}" 
-                                            Click="ResetPrompt_Click"/>
+                                    <TextBlock Text="System prompt" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <Button Grid.Column="1" Content="Reset to default" Style="{StaticResource SecondaryButton}" Click="ResetPrompt_Click"/>
                                 </Grid>
-                                <TextBlock Text="Instructions given to the AI. Only change if you know what you're doing." 
-                                           Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
-                                
-                                <TextBox x:Name="PromptBox" AcceptsReturn="True" TextWrapping="Wrap"
-                                         VerticalScrollBarVisibility="Auto" Height="350"
-                                         FontFamily="Consolas" FontSize="12" TextChanged="Setting_Changed"/>
+                                <TextBlock Text="These instructions are sent to the model. Only edit them if you want to deeply customize behavior." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,14" TextWrapping="Wrap"/>
+                                <TextBox x:Name="PromptBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="320" FontFamily="Consolas" FontSize="12" TextChanged="Setting_Changed"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                </Grid>
+            </ScrollViewer>
 
-        </TabControl>
-
-        <!-- Footer -->
-        <Border Grid.Row="2" Background="{StaticResource BgCard}" BorderBrush="{StaticResource Border}" 
-                BorderThickness="0,1,0,0" Padding="20,12">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Changes save automatically" 
-                               Foreground="{StaticResource TextMuted}" FontSize="12" 
-                               VerticalAlignment="Center"/>
-                    <TextBlock x:Name="SaveStatus" Text=" ✓ Saved" 
-                               Foreground="{StaticResource Success}" FontSize="12" 
-                               FontWeight="SemiBold" VerticalAlignment="Center" Opacity="0"/>
-                </StackPanel>
-                <Button Grid.Column="1" Content="Done" Style="{StaticResource PrimaryButton}" Click="Done_Click"/>
-            </Grid>
-        </Border>
+            <Border Grid.Row="2" Background="{StaticResource BgSidebar}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="16" Padding="18,14" Margin="0,18,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Changes save automatically" Foreground="{StaticResource TextMuted}" FontSize="12" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="SaveStatus" Text=" Saved" Foreground="{StaticResource Success}" FontSize="12" FontWeight="SemiBold" Opacity="0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Done" Style="{StaticResource PrimaryButton}" Click="Done_Click"/>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

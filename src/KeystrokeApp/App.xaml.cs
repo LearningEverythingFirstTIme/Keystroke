@@ -83,6 +83,8 @@ public partial class App : Application
     private readonly ITextInjector _textInjector;
     private long _predictionRequestCounter;
     private long _activePredictionRequestId;
+    private long _lastBufferTraceTicks;
+    private int _lastTracedBufferLength;
     private volatile string _predictionState = "Idle";
 
     private string _logPath = Path.Combine(

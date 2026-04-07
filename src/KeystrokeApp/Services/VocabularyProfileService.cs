@@ -418,7 +418,7 @@ public class VocabularyProfileService
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             Log($"Loaded: {_profile?.Categories.Count ?? 0} categories");
         }
-        catch (Exception ex) { Log($"Load error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Load error: {ex}"); }
     }
 
     private void SaveProfile()
@@ -431,7 +431,7 @@ public class VocabularyProfileService
             File.WriteAllText(tempPath, json);
             File.Move(tempPath, _profilePath, overwrite: true);
         }
-        catch (Exception ex) { Log($"Save error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Save error: {ex}"); }
     }
 
     private List<VocabEntry> LoadAcceptedEntries()
@@ -441,7 +441,7 @@ public class VocabularyProfileService
         {
             if (!File.Exists(_dataPath)) return entries;
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            foreach (var line in File.ReadAllLines(_dataPath))
+            foreach (var line in File.ReadLines(_dataPath))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 try
@@ -454,7 +454,7 @@ public class VocabularyProfileService
                 catch { /* malformed line — skip */ }
             }
         }
-        catch (Exception ex) { Log($"Read error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Read error: {ex}"); }
         return entries;
     }
 

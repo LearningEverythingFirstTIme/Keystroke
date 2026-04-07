@@ -22,6 +22,12 @@ public class ContextSnapshot
     public string WindowTitle { get; init; } = "";
 
     /// <summary>
+    /// Privacy-safe app context string suitable for outbound prompts.
+    /// This should never contain the raw window title.
+    /// </summary>
+    public string SafeContextLabel { get; init; } = "";
+
+    /// <summary>
     /// OCR-captured text from the screen. Null if OCR hasn't run yet or failed.
     /// </summary>
     public string? ScreenText { get; init; }

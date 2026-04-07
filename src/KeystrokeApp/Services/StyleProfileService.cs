@@ -156,7 +156,7 @@ public class StyleProfileService
             _profile = JsonSerializer.Deserialize<StyleProfileData>(json);
             Log($"Loaded: categories={_profile?.CategoryProfiles?.Count ?? 0}, general={_profile?.GeneralProfile?.Length ?? 0} chars");
         }
-        catch (Exception ex) { Log($"Load error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Load error: {ex}"); }
     }
 
     private void SaveProfile()
@@ -169,7 +169,7 @@ public class StyleProfileService
             File.WriteAllText(tempPath, json);
             File.Move(tempPath, _profilePath, overwrite: true);
         }
-        catch (Exception ex) { Log($"Save error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Save error: {ex}"); }
     }
 
     private async Task GenerateProfileAsync()
@@ -265,7 +265,7 @@ public class StyleProfileService
             ProfileUpdated?.Invoke();
         }
         catch (OperationCanceledException) { Log("Generation cancelled"); }
-        catch (Exception ex) { Log($"Generate error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Generate error: {ex}"); }
         finally { lock (_lock) { _isGenerating = false; } }
     }
 
@@ -301,9 +301,8 @@ public class StyleProfileService
         try
         {
             if (!File.Exists(_dataPath)) return entries;
-            var lines = File.ReadAllLines(_dataPath);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            foreach (var line in lines)
+            foreach (var line in File.ReadLines(_dataPath))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 try
@@ -316,7 +315,7 @@ public class StyleProfileService
                 catch { }
             }
         }
-        catch (Exception ex) { Log($"Read error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Read error: {ex}"); }
         return entries;
     }
 

@@ -7,7 +7,7 @@ A system-wide AI autocomplete for Windows. Keystroke runs in the background, lis
 ## How it works
 
 1. An input listener detects your typing across all applications
-2. After a brief debounce, your typed text is sent to the AI engine along with context from the active window
+2. After a brief debounce, Keystroke builds a privacy-sanitized context bundle and sends only the allowed parts to the AI engine
 3. A suggestion panel appears near your cursor with the predicted completion
 4. Press **Tab** to accept, **Shift+Tab** to accept one word at a time, **Esc** to dismiss, or just keep typing
 
@@ -46,7 +46,11 @@ A system-wide AI autocomplete for Windows. Keystroke runs in the background, lis
 
 ### Security and privacy
 - **DPAPI-encrypted API keys** — keys are encrypted at rest using Windows Data Protection API, never stored in plaintext
-- **PII filtering** — Luhn-validated credit card redaction, SSN/email/phone scrubbing before data leaves the device
+- **Centralized egress sanitization** — OCR, rolling context, learning hints, and few-shot examples all pass through one outbound privacy layer before any cloud request
+- **Safe app context labels** — raw window titles stay local; outbound prompts use coarse app/category labels instead
+- **Expanded sensitive-data detection** — detects credit cards, SSNs, email, phone, IPs, JWTs, bearer tokens, API keys, private keys, IBANs, and more
+- **High-risk input blocking** — predictions are suppressed entirely when the actively typed text appears to contain secrets or other blocking sensitive data
+- **Custom privacy rules** — add your own regex-based redaction/blocking rules in `%AppData%/Keystroke/privacy-rules.json`
 - **No telemetry** — all data stays on your machine; completion feedback is local-only JSONL
 - **Consent-first** — input processing only activates after explicit user consent on first launch
 - **Auto-pruning** — log files and completion data are automatically pruned to prevent unbounded disk usage
@@ -74,20 +78,20 @@ Download `KeystrokeApp.exe` from the [Releases](../../releases) page and run it 
 
 ```bash
 git clone https://github.com/LearningEverythingFirstTIme/Keystroke.git
-cd Keystroke/src
-dotnet build KeystrokeApp
+cd Keystroke
+powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 Run directly for development:
 
 ```bash
-dotnet run --project KeystrokeApp
+dotnet run --project src/KeystrokeApp/KeystrokeApp.csproj
 ```
 
 Build a portable single-file exe:
 
 ```bash
-dotnet publish KeystrokeApp -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish src/KeystrokeApp/KeystrokeApp.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
 ### First-time setup
@@ -166,7 +170,9 @@ src/KeystrokeApp/
     AppCategory.cs                   # App classification and tone hints
     AppConfig.cs                     # Configuration with DPAPI-encrypted key storage
     ApiKeyEncryption.cs              # Windows DPAPI encryption/decryption for API keys
-    PiiFilter.cs                     # PII scrubbing with Luhn-validated credit card detection
+    PiiFilter.cs                     # Centralized text redaction built on the sensitive-data detector
+    SensitiveDataDetector.cs         # Secret/PII detection with built-in + custom regex rules
+    OutboundPrivacyService.cs        # Single policy layer for all outbound prompt text
     ContaminationFilter.cs           # Shared prompt-leakage and contamination detection
     TypingBuffer.cs                  # Input accumulation buffer
     DebounceTimer.cs                 # Configurable debounce with cancellation
@@ -189,7 +195,11 @@ src/KeystrokeApp/
 ## Security
 
 - **API keys** are encrypted at rest using Windows DPAPI (Data Protection API) — they are never stored in plaintext on disk. Legacy plaintext keys from older versions are automatically detected and re-encrypted on startup.
-- **PII filtering** scrubs credit card numbers (Luhn-validated), SSNs, email addresses, and phone numbers before any data is sent to the AI engine. API key patterns (`sk-`, `AIzaSy`, `ghp_`, `AKIA`, AWS keys) are also stripped from outgoing text.
+- **Centralized outbound privacy policy** — all prompt-bound text now flows through a single sanitization layer before any cloud request is built.
+- **No raw window titles in prompts** — window titles are still used locally for app classification, but outbound prompts receive only a safe label such as `chrome (Browser)` or `code (Code)`.
+- **Expanded secret detection** — outgoing text is scrubbed for credit cards (Luhn-validated), SSNs, email addresses, phone numbers, IPv4/IPv6 addresses, JWTs, bearer tokens, GitHub/OpenAI/Google/AWS-style keys, private key blocks, IBANs, and password/token assignment patterns.
+- **Blocking on high-risk active input** — if the text currently being typed appears to contain secrets or other blocking sensitive data, Keystroke suppresses prediction instead of sending the prefix upstream.
+- **Custom privacy rules** — advanced users can define additional redaction/blocking patterns in `%AppData%/Keystroke/privacy-rules.json`.
 - **Contamination filtering** — prompt-leakage patterns are detected and excluded from all learning data so the model never trains on its own system prompt artifacts.
 - **No telemetry** — all data stays on your machine. Completion feedback is local-only JSONL, auto-pruned to 2,000 entries.
 - **Consent-first** — input processing only activates after explicit user consent on first launch.

@@ -17,12 +17,14 @@ namespace KeystrokeApp.Services;
 /// </summary>
 public class AcceptanceLearningService
 {
+    private static readonly OutboundPrivacyService OutboundPrivacy = new();
     private readonly string _dataPath;
     private readonly string _logPath;
     private readonly List<TrackingEntry> _acceptedEntries;
     private readonly List<TrackingEntry> _dismissedEntries;
     private readonly object _lock = new();
     private DateTime _lastFileRead;
+    private DateTime _lastFileWriteUtc;
     private long _lastFileSize;
 
     // Configuration
@@ -79,6 +81,7 @@ public class AcceptanceLearningService
         _acceptedEntries  = new List<TrackingEntry>();
         _dismissedEntries = new List<TrackingEntry>();
         _lastFileRead = DateTime.MinValue;
+        _lastFileWriteUtc = DateTime.MinValue;
         _lastFileSize = 0;
 
         Log($"Initialized. Looking for completions data at: {_dataPath}");
@@ -153,7 +156,10 @@ public class AcceptanceLearningService
                 }
             }
 
-            return selected;
+            return selected
+                .Select(OutboundPrivacy.SanitizeFewShotExample)
+                .Where(e => !string.IsNullOrWhiteSpace(e.Prefix) || !string.IsNullOrWhiteSpace(e.Completion))
+                .ToList();
         }
     }
 
@@ -208,6 +214,8 @@ public class AcceptanceLearningService
                     Context    = $"{x.Entry.App} ({x.Entry.Category})",
                     IsNegative = true
                 })
+                .Select(OutboundPrivacy.SanitizeFewShotExample)
+                .Where(e => !string.IsNullOrWhiteSpace(e.Completion))
                 .ToList();
         }
     }
@@ -232,8 +240,8 @@ public class AcceptanceLearningService
             _sessionBuffer.Enqueue(new SessionAccept
             {
                 Timestamp  = DateTime.UtcNow,
-                Prefix     = prefix,
-                Completion = completion,
+                Prefix     = PiiFilter.Scrub(prefix) ?? "",
+                Completion = PiiFilter.Scrub(completion) ?? "",
                 Category   = category
             });
             // Hard cap — oldest entries fall off automatically
@@ -373,17 +381,32 @@ public class AcceptanceLearningService
         try
         {
             var fileInfo = new FileInfo(_dataPath);
-            Log($"Refreshing from {_dataPath}");
-            Log($"File size: {fileInfo.Length}, Last read: {_lastFileSize}");
+            var currentWriteUtc = fileInfo.LastWriteTimeUtc;
 
             lock (_lock)
             {
+                // Nothing changed on disk since the last successful refresh.
+                // Skip reparsing the entire file; this hot path runs during prediction.
+                if (_lastFileSize > 0 &&
+                    fileInfo.Length == _lastFileSize &&
+                    currentWriteUtc == _lastFileWriteUtc)
+                {
+                    _lastFileRead = DateTime.UtcNow;
+                    return;
+                }
+
+                Log($"Refreshing from {_dataPath}");
+                Log($"File size: {fileInfo.Length}, Last read: {_lastFileSize}");
+
                 // File was truncated/rotated — reload from the start.
-                if (fileInfo.Length < _lastFileSize)
+                // Also reload fully if it was rewritten in place and kept the same size.
+                if (fileInfo.Length < _lastFileSize ||
+                    (fileInfo.Length == _lastFileSize && currentWriteUtc != _lastFileWriteUtc))
                 {
                     Log("File truncated, clearing cache");
                     _acceptedEntries.Clear();
                     _dismissedEntries.Clear();
+                    _lastFileSize = 0;
                 }
 
                 using var stream = File.Open(_dataPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -445,6 +468,7 @@ public class AcceptanceLearningService
 
                 _lastFileRead = DateTime.UtcNow;
                 _lastFileSize = fileInfo.Length;
+                _lastFileWriteUtc = currentWriteUtc;
             }
         }
         catch (Exception ex)
@@ -500,20 +524,20 @@ public class AcceptanceLearningService
     {
         var cutoff = dismissed.Timestamp.AddSeconds(60);
 
-        // Check accepted entries for a follow-up
+        // Entries are in chronological order — skip before window, break after.
         foreach (var e in _acceptedEntries)
         {
-            if (e.Timestamp > dismissed.Timestamp && e.Timestamp <= cutoff
-                && string.Equals(e.Category, dismissed.Category, StringComparison.OrdinalIgnoreCase))
+            if (e.Timestamp <= dismissed.Timestamp) continue;
+            if (e.Timestamp > cutoff) break;
+            if (string.Equals(e.Category, dismissed.Category, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 
-        // Check other dismissed entries for a follow-up
         foreach (var e in _dismissedEntries)
         {
-            if (e == dismissed) continue;
-            if (e.Timestamp > dismissed.Timestamp && e.Timestamp <= cutoff
-                && string.Equals(e.Category, dismissed.Category, StringComparison.OrdinalIgnoreCase))
+            if (e.Timestamp <= dismissed.Timestamp) continue;
+            if (e.Timestamp > cutoff) break;
+            if (string.Equals(e.Category, dismissed.Category, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 

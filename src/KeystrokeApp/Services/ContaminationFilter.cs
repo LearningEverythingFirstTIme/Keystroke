@@ -14,9 +14,8 @@ public static class ContaminationFilter
     /// </summary>
     public static bool IsContaminated(string completion)
     {
-        var lower = completion.ToLowerInvariant();
         foreach (var phrase in ContaminationPhrases)
-            if (lower.Contains(phrase))
+            if (completion.Contains(phrase, StringComparison.OrdinalIgnoreCase))
                 return true;
         return false;
     }

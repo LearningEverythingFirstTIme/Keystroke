@@ -64,8 +64,12 @@ public class RollingContextService
                 _context.Remove(0, excess);
                 
                 // Try to find a clean word boundary to start from
-                int firstSpace = _context.ToString().IndexOf(' ');
-                if (firstSpace > 0 && firstSpace < 20)
+                int firstSpace = -1;
+                for (int i = 0; i < _context.Length && i < 20; i++)
+                {
+                    if (_context[i] == ' ') { firstSpace = i; break; }
+                }
+                if (firstSpace > 0)
                 {
                     _context.Remove(0, firstSpace + 1);
                 }

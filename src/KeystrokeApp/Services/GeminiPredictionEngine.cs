@@ -22,7 +22,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
         _apiKey         = apiKey;
         _endpoint       = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
         _streamEndpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse";
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _httpClient = CreatePooledHttpClient(TimeSpan.FromSeconds(10));
         _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", _apiKey);
     }
 
@@ -84,18 +84,13 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
             if (string.IsNullOrWhiteSpace(completion)) return null;
 
-            completion = completion.Trim('"').Trim();
-            if (completion.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                completion = completion[prefix.Length..].TrimStart();
-
-            completion = TrimToWholeWords(completion);
-            completion = RejectDuplicate(prefix, completion!);
-            if (!string.IsNullOrWhiteSpace(completion))
-                RecordRecentCompletion(completion);
-            return string.IsNullOrWhiteSpace(completion) ? null : completion;
+            var processed = PostProcessCompletion(prefix, completion);
+            if (!string.IsNullOrWhiteSpace(processed))
+                RecordRecentCompletion(processed);
+            return processed;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Exception: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"Exception: {ex}"); return null; }
     }
 
     public async Task<string?> PredictStreamingAsync(ContextSnapshot context, Action<string> onChunk, CancellationToken ct = default)
@@ -146,60 +141,14 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 return null;
             }
 
-            var fullCompletion = new StringBuilder();
-            bool isFirstChunk  = true;
-            var degenDetector  = CreateDegenerationDetector();
-
-            using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var reader = new System.IO.StreamReader(stream);
-
-            while (!reader.EndOfStream && !ct.IsCancellationRequested)
+            return await ParseSseStreamAsync(response, prefix, dataJson =>
             {
-                var line = await reader.ReadLineAsync(ct);
-                if (line == null) break;
-                if (!line.StartsWith("data: ")) continue;
-
-                var dataJson = line[6..];
-                try
-                {
-                    var chunk = JsonSerializer.Deserialize<GeminiResponse>(dataJson);
-                    var text  = chunk?.Candidates?[0]?.Content?.Parts?[0]?.Text;
-
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        if (isFirstChunk)
-                        {
-                            text = text.TrimStart('"');
-                            if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                                text = text[prefix.Length..];
-                            if (text.Length > 0 && !prefix.EndsWith(" ") && !text.StartsWith(" "))
-                                text = " " + text;
-                            isFirstChunk = false;
-                        }
-
-                        // Abort early if the model is degenerating (repeating characters)
-                        if (degenDetector.IsDegenerate(text))
-                        {
-                            Log($"Stream aborted: degeneration detected after {fullCompletion.Length} chars");
-                            break;
-                        }
-
-                        fullCompletion.Append(text);
-                        onChunk(text);
-                    }
-                }
-                catch (JsonException) { /* malformed chunk — skip */ }
-            }
-
-            var result = TrimToWholeWords(fullCompletion.ToString().TrimEnd('"').Trim());
-            result = RejectDuplicate(prefix, result) ?? "";
-            Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected as duplicate)" : "")}");
-            if (!string.IsNullOrWhiteSpace(result))
-                RecordRecentCompletion(result);
-            return string.IsNullOrWhiteSpace(result) ? null : result;
+                var chunk = JsonSerializer.Deserialize<GeminiResponse>(dataJson);
+                return chunk?.Candidates?[0]?.Content?.Parts?[0]?.Text;
+            }, onChunk, ct);
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Stream exception: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"Stream exception: {ex}"); return null; }
     }
 
     /// <summary>
@@ -252,22 +201,15 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             foreach (var candidate in result.Candidates)
             {
                 var text = candidate?.Content?.Parts?[0]?.Text?.Trim();
-                if (string.IsNullOrWhiteSpace(text)) continue;
-                text = text.Trim('"');
-                if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    text = text[prefix.Length..];
-                if (text.Length > 0 && !prefix.EndsWith(" ") && !text.StartsWith(" "))
-                    text = " " + text;
-                text = TrimToWholeWords(text.Trim('"'));
-                text = RejectDuplicate(prefix, text!);
-                if (!string.IsNullOrWhiteSpace(text) && !results.Contains(text))
-                    results.Add(text);
+                var processed = PostProcessCompletion(prefix, text);
+                if (!string.IsNullOrWhiteSpace(processed) && !results.Contains(processed))
+                    results.Add(processed);
             }
 
             Log($"Got {results.Count} alternatives");
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Log($"Alternatives error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Alternatives error: {ex}"); }
 
         return results;
     }
@@ -317,7 +259,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             return result?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
     }
 
     private class GeminiResponse  { [JsonPropertyName("candidates")] public GeminiCandidate[]? Candidates { get; set; } }

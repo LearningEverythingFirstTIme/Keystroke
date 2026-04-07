@@ -161,7 +161,7 @@ public partial class SuggestionPanel : Window
         foreach (var alt in alternatives)
         {
             var normalized = alt.Trim().Trim('"');
-            if (!string.IsNullOrWhiteSpace(normalized) && !_suggestions.Contains(normalized))
+            if (!string.IsNullOrWhiteSpace(normalized) && !_suggestions.Contains(normalized, StringComparer.OrdinalIgnoreCase))
                 _suggestions.Add(normalized);
         }
 

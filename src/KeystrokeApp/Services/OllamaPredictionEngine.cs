@@ -32,7 +32,7 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
         _isBaseModel = model.Contains("base", StringComparison.OrdinalIgnoreCase);
         // Use InfiniteTimeSpan so the prediction CancellationToken (TimeoutMs) governs
         // timeouts — not a hard HttpClient limit. Large models (30B+) need 60-120s cold start.
-        _httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        _httpClient = CreatePooledHttpClient(Timeout.InfiniteTimeSpan);
     }
 
     public void Dispose() => _httpClient.Dispose();
@@ -95,7 +95,7 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             return JsonSerializer.Deserialize<OllamaChatResponse>(respBody)?.Message?.Content?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
     }
 
     // ── Instruct path: /api/chat (non-Qwen3) and /api/generate raw (Qwen3) ──
@@ -591,7 +591,7 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 if (!string.IsNullOrWhiteSpace(c) && !results.Contains(c)) results.Add(c);
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Log($"Alt error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Alt error: {ex}"); }
         return results;
     }
 
@@ -674,9 +674,10 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
 internal static class HttpClientExtensions
 {
-    public static async Task<HttpResponseMessage> GetAsync(this HttpClient client, string url, TimeSpan timeout)
+    public static async Task<HttpResponseMessage> GetAsync(this HttpClient client, string url, TimeSpan timeout, CancellationToken ct = default)
     {
-        using var cts = new CancellationTokenSource(timeout);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
         return await client.GetAsync(url, cts.Token);
     }
 }

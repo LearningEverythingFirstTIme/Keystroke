@@ -2,6 +2,8 @@
 **/bin/
 **/obj/
 publish/
+artifacts/
+TestResults/
 
 # IDE
 .vs/

@@ -23,8 +23,10 @@ public class ScreenReaderService : IDisposable
 
     // Reusable GDI+ bitmap and MemoryStream — avoids a large allocation every 3 seconds.
     // Recreated only when the window dimensions change.
+    // Guarded by _ocrLock to prevent concurrent mutation if two reads overlap.
     private Bitmap? _reusableBitmap;
     private readonly MemoryStream _reusableMs = new();
+    private readonly SemaphoreSlim _ocrLock = new(1, 1);
 
     /// <summary>
     /// Maximum characters to keep from OCR output.
@@ -74,6 +76,10 @@ public class ScreenReaderService : IDisposable
     public async Task ReadScreenAsync()
     {
         if (_ocrEngine == null || _disposed)
+            return;
+
+        // Skip if a previous read is still in progress (e.g. slow GPU decode).
+        if (!_ocrLock.Wait(0))
             return;
 
         try
@@ -137,6 +143,10 @@ public class ScreenReaderService : IDisposable
         catch (Exception ex)
         {
             Log($"Screen read error: {ex.Message}");
+        }
+        finally
+        {
+            _ocrLock.Release();
         }
     }
 
@@ -219,6 +229,7 @@ public class ScreenReaderService : IDisposable
         _disposed = true;
         _reusableBitmap?.Dispose();
         _reusableMs.Dispose();
+        _ocrLock.Dispose();
         GC.SuppressFinalize(this);
     }
 }

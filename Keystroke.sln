@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{2FEF2B53-964C-445D-9973-56EE8BEF869F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeystrokeApp", "src\KeystrokeApp\KeystrokeApp.csproj", "{CCDD816C-395B-49F9-A46A-57230E47BCB2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeystrokeHook", "src\KeystrokeHook\KeystrokeHook.csproj", "{40BE2F9B-D145-4B2F-8256-94B363E7E4EF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A3408542-9B43-4100-AA75-778D7F97A7D0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeystrokeApp.Tests", "tests\KeystrokeApp.Tests\KeystrokeApp.Tests.csproj", "{C4D2335D-90B1-4061-B58A-1191A56F971D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CCDD816C-395B-49F9-A46A-57230E47BCB2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCDD816C-395B-49F9-A46A-57230E47BCB2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCDD816C-395B-49F9-A46A-57230E47BCB2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCDD816C-395B-49F9-A46A-57230E47BCB2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{40BE2F9B-D145-4B2F-8256-94B363E7E4EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{40BE2F9B-D145-4B2F-8256-94B363E7E4EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{40BE2F9B-D145-4B2F-8256-94B363E7E4EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{40BE2F9B-D145-4B2F-8256-94B363E7E4EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4D2335D-90B1-4061-B58A-1191A56F971D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4D2335D-90B1-4061-B58A-1191A56F971D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{CCDD816C-395B-49F9-A46A-57230E47BCB2} = {2FEF2B53-964C-445D-9973-56EE8BEF869F}
+		{40BE2F9B-D145-4B2F-8256-94B363E7E4EF} = {2FEF2B53-964C-445D-9973-56EE8BEF869F}
+		{C4D2335D-90B1-4061-B58A-1191A56F971D} = {A3408542-9B43-4100-AA75-778D7F97A7D0}
+	EndGlobalSection
+EndGlobal

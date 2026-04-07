@@ -20,11 +20,19 @@ public partial class SettingsWindow : Window
     private DispatcherTimer? _saveDebounceTimer;
     private CancellationTokenSource? _modelFetchCts;
 
+    // Shared HttpClient for Ollama status checks — avoids socket exhaustion from
+    // creating/disposing clients on every engine switch or settings change.
+    private static readonly System.Net.Http.HttpClient OllamaStatusClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(3)
+    };
+
     /// <summary>Fired immediately when the user picks a theme swatch.</summary>
     public event Action<string>? ThemeChanged;
 
     public SettingsWindow(
         AppConfig config,
+        AcceptanceLearningService? learningService          = null,
         StyleProfileService?      styleProfileService      = null,
         VocabularyProfileService? vocabularyProfileService = null,
         LearningScoreService?     learningScoreService     = null)
@@ -34,11 +42,12 @@ public partial class SettingsWindow : Window
         _styleProfileService      = styleProfileService;
         _vocabularyProfileService = vocabularyProfileService;
         _learningScoreService     = learningScoreService;
-        _learningService          = new AcceptanceLearningService();
+        _learningService          = learningService;
         LoadValues();
         LoadLearningStats();
         LoadVocabularyProfileStatus();
         UpdateSwatchSelection(_config.ThemeId);
+        ShowSection("Overview");
         _loading = false;
         Closed += OnWindowClosed;
     }
@@ -51,6 +60,112 @@ public partial class SettingsWindow : Window
         _modelFetchCts?.Dispose();
         _modelFetchCts = null;
         _learningService = null;
+    }
+
+    private void ShowSection(string section)
+    {
+        OverviewSection.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
+        SuggestionsSection.Visibility = section == "Suggestions" ? Visibility.Visible : Visibility.Collapsed;
+        PersonalizationSection.Visibility = section == "Personalization" ? Visibility.Visible : Visibility.Collapsed;
+        AppearanceSection.Visibility = section == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
+        AdvancedSection.Visibility = section == "Advanced" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateExperienceSummary()
+    {
+        string length = LengthCombo.SelectedItem is ComboBoxItem lengthItem
+            ? lengthItem.Tag?.ToString() ?? "extended"
+            : "extended";
+
+        string lengthLabel = length switch
+        {
+            "brief" => "brief suggestions",
+            "standard" => "standard suggestions",
+            "extended" => "balanced suggestions",
+            "unlimited" => "deep suggestions",
+            _ => "balanced suggestions"
+        };
+
+        string speedLabel = DebounceSlider.Value <= 200 ? "quick to appear"
+            : DebounceSlider.Value <= 400 ? "paced for flow"
+            : "deliberate and cautious";
+
+        HeroTitleText.Text = $"Keystroke is tuned for {lengthLabel}";
+        HeroSubtitleText.Text = $"It feels {speedLabel}, with {SuggestionsSlider.Value:0} option{(SuggestionsSlider.Value == 1 ? "" : "s")} ready when you pause.";
+
+        var engineName = (EngineCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Gemini";
+        var learningOn = LearningEnabledCheck.IsChecked == true;
+        var contextOn = RollingContextCheck.IsChecked == true || OcrEnabledCheck.IsChecked == true;
+
+        HeroEngineStatusText.Text = engineName;
+        HeroLearningStatusText.Text = learningOn ? "Learning on" : "Learning off";
+        HeroContextStatusText.Text = contextOn ? "Context on" : "Context light";
+        HeroThemeStatusText.Text = $"Theme: {ThemeDefinitions.Get(_config.ThemeId).DisplayName}";
+
+        OverviewFeelText.Text = $"Configured for {lengthLabel} that feel {speedLabel}.";
+        OverviewLengthSummaryText.Text = char.ToUpper(lengthLabel[0]) + lengthLabel[1..];
+        OverviewSpeedSummaryText.Text = $"{(int)DebounceSlider.Value}ms after words";
+        OverviewSuggestionSummaryText.Text = $"{(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} shown";
+
+        OverviewEngineStatusText.Text = $"{engineName} is active.";
+        OverviewLearningStatusText.Text = learningOn
+            ? "Using accepted suggestions to shape future completions."
+            : "Learning is off, so Keystroke will not adapt from acceptances.";
+
+        var privacyBits = new List<string>();
+        privacyBits.Add(OcrEnabledCheck.IsChecked == true ? "screen context on" : "screen context off");
+        privacyBits.Add(RollingContextCheck.IsChecked == true ? "recent text memory on" : "recent text memory off");
+        OverviewPrivacyStatusText.Text = string.Join(", ", privacyBits) + ".";
+        OverviewPrivacyDetailText.Text = $"Screen reading is {(OcrEnabledCheck.IsChecked == true ? "on" : "off")}. Learning is {(learningOn ? "on" : "off")}.";
+    }
+
+    private void UpdateFeatureCards()
+    {
+        RollingContextStatusText.Text = RollingContextCheck.IsChecked == true
+            ? "Recent text is being remembered so suggestions stay coherent."
+            : "Only the immediate text is used, so suggestions reset faster between thoughts.";
+
+        OcrStatusText.Text = OcrEnabledCheck.IsChecked == true
+            ? "Visible text on screen helps ground suggestions in what you are looking at."
+            : "No screen text is captured, which keeps privacy tighter but reduces grounding.";
+
+        LearningFeatureStatusText.Text = LearningEnabledCheck.IsChecked == true
+            ? "Accepted suggestions will feed back into your writing profile."
+            : "Accepted suggestions are not stored for learning right now.";
+
+        bool learningOn = LearningEnabledCheck.IsChecked == true;
+        StyleProfileCheck.IsEnabled = learningOn;
+        StyleProfileIntervalSlider.IsEnabled = learningOn && StyleProfileCheck.IsChecked == true;
+        StyleProfileDependencyText.Visibility = learningOn ? Visibility.Collapsed : Visibility.Visible;
+        StyleProfileCard.Opacity = learningOn ? 1.0 : 0.72;
+        StyleProfileFeatureText.Text = learningOn
+            ? "Builds a writing profile over time so phrasing and tone feel more like you."
+            : "Turn on learning first if you want Keystroke to build a style profile.";
+    }
+
+    private void UpdatePreview()
+    {
+        PreviewSuggestionText.Text = LengthCombo.SelectedItem is ComboBoxItem item && item.Tag?.ToString() == "brief"
+            ? ", will send shortly."
+            : LengthCombo.SelectedItem is ComboBoxItem item2 && item2.Tag?.ToString() == "standard"
+                ? ", I can send the cleaned-up draft this afternoon."
+                : LengthCombo.SelectedItem is ComboBoxItem item3 && item3.Tag?.ToString() == "unlimited"
+                    ? ", I can tighten it up, sanity check the tone, and send you a polished version before the meeting."
+                    : ", I can tighten it up before we send it.";
+
+        PreviewMetaText.Text = $"{(LengthCombo.SelectedItem as ComboBoxItem)?.Content} | {(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} | temp {TempSlider.Value:0.0}";
+
+        var theme = ThemeDefinitions.Get(_config.ThemeId);
+        var accentBrush = new SolidColorBrush(theme.ShadowColor);
+        var bubbleBrush = new SolidColorBrush(Color.FromArgb(255,
+            (byte)Math.Min(255, theme.ShadowColor.R / 2 + 28),
+            (byte)Math.Min(255, theme.ShadowColor.G / 2 + 32),
+            (byte)Math.Min(255, theme.ShadowColor.B / 2 + 54)));
+
+        PreviewAccentDot.Fill = accentBrush;
+        PreviewBorder.BorderBrush = new SolidColorBrush(theme.NormalBorder);
+        PreviewSuggestionBubble.BorderBrush = accentBrush;
+        PreviewSuggestionBubble.Background = bubbleBrush;
     }
 
     private void LoadValues()
@@ -120,9 +235,10 @@ public partial class SettingsWindow : Window
         LoadStyleProfileStatus();
         LoadStyleProfileProgress();
 
-        // Advanced / Beta
-        GhostTextCheck.IsChecked = _config.GhostTextEnabled;
         PromptBox.Text = _config.EffectiveSystemPrompt;
+        UpdateFeatureCards();
+        UpdateExperienceSummary();
+        UpdatePreview();
     }
 
     private void LoadLearningStats()
@@ -863,6 +979,15 @@ public partial class SettingsWindow : Window
         ClaudeModelPanel.Visibility   = e == 2 ? Visibility.Visible : Visibility.Collapsed;
         OllamaPanel.Visibility        = e == 3 ? Visibility.Visible : Visibility.Collapsed;
         OpenRouterPanel.Visibility    = e == 4 ? Visibility.Visible : Visibility.Collapsed;
+        ProviderDetailIntroText.Text = e switch
+        {
+            0 => "Gemini is active. Add your key and choose the model that matches your latency needs.",
+            1 => "GPT-5 is active. Add your OpenAI key and pick the model size you want.",
+            2 => "Claude is active. Add your Anthropic key and choose the tradeoff between speed and quality.",
+            3 => "Ollama is active. Make sure your local endpoint and pulled model are ready.",
+            4 => "OpenRouter is active. Use one key to access many hosted models.",
+            _ => "Dummy mode is active for testing only."
+        };
 
         if (e == 3) _ = CheckOllamaStatusAsync();
         if (e == 4) _ = LoadOpenRouterModelsAsync();
@@ -919,13 +1044,14 @@ public partial class SettingsWindow : Window
         _config.StyleProfileEnabled = StyleProfileCheck.IsChecked == true;
         _config.StyleProfileInterval = (int)StyleProfileIntervalSlider.Value;
         _config.MaxSuggestions = (int)SuggestionsSlider.Value;
-        _config.GhostTextEnabled = GhostTextCheck.IsChecked == true;
-
         var promptText = PromptBox.Text.Trim();
         _config.CustomSystemPrompt = (promptText == AppConfig.DefaultSystemPrompt) ? null : promptText;
 
         _config.Save();
         UpdateGeminiApiKeyStatus();
+        UpdateFeatureCards();
+        UpdateExperienceSummary();
+        UpdatePreview();
         ShowSaveIndicator();
     }
 
@@ -942,7 +1068,7 @@ public partial class SettingsWindow : Window
             OcrEnabledCheck.IsChecked = false;
             RollingContextCheck.IsChecked = false;
             LearningEnabledCheck.IsChecked = false;
-            StyleProfileCheck.IsChecked = true;
+            StyleProfileCheck.IsChecked = false;
             StyleProfileIntervalSlider.Value = 30;
             StyleProfileIntervalLabel.Text = "30";
             TempSlider.Value = 0.2;
@@ -1055,6 +1181,12 @@ public partial class SettingsWindow : Window
     }
 
     // Event handlers
+    private void NavigateSection_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string section })
+            ShowSection(section);
+    }
+
     private void Setting_Changed(object sender, RoutedEventArgs e) => SaveSettings();
     private void Setting_Changed(object sender, TextChangedEventArgs e) => DebouncedSave();
     private void Setting_Changed(object sender, SelectionChangedEventArgs e) => SaveSettings();
@@ -1106,6 +1238,7 @@ public partial class SettingsWindow : Window
     private void StyleProfileCheck_Changed(object sender, RoutedEventArgs e)
     {
         SaveSettings();
+        UpdateFeatureCards();
         LoadStyleProfileProgress();
     }
 
@@ -1119,8 +1252,7 @@ public partial class SettingsWindow : Window
             var endpoint = OllamaEndpointBox.Text.Trim().TrimEnd('/');
             var model = (OllamaModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "qwen2.5:0.5b";
 
-            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-            var response = await client.GetAsync($"{endpoint}/api/tags");
+            var response = await OllamaStatusClient.GetAsync($"{endpoint}/api/tags");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -1285,6 +1417,8 @@ public partial class SettingsWindow : Window
         _config.ThemeId = themeId;
         _config.Save();
         UpdateSwatchSelection(themeId);
+        UpdateExperienceSummary();
+        UpdatePreview();
         ThemeChanged?.Invoke(themeId);
         ShowSaveIndicator();
     }

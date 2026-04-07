@@ -31,15 +31,9 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
         _apiKey   = apiKey;
         _model    = model;
         _endpoint = "https://api.anthropic.com/v1/messages";
-        _httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(15),
-            DefaultRequestHeaders =
-            {
-                { "x-api-key", apiKey },
-                { "anthropic-version", "2024-10-22" }
-            }
-        };
+        _httpClient = CreatePooledHttpClient(TimeSpan.FromSeconds(15));
+        _httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
+        _httpClient.DefaultRequestHeaders.Add("anthropic-version", "2024-10-22");
     }
 
     public async Task<string?> PredictAsync(ContextSnapshot context, CancellationToken ct = default)
@@ -94,18 +88,13 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
             if (string.IsNullOrWhiteSpace(completion))
                 return null;
 
-            completion = completion.Trim('"').Trim();
-            if (completion.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                completion = completion[prefix.Length..].TrimStart();
-
-            completion = TrimToWholeWords(completion);
-            completion = RejectDuplicate(prefix, completion!);
-            if (!string.IsNullOrWhiteSpace(completion))
-                RecordRecentCompletion(completion);
-            return string.IsNullOrWhiteSpace(completion) ? null : completion;
+            var processed = PostProcessCompletion(prefix, completion);
+            if (!string.IsNullOrWhiteSpace(processed))
+                RecordRecentCompletion(processed);
+            return processed;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Exception: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"Exception: {ex}"); return null; }
     }
 
     public async Task<string?> PredictStreamingAsync(ContextSnapshot context, Action<string> onChunk, CancellationToken ct = default)
@@ -152,61 +141,14 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 return null;
             }
 
-            var fullCompletion = new StringBuilder();
-            bool isFirstChunk  = true;
-            var degenDetector  = CreateDegenerationDetector();
-
-            using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var reader = new System.IO.StreamReader(stream);
-
-            while (!reader.EndOfStream && !ct.IsCancellationRequested)
+            return await ParseSseStreamAsync(response, prefix, dataJson =>
             {
-                var line = await reader.ReadLineAsync(ct);
-                if (line == null) break;
-                if (!line.StartsWith("data: ")) continue;
-
-                var dataJson = line[6..];
-                if (dataJson == "[DONE]") continue;
-
-                try
-                {
-                    var chunk = JsonSerializer.Deserialize<ClaudeStreamEvent>(dataJson);
-                    var text  = chunk?.Delta?.Text;
-
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        if (isFirstChunk)
-                        {
-                            text = text.TrimStart('"');
-                            if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                                text = text[prefix.Length..];
-                            if (text.Length > 0 && !prefix.EndsWith(" ") && !text.StartsWith(" "))
-                                text = " " + text;
-                            isFirstChunk = false;
-                        }
-
-                        if (degenDetector.IsDegenerate(text))
-                        {
-                            Log($"Stream aborted: degeneration detected after {fullCompletion.Length} chars");
-                            break;
-                        }
-
-                        fullCompletion.Append(text);
-                        onChunk(text);
-                    }
-                }
-                catch (JsonException) { /* malformed chunk — skip */ }
-            }
-
-            var result = TrimToWholeWords(fullCompletion.ToString().TrimEnd('"').Trim());
-            result = RejectDuplicate(prefix, result) ?? "";
-            Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected as duplicate)" : "")}");
-            if (!string.IsNullOrWhiteSpace(result))
-                RecordRecentCompletion(result);
-            return string.IsNullOrWhiteSpace(result) ? null : result;
+                var chunk = JsonSerializer.Deserialize<ClaudeStreamEvent>(dataJson);
+                return chunk?.Delta?.Text;
+            }, onChunk, ct);
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Stream exception: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"Stream exception: {ex}"); return null; }
     }
 
     /// <summary>
@@ -253,14 +195,7 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
             foreach (var text in completions)
             {
-                if (string.IsNullOrWhiteSpace(text)) continue;
-                var processed = text.Trim('"');
-                if (processed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    processed = processed[prefix.Length..];
-                if (!prefix.EndsWith(" ") && processed.Length > 0 && !processed.StartsWith(" "))
-                    processed = " " + processed;
-                processed = TrimToWholeWords(processed.Trim('"'));
-                processed = RejectDuplicate(prefix, processed!);
+                var processed = PostProcessCompletion(prefix, text);
                 if (!string.IsNullOrWhiteSpace(processed) && !results.Contains(processed))
                     results.Add(processed);
             }
@@ -268,7 +203,7 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
             Log($"Got {results.Count} alternatives");
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Log($"Alternatives error: {ex.Message}"); }
+        catch (Exception ex) { Log($"Alternatives error: {ex}"); }
 
         return results;
     }
@@ -315,7 +250,7 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
             return result?.Content?[0]?.Text?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex.Message}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
     }
 
     public void Dispose() => _httpClient.Dispose();

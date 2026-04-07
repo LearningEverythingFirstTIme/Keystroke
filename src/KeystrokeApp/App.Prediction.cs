@@ -13,10 +13,7 @@ public partial class App
     private void OnBufferChanged(string newText)
     {
         LogToDebug($"Buffer: \"{newText}\" ({newText.Length} chars)");
-        _reliabilityTrace.Trace("buffer", "changed", "Typing buffer changed.", new Dictionary<string, string>
-        {
-            ["length"] = newText.Length.ToString()
-        });
+        TraceBufferChanged(newText);
 
         // Only cancel in-flight predictions if the user backspaced or the text diverged.
         // If they're just extending (typing forward), let the current prediction finish —
@@ -53,6 +50,8 @@ public partial class App
     {
         CancelPendingPrediction();
         _suggestionPanel?.HideSuggestion();
+        Interlocked.Exchange(ref _lastTracedBufferLength, 0);
+        Interlocked.Exchange(ref _lastBufferTraceTicks, 0);
 
         LogToDebug("Buffer cleared");
         _reliabilityTrace.Trace("buffer", "cleared", "Typing buffer cleared.");
@@ -291,19 +290,19 @@ public partial class App
                     }
                 }
 
-                // If the buffer advanced while this prediction was in-flight, immediately
-                // kick off a fresh prediction for the current position. Without this, the
-                // "don't restart if extending" guard holds off every debounce while a
-                // prediction runs — leaving the user with a stale result and no follow-up
-                // when they've typed ahead of the old prefix.
+                // If the buffer advanced while this prediction was in-flight, do NOT
+                // immediately issue a second request for the same typing burst.
+                // That follow-up often lands just after the first visible suggestion and
+                // overwrites it, which feels jittery and wastes tokens. Instead, keep the
+                // first suggestion on screen and let any *future* keystrokes trigger the
+                // next prediction naturally via the normal debounce path.
                 if (!ct.IsCancellationRequested)
                 {
                     var currentBuffer = _typingBuffer.CurrentText;
                     if (currentBuffer.Length > buffer.Length
                         && currentBuffer.StartsWith(buffer, StringComparison.Ordinal))
                     {
-                        LogToDebug($"Buffer advanced (\"{buffer}\" → \"{currentBuffer}\"), re-triggering prediction");
-                        _fastDebounceTimer?.Restart();
+                        LogToDebug($"Buffer advanced (\"{buffer}\" → \"{currentBuffer}\"), keeping current suggestion until next keystroke");
                     }
                 }
 
@@ -382,5 +381,32 @@ public partial class App
             Interlocked.Exchange(ref _activePredictionRequestId, 0);
         }
         _predictionState = "Idle";
+    }
+
+    private void TraceBufferChanged(string newText)
+    {
+        if (string.IsNullOrEmpty(newText))
+            return;
+
+        var nowTicks = DateTime.UtcNow.Ticks;
+        var lastTicks = Interlocked.Read(ref _lastBufferTraceTicks);
+        var lastLength = Interlocked.CompareExchange(ref _lastTracedBufferLength, 0, 0);
+
+        bool shouldTrace =
+            newText.Length <= 1 ||
+            newText.Length < lastLength ||
+            _wordBoundaryChars.Contains(newText[^1]) ||
+            (nowTicks - lastTicks) >= TimeSpan.FromMilliseconds(250).Ticks;
+
+        if (!shouldTrace)
+            return;
+
+        Interlocked.Exchange(ref _lastBufferTraceTicks, nowTicks);
+        Interlocked.Exchange(ref _lastTracedBufferLength, newText.Length);
+
+        _reliabilityTrace.Trace("buffer", "changed", "Typing buffer changed.", new Dictionary<string, string>
+        {
+            ["length"] = newText.Length.ToString()
+        });
     }
 }
