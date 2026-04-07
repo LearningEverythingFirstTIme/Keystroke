@@ -82,6 +82,20 @@ cd Keystroke
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
+Run just the unit tests:
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\test.ps1
+```
+
+Optional flags:
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\test.ps1 -NoBuild -NoRestore
+```
+
+Avoid `dotnet test Keystroke.sln` for now. In this repo, the reliable path is `.\test.ps1`, the test project directly, or `.\build.ps1`, which already builds the app projects and then runs the test project explicitly.
+
 Run directly for development:
 
 ```bash

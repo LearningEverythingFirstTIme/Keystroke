@@ -19,13 +19,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Solution builds share the normal app output; direct test runs use an isolated app build. -->
   <ItemGroup Condition="'$(BuildingSolutionFile)' == 'true'">
-    <ProjectReference Include="..\..\src\KeystrokeApp\KeystrokeApp.csproj"
-                      ReferenceOutputAssembly="false" />
-    <Reference Include="KeystrokeApp">
-      <HintPath>..\..\src\KeystrokeApp\obj\$(Configuration)\net8.0-windows10.0.19041.0\ref\KeystrokeApp.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
+    <ProjectReference Include="..\..\src\KeystrokeApp\KeystrokeApp.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(BuildingSolutionFile)' != 'true'">
