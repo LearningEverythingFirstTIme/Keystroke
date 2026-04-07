@@ -138,19 +138,25 @@ public partial class App
     /// </summary>
     private void ToggleEnabled()
     {
-        _isEnabled = !_isEnabled;
+        // _isEnabled is volatile. The read-modify-write is not atomic, but the only
+        // other writers are UI-thread menu clicks and the suspend timer callback
+        // (which dispatches to UI). A lost toggle is extremely unlikely and harmless
+        // (user just presses the hotkey again). Avoiding a lock here keeps the
+        // input-hook callback fast.
+        var newState = !_isEnabled;
+        _isEnabled = newState;
 
         Dispatcher.BeginInvoke(() =>
         {
             if (_enabledMenuItem != null)
-                _enabledMenuItem.IsChecked = _isEnabled;
+                _enabledMenuItem.IsChecked = newState;
             if (_trayIcon != null)
             {
-                _trayIcon.Icon        = GetTrayIcon(_isEnabled);
+                _trayIcon.Icon        = GetTrayIcon(newState);
                 _trayIcon.ToolTipText = BuildToolTip();
             }
 
-            if (!_isEnabled)
+            if (!newState)
             {
                 _suggestionPanel?.HideSuggestion();
                 CancelPendingPrediction();
@@ -158,7 +164,7 @@ public partial class App
             }
         });
 
-        Log($"Toggled via Ctrl+Shift+K: {(_isEnabled ? "Enabled" : "Disabled")}");
+        Log($"Toggled via Ctrl+Shift+K: {(newState ? "Enabled" : "Disabled")}");
     }
 
     private void UpdateTraySessionInfo()

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 
 namespace KeystrokeApp.Services;
 
@@ -17,6 +18,37 @@ namespace KeystrokeApp.Services;
 /// </summary>
 public abstract class PredictionEngineBase
 {
+    private static readonly OutboundPrivacyService OutboundPrivacy = new();
+
+    // ── Shared HTTP connection pool ─────────────────────────────────────────
+    //
+    // All prediction engines share a single SocketsHttpHandler so TCP connections
+    // are reused across engine switches.  Each engine still creates its own
+    // HttpClient (with its own headers / timeout) but passes this shared handler
+    // with disposeHandler:false so Disposing the HttpClient does NOT destroy the
+    // connection pool.  This avoids socket exhaustion (a well-known .NET pitfall)
+    // and eliminates the cold TCP/TLS handshake on every engine switch.
+    //
+    private static readonly SocketsHttpHandler SharedHttpHandler = new()
+    {
+        MaxConnectionsPerServer  = 4,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
+    };
+
+    /// <summary>
+    /// Create an HttpClient that shares the pooled connections with all other engines.
+    /// Callers MUST pass disposeHandler: false (done internally here) so that
+    /// disposing the returned HttpClient does not destroy the shared pool.
+    /// </summary>
+    protected static HttpClient CreatePooledHttpClient(TimeSpan timeout)
+    {
+        return new HttpClient(SharedHttpHandler, disposeHandler: false)
+        {
+            Timeout = timeout
+        };
+    }
+
     private readonly string _logPath;
     private DateTime _lastRateLimitError = DateTime.MinValue;
     private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromSeconds(10);
@@ -32,6 +64,14 @@ public abstract class PredictionEngineBase
     private readonly Queue<string> _recentCompletions = new();
     private readonly List<string> _recentTrailingPhrases = new();
     private const int MaxRecentCompletions = 8;
+
+    /// <summary>
+    /// Hard ceiling (in characters) for the entire AVOID REPEATING block injected
+    /// into the system prompt. Prevents anti-repetition from crowding out actual
+    /// context when many completions accumulate.
+    /// </summary>
+    private const int MaxAntiRepetitionChars = 600;
+    private const int MaxOverusedEndingsReturned = 3;
 
     /// <summary>
     /// Record a completion that was generated (regardless of whether the user accepted it).
@@ -84,6 +124,8 @@ public abstract class PredictionEngineBase
             return _recentTrailingPhrases
                 .GroupBy(p => p, StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Count() >= 2)
+                .OrderByDescending(g => g.Count())
+                .Take(MaxOverusedEndingsReturned)
                 .Select(g => g.Key)
                 .ToList();
         }
@@ -192,9 +234,10 @@ public abstract class PredictionEngineBase
 
     /// <summary>
     /// Injected by the caller (App.xaml.cs) after construction.
-    /// Not initialised here to avoid a wasted file read on every engine creation.
+    /// Nullable — engines must guard access. Not a constructor parameter to avoid
+    /// a wasted file read on every engine creation.
     /// </summary>
-    public AcceptanceLearningService  LearningService          { get; set; } = null!;
+    public AcceptanceLearningService?  LearningService          { get; set; }
     public StyleProfileService?       StyleProfileService       { get; set; }
     public VocabularyProfileService?  VocabularyProfileService  { get; set; }
 
@@ -269,25 +312,42 @@ public abstract class PredictionEngineBase
         // Anti-repetition: recently generated completions (regardless of accept/dismiss).
         // This is the one learning signal that stays in the system prompt because it's
         // a hard behavioral constraint ("do not repeat"), not a soft contextual hint.
+        // The entire block is capped at MaxAntiRepetitionChars to prevent crowding out
+        // real context when many completions accumulate.
         var recentCompletions = GetRecentCompletions();
         var negativeExamples = LearningService?.GetNegativeExamples(context, 2) ?? [];
         var overusedEndings = GetOverusedEndings();
         if (recentCompletions.Count > 0 || negativeExamples.Count > 0 || overusedEndings.Count > 0)
         {
-            sb.AppendLine();
-            sb.AppendLine("AVOID REPEATING (hard constraint — never output these or close rephrasings):");
-            foreach (var rc in recentCompletions)
-                sb.AppendLine($"  - \"{rc}\"");
-            foreach (var ex in negativeExamples)
-                sb.AppendLine($"  - \"{ex.Completion.Trim()}\"");
+            var antiRep = new StringBuilder();
+            antiRep.AppendLine("AVOID REPEATING (hard constraint — never output these or close rephrasings):");
 
+            // Overused endings are short and high-signal — add first.
             if (overusedEndings.Count > 0)
             {
-                sb.AppendLine();
-                sb.AppendLine("OVERUSED ENDINGS — do NOT end completions with any of these phrases:");
                 foreach (var ending in overusedEndings)
-                    sb.AppendLine($"  - \"{ending}\"");
+                    antiRep.AppendLine($"  - ending: \"{ending}\"");
             }
+
+            // Negative examples (dismissed completions) — add next, most relevant.
+            foreach (var ex in negativeExamples)
+            {
+                var line = $"  - \"{TruncateForPrompt(ex.Completion.Trim(), 80)}\"";
+                if (antiRep.Length + line.Length > MaxAntiRepetitionChars) break;
+                antiRep.AppendLine(line);
+            }
+
+            // Recent completions — oldest are least relevant, so add newest first
+            // and stop when budget is exhausted.
+            for (int i = recentCompletions.Count - 1; i >= 0; i--)
+            {
+                var line = $"  - \"{TruncateForPrompt(recentCompletions[i], 80)}\"";
+                if (antiRep.Length + line.Length > MaxAntiRepetitionChars) break;
+                antiRep.AppendLine(line);
+            }
+
+            sb.AppendLine();
+            sb.Append(antiRep);
         }
 
         sb.AppendLine();
@@ -306,7 +366,7 @@ public abstract class PredictionEngineBase
 
         if (context.HasAppContext)
         {
-            sb.AppendLine($"[Application: {context.ProcessName} — \"{context.WindowTitle}\"]");
+            sb.AppendLine($"[Application: {context.SafeContextLabel}]");
             sb.AppendLine();
         }
 
@@ -393,7 +453,7 @@ public abstract class PredictionEngineBase
             {
                 var styleHint = StyleProfileService.GetStyleHint(categoryStr);
                 if (!string.IsNullOrEmpty(styleHint))
-                    parts.Add($"Writing style: {styleHint}");
+                    parts.Add($"Writing style: {OutboundPrivacy.SanitizeForPrompt(styleHint)}");
             }
 
             // Vocabulary fingerprint (deterministic) — only when data is trustworthy
@@ -401,7 +461,7 @@ public abstract class PredictionEngineBase
             {
                 var vocabHint = VocabularyProfileService.GetVocabularyHint(categoryStr);
                 if (!string.IsNullOrEmpty(vocabHint))
-                    parts.Add(vocabHint);
+                    parts.Add(OutboundPrivacy.SanitizeForPrompt(vocabHint) ?? "");
             }
 
             // Session hint — always available since it's real-time signal, not historical.
@@ -409,10 +469,11 @@ public abstract class PredictionEngineBase
             {
                 var sessionHint = LearningService.GetSessionModeHint(categoryStr);
                 if (!string.IsNullOrEmpty(sessionHint))
-                    parts.Add(sessionHint);
+                    parts.Add(OutboundPrivacy.SanitizeForPrompt(sessionHint) ?? "");
             }
         }
 
+        parts = parts.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
         return parts.Count > 0 ? string.Join("\n", parts) : null;
     }
 
@@ -450,6 +511,105 @@ public abstract class PredictionEngineBase
         if (wordCount < 4) return Math.Min(25, MaxOutputTokens);
         if (wordCount < 8) return Math.Min(60, MaxOutputTokens);
         return MaxOutputTokens;
+    }
+
+    // ── Shared SSE stream parsing ────────────────────────────────────────────
+
+    /// <summary>
+    /// Shared SSE stream parser for all cloud prediction engines. Reads "data: "
+    /// prefixed lines, delegates text extraction to the engine-specific callback,
+    /// handles first-chunk normalization, degeneration detection, and final
+    /// post-processing (trim, dedup, record).
+    /// </summary>
+    protected async Task<string?> ParseSseStreamAsync(
+        HttpResponseMessage response,
+        string prefix,
+        Func<string, string?> extractText,
+        Action<string> onChunk,
+        CancellationToken ct)
+    {
+        var fullCompletion = new StringBuilder();
+        bool isFirstChunk = true;
+        var degenDetector = CreateDegenerationDetector();
+
+        using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(stream);
+
+        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line == null) break;
+            if (!line.StartsWith("data: ")) continue;
+            var dataJson = line[6..];
+            if (dataJson == "[DONE]") break;
+
+            try
+            {
+                var text = extractText(dataJson);
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (isFirstChunk)
+                    {
+                        text = text.TrimStart('"');
+                        if (text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                            text = text[prefix.Length..];
+                        if (text.Length > 0 && !prefix.EndsWith(" ") && !text.StartsWith(" "))
+                            text = " " + text;
+                        isFirstChunk = false;
+                    }
+
+                    if (degenDetector.IsDegenerate(text))
+                    {
+                        Log($"Stream aborted: degeneration detected after {fullCompletion.Length} chars");
+                        break;
+                    }
+
+                    fullCompletion.Append(text);
+                    onChunk(text);
+                }
+            }
+            catch (JsonException) { /* malformed chunk — skip */ }
+        }
+
+        var raw = fullCompletion.ToString().TrimEnd('"').Trim();
+        var result = TrimToWholeWords(StripThinkTags(raw));
+        result = RejectDuplicate(prefix, result) ?? "";
+        Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected as duplicate)" : "")}");
+        if (!string.IsNullOrWhiteSpace(result))
+            RecordRecentCompletion(result);
+        return string.IsNullOrWhiteSpace(result) ? null : result;
+    }
+
+    /// <summary>
+    /// Shared post-processing for non-streaming completions and alternatives:
+    /// strip think tags, trim quotes, strip prefix echo, ensure leading space,
+    /// trim to whole words, and reject duplicates.
+    /// </summary>
+    protected string? PostProcessCompletion(string prefix, string? completion)
+    {
+        if (string.IsNullOrWhiteSpace(completion)) return null;
+
+        completion = StripThinkTags(completion);
+        completion = completion.Trim('"').Trim();
+        if (string.IsNullOrWhiteSpace(completion)) return null;
+
+        if (completion.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            completion = completion[prefix.Length..].TrimStart();
+        if (completion.Length > 0 && !prefix.EndsWith(" ") && !completion.StartsWith(" "))
+            completion = " " + completion;
+
+        completion = TrimToWholeWords(completion);
+        return RejectDuplicate(prefix, completion!);
+    }
+
+    /// <summary>
+    /// Truncates a string to maxLen characters, appending "…" if shortened.
+    /// Used to keep individual anti-repetition entries from consuming the budget.
+    /// </summary>
+    private static string TruncateForPrompt(string text, int maxLen)
+    {
+        if (text.Length <= maxLen) return text;
+        return text[..(maxLen - 1)] + "…";
     }
 
     // ── Post-processing ───────────────────────────────────────────────────────

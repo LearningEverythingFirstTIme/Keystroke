@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using Hardcodet.Wpf.TaskbarNotification;
 using KeystrokeApp.Services;
 using KeystrokeApp.Views;
+using WindowsInput;
 
 namespace KeystrokeApp;
 
@@ -22,13 +23,21 @@ public partial class App : Application
     private TaskbarIcon?              _trayIcon;
     private DebugWindow?              _debugWindow;
     private SuggestionPanel?         _suggestionPanel;
-    private GhostTextWindow?         _ghostTextWindow;
     private SettingsWindow?          _settingsWindow;
     private IPredictionEngine?       _predictionEngine;
     private ScreenReaderService?              _ocrService;
     private Timer?                   _ocrTimer;
 
     // ── App state ─────────────────────────────────────────────────────────────
+    // Thread-safety notes:
+    //   UI-only:        _config, _typingBuffer, _debounceTimer, _fastDebounceTimer,
+    //                   _predictionCache, _suggestionPanel, _debugWindow, _settingsWindow,
+    //                   _trayIcon, tray menu items
+    //   Interlocked:    _sessionAcceptCount, _suggestionShownAtTicks, _cycleDepth,
+    //                   _activePredictionRequestId, _predictionRequestCounter
+    //   volatile:       _isEnabled (written on UI/Input, read on Background/Timer)
+    //                   _predictionState (written on Background, read on UI for debug)
+    //   Lock-protected: _predictionCts, _lastPredictionPrefix (via _predictionCtsLock)
     private AppConfig                _config           = new();
     private TypingBuffer             _typingBuffer     = new();
     private DebounceTimer?           _debounceTimer;
@@ -37,11 +46,12 @@ public partial class App : Application
     private CompletionFeedbackService        _acceptanceTracker = new();
     private RollingContextService    _rollingContext   = new(maxChars: 2000, timeoutMinutes: 5);
     private AcceptanceLearningService  _learningService          = new();
+    private readonly OutboundPrivacyService _outboundPrivacy = new();
     private StyleProfileService        _styleProfileService       = new();
     private VocabularyProfileService   _vocabularyProfileService  = new();
     private LearningScoreService       _learningScoreService      = new();
-    private bool                     _isEnabled        = true;
-    private int                      _sessionAcceptCount;
+    private volatile bool            _isEnabled        = true;
+    private int                      _sessionAcceptCount;  // Access via Interlocked only
 
     // ── Tray icon state (used by App.TrayIcon.cs) ─────────────────────────────
     private Icon?     _iconEnabled;
@@ -52,6 +62,8 @@ public partial class App : Application
     private MenuItem? _sessionMenuItem;
 
     // ── Prediction state (used by App.Prediction.cs) ─────────────────────────
+    // _predictionCts and _lastPredictionPrefix are guarded by _predictionCtsLock.
+    // Always acquire the lock before reading or writing either field.
     private readonly object          _predictionCtsLock    = new();
     private CancellationTokenSource? _predictionCts;
     private string                   _lastPredictionPrefix = "";
@@ -67,12 +79,24 @@ public partial class App : Application
     private long _suggestionShownAtTicks = 0;
     private int  _cycleDepth             = 0;
     private readonly CorrectionDetector _postEditDetector = new();
+    private readonly ReliabilityTraceService _reliabilityTrace = new();
+    private readonly ITextInjector _textInjector;
+    private long _predictionRequestCounter;
+    private long _activePredictionRequestId;
+    private volatile string _predictionState = "Idle";
 
     private string _logPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "Keystroke",
         "debug.log"
     );
+
+    public App()
+    {
+        _textInjector = new ClipboardTextInjector(new InputSimulator(), _reliabilityTrace);
+        _reliabilityTrace.EventRecorded += evt => LogToDebug(
+            $"[reliability:{evt.Area}] {evt.EventName} - {evt.Message}");
+    }
 
     // ==================== Startup / Shutdown ====================
 
@@ -106,6 +130,12 @@ public partial class App : Application
             // Load config
             _config = AppConfig.Load();
             Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
+            _reliabilityTrace.Trace("startup", "config_loaded", "Loaded app configuration.", new Dictionary<string, string>
+            {
+                ["engine"] = _config.PredictionEngine,
+                ["ocrEnabled"] = _config.OcrEnabled.ToString(),
+                ["learningEnabled"] = _config.LearningEnabled.ToString()
+            });
 
             // First-launch consent — must accept before input processing activates
             if (!_config.ConsentAccepted)
@@ -163,8 +193,9 @@ public partial class App : Application
                 _vocabularyProfileService.Start(_config.StyleProfileInterval);
             }
 
-            // Prune log files to prevent unbounded growth (keep last ~5000 lines each)
-            PruneLogFiles();
+            // Prune log files to prevent unbounded growth (keep last ~5000 lines each).
+            // Run on a background thread so file I/O doesn't block the UI thread at startup.
+            _ = Task.Run(PruneLogFiles);
 
             // Initialize prediction engine based on config
             _predictionEngine = CreatePredictionEngine();
@@ -196,13 +227,6 @@ public partial class App : Application
             _suggestionPanel.ApplyTheme(ThemeDefinitions.Get(_config.ThemeId));
             Log("Suggestion panel created.");
 
-            // Beta: create ghost text overlay if enabled
-            if (_config.GhostTextEnabled)
-            {
-                _ghostTextWindow = new GhostTextWindow();
-                Log("Ghost text overlay created (beta).");
-            }
-
             // Initialize OCR service with periodic capture (every 3 seconds)
             if (_config.OcrEnabled)
             {
@@ -220,10 +244,15 @@ public partial class App : Application
             Log("Tray icon created.");
 
             Log("App ready. Right-click tray icon for options.");
+            _reliabilityTrace.Trace("startup", "ready", "App startup completed successfully.");
         }
         catch (Exception ex)
         {
             Log($"ERROR: {ex}");
+            _reliabilityTrace.Trace("startup", "failed", "App startup failed.", new Dictionary<string, string>
+            {
+                ["error"] = ex.Message
+            });
             MessageBox.Show($"Startup error: {ex.Message}", "Keystroke Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
@@ -240,7 +269,6 @@ public partial class App : Application
         _inputListener?.Dispose();
         (_predictionEngine as IDisposable)?.Dispose();
         _trayIcon?.Dispose();
-        _ghostTextWindow?.Close();
         _suggestionPanel?.Close();
         _debounceTimer?.Dispose();
         _fastDebounceTimer?.Dispose();
@@ -252,70 +280,46 @@ public partial class App : Application
 
     private IPredictionEngine CreatePredictionEngine()
     {
-        return _config.PredictionEngine.ToLower() switch
+        IPredictionEngine engine = _config.PredictionEngine.ToLower() switch
         {
             "gemini" when !string.IsNullOrWhiteSpace(_config.GeminiApiKey)
-                => new GeminiPredictionEngine(_config.GeminiApiKey, _config.GeminiModel)
-                {
-                    SystemPrompt      = _config.EffectiveSystemPrompt,
-                    LengthInstruction = _config.CompletionLengthInstruction,
-                    Temperature       = _config.Temperature,
-                    MaxOutputTokens   = _config.PresetMaxOutputTokens,
-                    LearningService          = _learningService,
-                    StyleProfileService      = _config.StyleProfileEnabled ? _styleProfileService      : null,
-                    VocabularyProfileService = _config.StyleProfileEnabled ? _vocabularyProfileService : null
-                },
+                => new GeminiPredictionEngine(_config.GeminiApiKey, _config.GeminiModel),
             "gemini"
                 => throw new InvalidOperationException("Gemini API key not set. Please configure it in Settings."),
             "gpt5" when !string.IsNullOrWhiteSpace(_config.OpenAiApiKey)
-                => new Gpt5PredictionEngine(_config.OpenAiApiKey, _config.Gpt5Model)
-                {
-                    SystemPrompt      = _config.EffectiveSystemPrompt,
-                    LengthInstruction = _config.CompletionLengthInstruction,
-                    Temperature       = _config.Temperature,
-                    MaxOutputTokens   = _config.PresetMaxOutputTokens,
-                    LearningService          = _learningService,
-                    StyleProfileService      = _config.StyleProfileEnabled ? _styleProfileService      : null,
-                    VocabularyProfileService = _config.StyleProfileEnabled ? _vocabularyProfileService : null
-                },
+                => new Gpt5PredictionEngine(_config.OpenAiApiKey, _config.Gpt5Model),
             "gpt5"
                 => throw new InvalidOperationException("OpenAI API key not set. Please configure it in Settings."),
             "claude" when !string.IsNullOrWhiteSpace(_config.AnthropicApiKey)
-                => new ClaudePredictionEngine(_config.AnthropicApiKey, _config.ClaudeModel)
-                {
-                    SystemPrompt      = _config.EffectiveSystemPrompt,
-                    LengthInstruction = _config.CompletionLengthInstruction,
-                    Temperature       = _config.Temperature,
-                    MaxOutputTokens   = _config.PresetMaxOutputTokens,
-                    LearningService          = _learningService,
-                    StyleProfileService      = _config.StyleProfileEnabled ? _styleProfileService      : null,
-                    VocabularyProfileService = _config.StyleProfileEnabled ? _vocabularyProfileService : null
-                },
+                => new ClaudePredictionEngine(_config.AnthropicApiKey, _config.ClaudeModel),
             "claude"
                 => throw new InvalidOperationException("Claude API key not set. Please configure it in Settings."),
             "ollama"
-                => new OllamaPredictionEngine(_config.OllamaModel, _config.OllamaEndpoint)
-                {
-                    Temperature     = 0.1,
-                    MaxOutputTokens = _config.PresetMaxOutputTokens,
-                    LearningService = _learningService,
-                    StyleProfileService = _config.StyleProfileEnabled ? _styleProfileService : null
-                },
+                => new OllamaPredictionEngine(_config.OllamaModel, _config.OllamaEndpoint),
             "openrouter" when !string.IsNullOrWhiteSpace(_config.OpenRouterApiKey)
-                => new OpenRouterPredictionEngine(_config.OpenRouterApiKey, _config.OpenRouterModel)
-                {
-                    SystemPrompt      = _config.EffectiveSystemPrompt,
-                    LengthInstruction = _config.CompletionLengthInstruction,
-                    Temperature       = _config.Temperature,
-                    MaxOutputTokens   = _config.PresetMaxOutputTokens,
-                    LearningService          = _learningService,
-                    StyleProfileService      = _config.StyleProfileEnabled ? _styleProfileService      : null,
-                    VocabularyProfileService = _config.StyleProfileEnabled ? _vocabularyProfileService : null
-                },
+                => new OpenRouterPredictionEngine(_config.OpenRouterApiKey, _config.OpenRouterModel),
             "openrouter"
                 => throw new InvalidOperationException("OpenRouter API key not set. Please configure it in Settings."),
             _ => new DummyPredictionEngine()
         };
+
+        // Apply common configuration to all real engines
+        if (engine is PredictionEngineBase baseEngine)
+        {
+            baseEngine.SystemPrompt      = _config.EffectiveSystemPrompt;
+            baseEngine.LengthInstruction = _config.CompletionLengthInstruction;
+            baseEngine.Temperature       = _config.Temperature;
+            baseEngine.MaxOutputTokens   = _config.PresetMaxOutputTokens;
+            baseEngine.LearningService          = _learningService;
+            baseEngine.StyleProfileService      = _config.StyleProfileEnabled ? _styleProfileService      : null;
+            baseEngine.VocabularyProfileService = _config.StyleProfileEnabled ? _vocabularyProfileService : null;
+        }
+
+        // Ollama uses a fixed low temperature for local models
+        if (engine is OllamaPredictionEngine ollama)
+            ollama.Temperature = 0.1;
+
+        return engine;
     }
 
     // ==================== Window management ====================
@@ -330,6 +334,8 @@ public partial class App : Application
             _debugWindow.Log($"Status: {(_isEnabled ? "Enabled" : "Disabled")}");
             _debugWindow.Log($"Engine: {_predictionEngine?.GetType().Name}");
             _debugWindow.Log($"Buffer: \"{_typingBuffer.CurrentText}\"");
+            _debugWindow.Log($"Prediction state: {_predictionState}");
+            _debugWindow.Log($"Reliability log: {_reliabilityTrace.LogPath}");
 
             // Show rolling context status
             var ctxInfo = _rollingContext.GetInfo();
@@ -377,6 +383,8 @@ public partial class App : Application
             }
 
             _debugWindow.Log("Type anywhere to see events here.\n");
+            foreach (var evt in _reliabilityTrace.GetRecentEvents().TakeLast(8))
+                _debugWindow.Log($"[{evt.TimestampUtc:HH:mm:ss}] {evt.Area}/{evt.EventName}: {evt.Message}");
         }
         _debugWindow.Show();
         _debugWindow.Activate();
@@ -386,7 +394,7 @@ public partial class App : Application
     {
         if (_settingsWindow == null || !_settingsWindow.IsLoaded)
         {
-            _settingsWindow = new SettingsWindow(_config, _styleProfileService, _vocabularyProfileService, _learningScoreService);
+            _settingsWindow = new SettingsWindow(_config, _learningService, _styleProfileService, _vocabularyProfileService, _learningScoreService);
             _settingsWindow.ThemeChanged += themeId =>
                 _suggestionPanel?.ApplyTheme(ThemeDefinitions.Get(themeId));
             _settingsWindow.Closed += (s, e) =>
@@ -430,19 +438,6 @@ public partial class App : Application
         _fastDebounceTimer?.Dispose();
         _fastDebounceTimer = new DebounceTimer(_config.FastDebounceMs);
         _fastDebounceTimer.DebounceComplete += OnDebounceComplete;
-
-        // Toggle ghost text on/off based on settings
-        if (_config.GhostTextEnabled && _ghostTextWindow == null)
-        {
-            _ghostTextWindow = new GhostTextWindow();
-            Log("Ghost text overlay enabled (beta).");
-        }
-        else if (!_config.GhostTextEnabled && _ghostTextWindow != null)
-        {
-            _ghostTextWindow.Close();
-            _ghostTextWindow = null;
-            Log("Ghost text overlay disabled.");
-        }
 
         // Toggle OCR on/off based on settings
         if (_config.OcrEnabled && _ocrService == null)
@@ -501,7 +496,7 @@ public partial class App : Application
     private void PruneLogFiles()
     {
         var logDir = Path.GetDirectoryName(_logPath)!;
-        string[] logFiles = ["debug.log", "gemini.log", "claude.log", "gpt5.log", "ocr.log", "learning.log", "style-profile.log"];
+        string[] logFiles = ["debug.log", "gemini.log", "claude.log", "gpt5.log", "ocr.log", "learning.log", "style-profile.log", "reliability.log"];
         const int maxLines = 5000;
 
         foreach (var fileName in logFiles)
@@ -528,5 +523,30 @@ public partial class App : Application
     {
         if (string.IsNullOrEmpty(value)) return value;
         return value.Length <= maxLength ? value : value[..maxLength] + "...";
+    }
+
+    private long NextPredictionRequestId() => Interlocked.Increment(ref _predictionRequestCounter);
+
+    private bool IsPredictionRequestCurrent(long requestId)
+        => Interlocked.Read(ref _activePredictionRequestId) == requestId;
+
+    private void SetPredictionState(string state, long? requestId = null, IReadOnlyDictionary<string, string>? data = null)
+    {
+        _predictionState = state;
+        _reliabilityTrace.Trace(
+            "prediction",
+            "state",
+            requestId.HasValue ? $"Request {requestId.Value} -> {state}" : $"Prediction state -> {state}",
+            data);
+    }
+
+    private void TracePredictionSuppressed(string reason, string buffer, IReadOnlyDictionary<string, string>? data = null)
+    {
+        var payload = new Dictionary<string, string>(data ?? new Dictionary<string, string>())
+        {
+            ["reason"] = reason,
+            ["bufferLength"] = buffer.Length.ToString()
+        };
+        _reliabilityTrace.Trace("prediction", "suppressed", $"Prediction suppressed: {reason}", payload);
     }
 }
