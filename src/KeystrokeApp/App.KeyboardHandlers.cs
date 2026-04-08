@@ -3,7 +3,7 @@ using KeystrokeApp.Services;
 namespace KeystrokeApp;
 
 /// <summary>
-/// Keyboard event handlers â€” character input, special keys, text injection, and
+/// Keyboard event handlers - character input, special keys, text injection, and
 /// word-by-word suggestion acceptance. Split from App.xaml.cs as a partial class.
 /// </summary>
 public partial class App
@@ -16,12 +16,18 @@ public partial class App
         if (!_isEnabled)
             return;
 
+        var (processName, windowTitle) = AppContextService.GetActiveWindow();
+        if (!IsProcessEnabled(processName))
+        {
+            SuppressForFilteredApp(processName);
+            return;
+        }
+
         _typingBuffer.AddChar(c);
         var currentBuffer = _typingBuffer.CurrentText;
 
         if (_config.LearningEnabled && _config.LearningV2Enabled)
         {
-            var (processName, windowTitle) = AppContextService.GetActiveWindow();
             var context = CreateContextSnapshot(currentBuffer, processName, windowTitle);
             _learningCaptureCoordinator.OnBufferChanged(currentBuffer, context);
 
@@ -38,7 +44,7 @@ public partial class App
 
         if (_debugWindow != null)
         {
-            Dispatcher.BeginInvoke(() => _debugWindow?.Log($"Char: '{c}' â†’ Buffer: \"{currentBuffer}\""));
+            Dispatcher.BeginInvoke(() => _debugWindow?.Log($"Char: '{c}' -> Buffer: \"{currentBuffer}\""));
         }
     }
 
@@ -46,24 +52,36 @@ public partial class App
     {
         var key = args.Key;
 
+        if (key == InputListenerService.SpecialKey.CtrlShiftK)
+        {
+            ToggleEnabled();
+            args.ShouldSwallow = true;
+            return;
+        }
+
+        if (!_isEnabled)
+            return;
+
+        var (activeProcessName, activeWindowTitle) = AppContextService.GetActiveWindow();
+        if (!IsProcessEnabled(activeProcessName))
+        {
+            SuppressForFilteredApp(activeProcessName);
+            return;
+        }
+
         switch (key)
         {
             case InputListenerService.SpecialKey.Backspace:
-                if (_isEnabled)
-                {
-                    _postEditDetector.OnBackspace();
-                    _typingBuffer.RemoveLastChar();
-                    LogToDebug($"Backspace â†’ Buffer: \"{_typingBuffer.CurrentText}\"");
-                }
+                _postEditDetector.OnBackspace();
+                _typingBuffer.RemoveLastChar();
+                LogToDebug($"Backspace -> Buffer: \"{_typingBuffer.CurrentText}\"");
                 break;
 
             case InputListenerService.SpecialKey.Enter:
             case InputListenerService.SpecialKey.Escape:
-                if (_isEnabled)
                 {
                     var oldBuffer = _typingBuffer.CurrentText;
-                    var (pn, wt) = AppContextService.GetActiveWindow();
-                    var context = CreateContextSnapshot(oldBuffer, pn, wt);
+                    var context = CreateContextSnapshot(oldBuffer, activeProcessName, activeWindowTitle);
 
                     if (_config.LearningEnabled && _suggestionPanel?.HasSuggestion == true)
                     {
@@ -71,7 +89,7 @@ public partial class App
                         var dismissed = SuggestionAcceptance.GetRemainingCompletion(oldBuffer, fullSuggestion);
                         if (!string.IsNullOrEmpty(dismissed))
                         {
-                            _acceptanceTracker.LogDismissed(oldBuffer, dismissed, pn, wt);
+                            _acceptanceTracker.LogDismissed(oldBuffer, dismissed, activeProcessName, activeWindowTitle);
                             var dismissSnapshot = SnapshotActiveSuggestion();
                             if (_config.LearningV2Enabled && dismissSnapshot.Context != null)
                             {
@@ -100,9 +118,9 @@ public partial class App
                     _suggestionPanel?.HideSuggestion();
                     ClearActiveSuggestion();
                     CancelPendingPrediction();
-                    LogToDebug($"{key} â†’ Buffer cleared (was: \"{oldBuffer}\")");
+                    LogToDebug($"{key} -> Buffer cleared (was: \"{oldBuffer}\")");
+                    break;
                 }
-                break;
 
             case InputListenerService.SpecialKey.LeftArrow:
             case InputListenerService.SpecialKey.RightArrow:
@@ -113,11 +131,10 @@ public partial class App
             case InputListenerService.SpecialKey.PageUp:
             case InputListenerService.SpecialKey.PageDown:
             case InputListenerService.SpecialKey.Delete:
-                if (_isEnabled && !_typingBuffer.IsEmpty)
+                if (!_typingBuffer.IsEmpty)
                 {
                     var oldBuffer = _typingBuffer.CurrentText;
-                    var (pn, wt) = AppContextService.GetActiveWindow();
-                    var context = CreateContextSnapshot(oldBuffer, pn, wt);
+                    var context = CreateContextSnapshot(oldBuffer, activeProcessName, activeWindowTitle);
 
                     if (_config.LearningEnabled && _config.LearningV2Enabled &&
                         !string.IsNullOrWhiteSpace(oldBuffer) &&
@@ -132,12 +149,12 @@ public partial class App
                     _suggestionPanel?.HideSuggestion();
                     ClearActiveSuggestion();
                     CancelPendingPrediction();
-                    LogToDebug($"{key} â†’ Buffer cleared (cursor moved, was: \"{oldBuffer}\")");
+                    LogToDebug($"{key} -> Buffer cleared (cursor moved, was: \"{oldBuffer}\")");
                 }
                 break;
 
             case InputListenerService.SpecialKey.CtrlDownArrow:
-                if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
+                if (_suggestionPanel?.HasSuggestion == true)
                 {
                     Interlocked.Increment(ref _cycleDepth);
                     var downSnapshot = SnapshotActiveSuggestion();
@@ -154,12 +171,12 @@ public partial class App
                         }
                     });
                     args.ShouldSwallow = true;
-                    LogToDebug("Ctrl+Down â†’ Next suggestion");
+                    LogToDebug("Ctrl+Down -> Next suggestion");
                 }
                 break;
 
             case InputListenerService.SpecialKey.CtrlUpArrow:
-                if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
+                if (_suggestionPanel?.HasSuggestion == true)
                 {
                     Interlocked.Increment(ref _cycleDepth);
                     var upSnapshot = SnapshotActiveSuggestion();
@@ -176,17 +193,12 @@ public partial class App
                         }
                     });
                     args.ShouldSwallow = true;
-                    LogToDebug("Ctrl+Up â†’ Previous suggestion");
+                    LogToDebug("Ctrl+Up -> Previous suggestion");
                 }
                 break;
 
-            case InputListenerService.SpecialKey.CtrlShiftK:
-                ToggleEnabled();
-                args.ShouldSwallow = true;
-                break;
-
             case InputListenerService.SpecialKey.ShiftTab:
-                if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
+                if (_suggestionPanel?.HasSuggestion == true)
                 {
                     AcceptNextWord("Shift+Tab");
                     args.ShouldSwallow = true;
@@ -194,7 +206,7 @@ public partial class App
                 break;
 
             case InputListenerService.SpecialKey.CtrlRight:
-                if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
+                if (_suggestionPanel?.HasSuggestion == true)
                 {
                     AcceptNextWord("Ctrl+Right");
                     args.ShouldSwallow = true;
@@ -202,7 +214,7 @@ public partial class App
                 break;
 
             case InputListenerService.SpecialKey.Tab:
-                if (_isEnabled && _suggestionPanel?.HasSuggestion == true)
+                if (_suggestionPanel?.HasSuggestion == true)
                 {
                     var buffer = _typingBuffer.CurrentText;
                     var fullText = _suggestionPanel.GetFullSuggestion();
@@ -214,9 +226,9 @@ public partial class App
                         break;
                     }
 
-                    LogToDebug($"Tab â†’ Buffer: \"{buffer}\" ({buffer.Length} chars)");
-                    LogToDebug($"Tab â†’ Full suggestion: \"{fullText}\" ({fullText.Length} chars)");
-                    LogToDebug($"Tab â†’ Injecting: \"{completion}\" ({completion.Length} chars)");
+                    LogToDebug($"Tab -> Buffer: \"{buffer}\" ({buffer.Length} chars)");
+                    LogToDebug($"Tab -> Full suggestion: \"{fullText}\" ({fullText.Length} chars)");
+                    LogToDebug($"Tab -> Injecting: \"{completion}\" ({completion.Length} chars)");
 
                     _ = InjectAcceptedTextAsync(completion, "full_accept");
                     _suggestionPanel.AcceptSuggestion();
@@ -231,9 +243,8 @@ public partial class App
                             int.MaxValue);
                     int cycleDepth = Interlocked.Exchange(ref _cycleDepth, 0);
 
-                    var (procName, winTitle) = AppContextService.GetActiveWindow();
                     var suggestionSnapshot = SnapshotActiveSuggestion();
-                    var captureContext = suggestionSnapshot.Context ?? CreateContextSnapshot(buffer, procName, winTitle);
+                    var captureContext = suggestionSnapshot.Context ?? CreateContextSnapshot(buffer, activeProcessName, activeWindowTitle);
 
                     if (_config.LearningEnabled)
                     {
@@ -245,8 +256,8 @@ public partial class App
 
                         var capturedBuffer = buffer;
                         var capturedCompletion = completion;
-                        var capturedProc = procName;
-                        var capturedTitle = winTitle;
+                        var capturedProc = activeProcessName;
+                        var capturedTitle = activeWindowTitle;
                         var capturedLatency = latencyMs;
                         var capturedDepth = cycleDepth;
                         var capturedSuggestionId = suggestionSnapshot.SuggestionId;
@@ -292,8 +303,8 @@ public partial class App
                     }
 
                     var fullAcceptedText = buffer + completion;
-                    _rollingContext.AppendAccepted(fullAcceptedText, procName, winTitle);
-                    LogToDebug($"Tab â†’ Rolling context updated (+{fullAcceptedText.Length} chars)");
+                    _rollingContext.AppendAccepted(fullAcceptedText, activeProcessName, activeWindowTitle);
+                    LogToDebug($"Tab -> Rolling context updated (+{fullAcceptedText.Length} chars)");
 
                     _typingBuffer.Clear();
                     _suggestionPanel?.HideSuggestion();
@@ -301,7 +312,7 @@ public partial class App
                     CancelPendingPrediction();
 
                     args.ShouldSwallow = true;
-                    LogToDebug("Tab â†’ Key swallowed");
+                    LogToDebug("Tab -> Key swallowed");
                 }
                 else
                 {
@@ -342,7 +353,7 @@ public partial class App
                            "Injected keystrokes bypass InputListenerService (LLKHF_INJECTED filtered). " +
                            $"Text \"{text}\" was sent to target app but is invisible to the typing buffer.");
                 _reliabilityTrace.Trace("injection", "sendinput_warning",
-                    "SendInput fallback used â€” injected keystrokes are filtered by the input hook. " +
+                    "SendInput fallback used - injected keystrokes are filtered by the input hook. " +
                     "Text reaches the target app but bypasses Keystroke's buffer tracking.",
                     new Dictionary<string, string>
                     {
@@ -376,6 +387,13 @@ public partial class App
         if (_suggestionPanel == null)
             return;
 
+        var (procName, winTitle) = AppContextService.GetActiveWindow();
+        if (!IsProcessEnabled(procName))
+        {
+            SuppressForFilteredApp(procName);
+            return;
+        }
+
         var buffer = _typingBuffer.CurrentText;
         var fullSugg = _suggestionPanel.GetFullSuggestion();
         var completion = SuggestionAcceptance.GetRemainingCompletion(buffer, fullSugg);
@@ -387,10 +405,9 @@ public partial class App
         }
 
         var nextWord = GetNextWord(completion);
-        LogToDebug($"{keyLabel} â†’ Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");
+        LogToDebug($"{keyLabel} -> Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");
         _ = InjectAcceptedTextAsync(nextWord, "word_accept");
 
-        var (procName, winTitle) = AppContextService.GetActiveWindow();
         var wordSnapshot = SnapshotActiveSuggestion();
         var context = wordSnapshot.Context ?? CreateContextSnapshot(buffer, procName, winTitle);
 

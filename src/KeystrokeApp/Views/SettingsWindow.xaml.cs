@@ -11,6 +11,28 @@ namespace KeystrokeApp.Views;
 
 public partial class SettingsWindow : Window
 {
+    private sealed class AppChoice
+    {
+        public string ProcessName { get; init; } = "";
+        public string WindowTitle { get; init; } = "";
+        public string FriendlyName => GetFriendlyProcessName(ProcessName);
+        public AppCategory.Category Category => AppCategory.GetEffectiveCategory(ProcessName, WindowTitle);
+        public string CategoryLabel => GetCategoryDisplay(Category);
+        public string ShortWindowTitle => TruncateWindowTitle(WindowTitle);
+
+        public string DisplayLabel =>
+            string.IsNullOrWhiteSpace(CategoryLabel)
+                ? FriendlyName
+                : $"{FriendlyName} ({CategoryLabel})";
+
+        public string DetailLabel =>
+            string.IsNullOrWhiteSpace(ShortWindowTitle)
+                ? $"Process: {PerAppSettings.NormalizeProcessName(ProcessName)}"
+                : $"{ShortWindowTitle}";
+
+        public override string ToString() => DisplayLabel;
+    }
+
     private AppConfig _config;
     private AcceptanceLearningService?  _learningService;
     private StyleProfileService?        _styleProfileService;
@@ -18,6 +40,8 @@ public partial class SettingsWindow : Window
     private LearningScoreService?       _learningScoreService;
     private readonly LearningContextPreferencesService _contextPreferencesService;
     private readonly LearningContextMaintenanceService _contextMaintenanceService;
+    private readonly Func<(string ProcessName, string WindowTitle)> _appPicker;
+    private AppChoice? _lastExternalApp;
     private bool _loading = true;
     private DispatcherTimer? _saveDebounceTimer;
     private CancellationTokenSource? _modelFetchCts;
@@ -39,7 +63,8 @@ public partial class SettingsWindow : Window
         VocabularyProfileService? vocabularyProfileService = null,
         LearningScoreService?     learningScoreService     = null,
         LearningContextPreferencesService? contextPreferencesService = null,
-        LearningContextMaintenanceService? contextMaintenanceService = null)
+        LearningContextMaintenanceService? contextMaintenanceService = null,
+        Func<(string ProcessName, string WindowTitle)>? appPicker = null)
     {
         InitializeComponent();
         _config                   = config;
@@ -49,6 +74,7 @@ public partial class SettingsWindow : Window
         _learningService          = learningService;
         _contextPreferencesService = contextPreferencesService ?? new LearningContextPreferencesService();
         _contextMaintenanceService = contextMaintenanceService ?? new LearningContextMaintenanceService();
+        _appPicker = appPicker ?? AppContextService.GetActiveWindow;
         LoadValues();
         LoadLearningStats();
         LoadVocabularyProfileStatus();
@@ -73,8 +99,12 @@ public partial class SettingsWindow : Window
         OverviewSection.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
         SuggestionsSection.Visibility = section == "Suggestions" ? Visibility.Visible : Visibility.Collapsed;
         PersonalizationSection.Visibility = section == "Personalization" ? Visibility.Visible : Visibility.Collapsed;
+        AppControlSection.Visibility = section == "AppControl" ? Visibility.Visible : Visibility.Collapsed;
         AppearanceSection.Visibility = section == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         AdvancedSection.Visibility = section == "Advanced" ? Visibility.Visible : Visibility.Collapsed;
+
+        if (section == "AppControl")
+            RefreshAppPickerOptions();
     }
 
     private void UpdateExperienceSummary()
@@ -147,6 +177,37 @@ public partial class SettingsWindow : Window
         StyleProfileFeatureText.Text = learningOn
             ? "Builds a writing profile over time so phrasing and tone feel more like you."
             : "Turn on learning first if you want Keystroke to build a style profile.";
+    }
+
+    private void UpdateAppFilteringUi()
+    {
+        var mode = GetSelectedAppFilteringMode();
+        var allowListOnly = mode == PerAppSettings.AllowListedOnly;
+        int blockedCount = PerAppSettings.ParseProcessList(BlockedAppsBox.Text).Count;
+        int allowedCount = PerAppSettings.ParseProcessList(AllowedAppsBox.Text).Count;
+
+        AppFilteringDescriptionText.Text = allowListOnly
+            ? "Keystroke will only appear in the apps listed on the right. This is best when you want a very small, intentional allow list."
+            : "Keystroke stays available everywhere except the apps listed on the left. This is the easiest way to keep it out of games and other noisy contexts.";
+
+        BlockedAppsCard.Opacity = allowListOnly ? 0.72 : 1.0;
+        AllowedAppsCard.Opacity = allowListOnly ? 1.0 : 0.9;
+
+        HeroAppControlStatusText.Text = allowListOnly
+            ? $"App control: {allowedCount} allowed"
+            : $"App control: {blockedCount} blocked";
+
+        OverviewAppControlSummaryText.Text = allowListOnly
+            ? allowedCount > 0
+                ? $"Keystroke only appears in {allowedCount} allowed app{(allowedCount == 1 ? "" : "s")}."
+                : "Keystroke is set to allow-list mode, but no apps are listed yet."
+            : blockedCount > 0
+                ? $"Keystroke stays available broadly, with {blockedCount} blocked app{(blockedCount == 1 ? "" : "s")}."
+                : "Keystroke is available everywhere right now.";
+
+        OverviewAppControlDetailText.Text = allowListOnly
+            ? "Great when you only want Keystroke in a small trusted set like chat or email apps."
+            : "Open App Control to block noisy apps, games, terminals, or anywhere the overlay should stay quiet.";
     }
 
     private void UpdatePreview()
@@ -241,7 +302,13 @@ public partial class SettingsWindow : Window
         LoadStyleProfileStatus();
         LoadStyleProfileProgress();
 
+        SelectComboItemByTag(AppFilteringModeCombo, _config.AppFilteringMode);
+        BlockedAppsBox.Text = PerAppSettings.FormatProcessList(_config.BlockedProcesses);
+        AllowedAppsBox.Text = PerAppSettings.FormatProcessList(_config.AllowedProcesses);
+
         PromptBox.Text = _config.EffectiveSystemPrompt;
+        UpdateAppFilteringUi();
+        RefreshAppPickerOptions();
         UpdateFeatureCards();
         UpdateExperienceSummary();
         UpdatePreview();
@@ -1343,11 +1410,15 @@ public partial class SettingsWindow : Window
         _config.StyleProfileEnabled = StyleProfileCheck.IsChecked == true;
         _config.StyleProfileInterval = (int)StyleProfileIntervalSlider.Value;
         _config.MaxSuggestions = (int)SuggestionsSlider.Value;
+        _config.AppFilteringMode = GetSelectedAppFilteringMode();
+        _config.BlockedProcesses = PerAppSettings.ParseProcessList(BlockedAppsBox.Text);
+        _config.AllowedProcesses = PerAppSettings.ParseProcessList(AllowedAppsBox.Text);
         var promptText = PromptBox.Text.Trim();
         _config.CustomSystemPrompt = (promptText == AppConfig.DefaultSystemPrompt) ? null : promptText;
 
         _config.Save();
         UpdateGeminiApiKeyStatus();
+        UpdateAppFilteringUi();
         UpdateFeatureCards();
         UpdateExperienceSummary();
         UpdatePreview();
@@ -1501,6 +1572,12 @@ public partial class SettingsWindow : Window
             ShowSection(section);
     }
 
+    private void OpenAppControl_Click(object sender, RoutedEventArgs e)
+    {
+        NavAppControlButton.IsChecked = true;
+        ShowSection("AppControl");
+    }
+
     private void Setting_Changed(object sender, RoutedEventArgs e) => SaveSettings();
     private void Setting_Changed(object sender, TextChangedEventArgs e) => DebouncedSave();
     private void Setting_Changed(object sender, SelectionChangedEventArgs e) => SaveSettings();
@@ -1554,6 +1631,282 @@ public partial class SettingsWindow : Window
         SaveSettings();
         UpdateFeatureCards();
         LoadStyleProfileProgress();
+    }
+
+    private void AppFilteringModeCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateAppFilteringUi();
+        SaveSettings();
+    }
+
+    private void AddCurrentBlockedApp_Click(object sender, RoutedEventArgs e)
+    {
+        AddLastKnownAppToLists(BlockedAppsBox, AllowedAppsBox);
+    }
+
+    private void AddCurrentAllowedApp_Click(object sender, RoutedEventArgs e)
+    {
+        AddLastKnownAppToLists(AllowedAppsBox, BlockedAppsBox);
+    }
+
+    private void ClearBlockedApps_Click(object sender, RoutedEventArgs e)
+    {
+        BlockedAppsBox.Text = "";
+        SaveSettings();
+    }
+
+    private void ClearAllowedApps_Click(object sender, RoutedEventArgs e)
+    {
+        AllowedAppsBox.Text = "";
+        SaveSettings();
+    }
+
+    private void AddLastKnownAppToLists(TextBox primaryBox, TextBox otherBox)
+    {
+        var choice = GetLastKnownApp();
+        if (choice == null)
+        {
+            MessageBox.Show(
+                "Keystroke could not find a recent non-Keystroke app yet. Focus another app first, or use the running-app picker.",
+                "Recent App Not Found",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        AddAppChoiceToLists(choice, primaryBox, otherBox);
+    }
+
+    private void AddLastAppToBlocked_Click(object sender, RoutedEventArgs e)
+    {
+        AddLastKnownAppToLists(BlockedAppsBox, AllowedAppsBox);
+    }
+
+    private void AddLastAppToAllowed_Click(object sender, RoutedEventArgs e)
+    {
+        AddLastKnownAppToLists(AllowedAppsBox, BlockedAppsBox);
+    }
+
+    private void AddSelectedAppToBlocked_Click(object sender, RoutedEventArgs e)
+    {
+        AddSelectedAppToLists(BlockedAppsBox, AllowedAppsBox);
+    }
+
+    private void AddSelectedAppToAllowed_Click(object sender, RoutedEventArgs e)
+    {
+        AddSelectedAppToLists(AllowedAppsBox, BlockedAppsBox);
+    }
+
+    private void RefreshAppPicker_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshAppPickerOptions();
+    }
+
+    private void AddSelectedAppToLists(TextBox primaryBox, TextBox otherBox)
+    {
+        if (RunningAppsCombo.SelectedItem is not AppChoice choice)
+        {
+            MessageBox.Show(
+                "Pick an app from the running-app list first.",
+                "No App Selected",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        AddAppChoiceToLists(choice, primaryBox, otherBox);
+    }
+
+    private void AddAppChoiceToLists(AppChoice choice, TextBox primaryBox, TextBox otherBox)
+    {
+        var normalized = PerAppSettings.NormalizeProcessName(choice.ProcessName);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        var primary = PerAppSettings.ParseProcessList(primaryBox.Text);
+        if (!primary.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+            primary.Add(normalized);
+
+        var other = PerAppSettings.ParseProcessList(otherBox.Text)
+            .Where(p => !string.Equals(p, normalized, StringComparison.OrdinalIgnoreCase));
+
+        primaryBox.Text = PerAppSettings.FormatProcessList(primary);
+        otherBox.Text = PerAppSettings.FormatProcessList(other);
+        SaveSettings();
+    }
+
+    private void RefreshAppPickerOptions()
+    {
+        RememberLastExternalApp(_appPicker());
+        UpdateLastExternalAppUi();
+
+        var visibleApps = AppContextService.GetVisibleApps("KeystrokeApp")
+            .Select(app => new AppChoice
+            {
+                ProcessName = app.ProcessName,
+                WindowTitle = app.WindowTitle
+            })
+            .OrderBy(app => app.FriendlyName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(app => app.CategoryLabel, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (_lastExternalApp != null &&
+            !visibleApps.Any(app => string.Equals(
+                PerAppSettings.NormalizeProcessName(app.ProcessName),
+                PerAppSettings.NormalizeProcessName(_lastExternalApp.ProcessName),
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            visibleApps.Insert(0, _lastExternalApp);
+        }
+
+        RunningAppsCombo.Items.Clear();
+        foreach (var app in visibleApps)
+            RunningAppsCombo.Items.Add(app);
+
+        if (RunningAppsCombo.Items.Count > 0)
+            RunningAppsCombo.SelectedIndex = 0;
+
+        UpdateSelectedAppDetailUi();
+    }
+
+    private void RememberLastExternalApp((string ProcessName, string WindowTitle) app)
+    {
+        var normalized = PerAppSettings.NormalizeProcessName(app.ProcessName);
+        if (string.IsNullOrWhiteSpace(normalized) ||
+            string.Equals(normalized, "keystrokeapp", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _lastExternalApp = new AppChoice
+        {
+            ProcessName = app.ProcessName,
+            WindowTitle = app.WindowTitle
+        };
+    }
+
+    private AppChoice? GetLastKnownApp()
+    {
+        RememberLastExternalApp(_appPicker());
+        return _lastExternalApp;
+    }
+
+    private void UpdateLastExternalAppUi()
+    {
+        if (_lastExternalApp == null)
+        {
+            LastExternalAppText.Text = "No recent app captured yet.";
+            LastExternalAppMetaText.Text = "";
+            LastExternalAppHintText.Text = "Focus another app before opening Settings, or use the running-app picker on the right.";
+            return;
+        }
+
+        LastExternalAppText.Text = _lastExternalApp.DisplayLabel;
+        LastExternalAppMetaText.Text = _lastExternalApp.DetailLabel;
+        LastExternalAppHintText.Text = "This is the last non-Keystroke app Keystroke remembers seeing.";
+    }
+
+    private void RunningAppsCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateSelectedAppDetailUi();
+    }
+
+    private void UpdateSelectedAppDetailUi()
+    {
+        if (RunningAppsCombo.SelectedItem is not AppChoice choice)
+        {
+            RunningAppsSelectionDetailText.Text = "Select an app to see more detail here.";
+            return;
+        }
+
+        var normalized = PerAppSettings.NormalizeProcessName(choice.ProcessName);
+        RunningAppsSelectionDetailText.Text = string.IsNullOrWhiteSpace(choice.ShortWindowTitle)
+            ? $"{choice.DisplayLabel} · process {normalized}"
+            : $"{choice.DetailLabel} · process {normalized}";
+    }
+
+    private static string GetFriendlyProcessName(string processName)
+    {
+        var normalized = PerAppSettings.NormalizeProcessName(processName);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return "Unknown app";
+
+        return normalized switch
+        {
+            "code" => "VS Code",
+            "devenv" => "Visual Studio",
+            "msedge" => "Microsoft Edge",
+            "pwsh" => "PowerShell",
+            "windowsterminal" => "Windows Terminal",
+            "notepad++" => "Notepad++",
+            "winword" => "Microsoft Word",
+            "olk" => "Outlook",
+            "idea64" => "IntelliJ IDEA",
+            "idea" => "IntelliJ IDEA",
+            "pycharm" => "PyCharm",
+            "webstorm" => "WebStorm",
+            "goland" => "GoLand",
+            "clion" => "CLion",
+            "sublime_text" => "Sublime Text",
+            _ => HumanizeProcessName(normalized)
+        };
+    }
+
+    private static string HumanizeProcessName(string normalized)
+    {
+        var parts = normalized
+            .Replace('_', ' ')
+            .Replace('-', ' ')
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length == 0)
+            return normalized;
+
+        return string.Join(" ", parts.Select(part =>
+            part.Length <= 3 ? part.ToUpperInvariant() : char.ToUpperInvariant(part[0]) + part[1..]));
+    }
+
+    private static string GetCategoryDisplay(AppCategory.Category category) => category switch
+    {
+        AppCategory.Category.Chat => "Chat",
+        AppCategory.Category.Email => "Email",
+        AppCategory.Category.Code => "Code",
+        AppCategory.Category.Document => "Document",
+        AppCategory.Category.Browser => "Browser",
+        AppCategory.Category.Terminal => "Terminal",
+        _ => ""
+    };
+
+    private static string TruncateWindowTitle(string windowTitle)
+    {
+        var trimmed = windowTitle?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return "";
+
+        const int maxLength = 72;
+        return trimmed.Length <= maxLength
+            ? trimmed
+            : trimmed[..(maxLength - 1)] + "...";
+    }
+
+    private string GetSelectedAppFilteringMode() =>
+        (AppFilteringModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString()
+        ?? PerAppSettings.AllowAllExceptBlocked;
+
+    private static void SelectComboItemByTag(ComboBox comboBox, string? tag)
+    {
+        var desired = tag ?? "";
+        foreach (var item in comboBox.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Tag?.ToString(), desired, StringComparison.OrdinalIgnoreCase))
+            {
+                comboBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (comboBox.Items.Count > 0)
+            comboBox.SelectedIndex = 0;
     }
 
     /// <summary>

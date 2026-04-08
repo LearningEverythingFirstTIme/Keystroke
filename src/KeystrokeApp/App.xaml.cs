@@ -96,6 +96,9 @@ public partial class App : Application
     private string _activeSuggestionId = "";
     private long _activeSuggestionRequestId;
     private ContextSnapshot? _activeSuggestionContext;
+    private string _lastSuppressedProcessName = "";
+    private string _lastExternalProcessName = "";
+    private string _lastExternalWindowTitle = "";
 
     private string _logPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -427,7 +430,8 @@ public partial class App : Application
                 _vocabularyProfileService,
                 _learningScoreService,
                 _contextPreferencesService,
-                _contextMaintenanceService);
+                _contextMaintenanceService,
+                GetLastExternalWindowOrCurrent);
             _settingsWindow.ThemeChanged += themeId =>
                 _suggestionPanel?.ApplyTheme(ThemeDefinitions.Get(themeId));
             _settingsWindow.Closed += (s, e) =>
@@ -497,6 +501,8 @@ public partial class App : Application
             _engineMenuItem.Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
         if (_sessionMenuItem != null)
             _sessionMenuItem.Header = $"Accepted: {_sessionAcceptCount} this session";
+
+        RefreshPerAppAvailability();
     }
 
     // ==================== Helpers ====================
@@ -526,6 +532,88 @@ public partial class App : Application
             ScreenText = screenText,
             RollingContext = rollingContext
         };
+    }
+
+    private bool IsProcessEnabled(string processName) => PerAppSettings.IsEnabled(_config, processName);
+
+    private void RememberExternalWindow(string processName, string windowTitle)
+    {
+        if (string.IsNullOrWhiteSpace(processName))
+            return;
+
+        if (string.Equals(processName, "KeystrokeApp", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _lastExternalProcessName = processName;
+        _lastExternalWindowTitle = windowTitle;
+    }
+
+    private (string ProcessName, string WindowTitle) GetLastExternalWindowOrCurrent()
+    {
+        var activeWindow = AppContextService.GetActiveWindow();
+        RememberExternalWindow(activeWindow.ProcessName, activeWindow.WindowTitle);
+
+        if (!string.IsNullOrWhiteSpace(activeWindow.ProcessName) &&
+            !string.Equals(activeWindow.ProcessName, "KeystrokeApp", StringComparison.OrdinalIgnoreCase))
+        {
+            return activeWindow;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_lastExternalProcessName))
+            return (_lastExternalProcessName, _lastExternalWindowTitle);
+
+        return activeWindow;
+    }
+
+    private bool TryGetEligibleActiveWindow(out string processName, out string windowTitle)
+    {
+        var activeWindow = AppContextService.GetActiveWindow();
+        processName = activeWindow.ProcessName;
+        windowTitle = activeWindow.WindowTitle;
+        RememberExternalWindow(processName, windowTitle);
+
+        if (IsProcessEnabled(processName))
+        {
+            _lastSuppressedProcessName = "";
+            return true;
+        }
+
+        SuppressForFilteredApp(processName);
+        return false;
+    }
+
+    private void SuppressForFilteredApp(string processName)
+    {
+        _fastDebounceTimer?.Cancel();
+        _debounceTimer?.Cancel();
+        CancelPendingPrediction();
+        _suggestionPanel?.HideSuggestion();
+        ClearActiveSuggestion();
+
+        if (!_typingBuffer.IsEmpty)
+            _typingBuffer.Clear();
+
+        var normalizedProcess = PerAppSettings.NormalizeProcessName(processName);
+        if (!string.Equals(_lastSuppressedProcessName, normalizedProcess, StringComparison.Ordinal))
+        {
+            var reason = PerAppSettings.NormalizeMode(_config.AppFilteringMode) == PerAppSettings.AllowListedOnly
+                ? "not in allow list"
+                : "blocked";
+            LogToDebug($"Per-app filter suppressed suggestions in {normalizedProcess} ({reason}).");
+            _lastSuppressedProcessName = normalizedProcess;
+        }
+    }
+
+    private void RefreshPerAppAvailability()
+    {
+        var (processName, _) = AppContextService.GetActiveWindow();
+        if (IsProcessEnabled(processName))
+        {
+            _lastSuppressedProcessName = "";
+            return;
+        }
+
+        SuppressForFilteredApp(processName);
     }
 
     private void RegisterVisibleSuggestion(long requestId, ContextSnapshot context, string prefix, string completion)

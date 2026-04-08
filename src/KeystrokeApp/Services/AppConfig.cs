@@ -71,6 +71,12 @@ public class AppConfig
     // Suggestion panel color theme ("midnight", "ember", "forest", "rose", "slate")
     public string ThemeId { get; set; } = "midnight";
 
+    // Per-app availability rules.
+    // Default: enabled everywhere except processes explicitly blocked by the user.
+    public string AppFilteringMode { get; set; } = PerAppSettings.AllowAllExceptBlocked;
+    public List<string> BlockedProcesses { get; set; } = [];
+    public List<string> AllowedProcesses { get; set; } = [];
+
     // User-customizable system prompt (empty = use default)
     public string? CustomSystemPrompt { get; set; }
 
@@ -189,6 +195,9 @@ public class AppConfig
         MaxSuggestions = Math.Clamp(MaxSuggestions, 1, 5);
         MaxOutputTokens = Math.Clamp(MaxOutputTokens, 1, 2000);
         StyleProfileInterval = Math.Clamp(StyleProfileInterval, 10, 200);
+        AppFilteringMode = PerAppSettings.NormalizeMode(AppFilteringMode);
+        BlockedProcesses = PerAppSettings.NormalizeProcessList(BlockedProcesses);
+        AllowedProcesses = PerAppSettings.NormalizeProcessList(AllowedProcesses);
     }
 
     /// <summary>

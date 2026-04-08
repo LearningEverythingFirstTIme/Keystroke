@@ -10,6 +10,8 @@ namespace KeystrokeApp.Services;
 /// </summary>
 public static class AppContextService
 {
+    public sealed record VisibleAppInfo(string ProcessName, string WindowTitle);
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
@@ -48,5 +50,53 @@ public static class AppContextService
         {
             return ("", "");
         }
+    }
+
+    public static List<VisibleAppInfo> GetVisibleApps(string? excludedProcessName = null)
+    {
+        var excluded = PerAppSettings.NormalizeProcessName(excludedProcessName);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var results = new List<VisibleAppInfo>();
+
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.HasExited || process.MainWindowHandle == IntPtr.Zero)
+                    continue;
+
+                var processName = process.ProcessName;
+                var normalized = PerAppSettings.NormalizeProcessName(processName);
+                if (string.IsNullOrWhiteSpace(normalized))
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(excluded) &&
+                    string.Equals(normalized, excluded, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var title = process.MainWindowTitle?.Trim() ?? "";
+                if (string.IsNullOrWhiteSpace(title))
+                    continue;
+
+                if (!seen.Add(normalized))
+                    continue;
+
+                results.Add(new VisibleAppInfo(processName, title));
+            }
+            catch
+            {
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return results
+            .OrderBy(app => PerAppSettings.NormalizeProcessName(app.ProcessName), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(app => app.WindowTitle, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

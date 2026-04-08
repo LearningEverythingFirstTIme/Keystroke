@@ -50,7 +50,9 @@ public partial class App
             return;
         }
 
-        var (processName, windowTitle) = AppContextService.GetActiveWindow();
+        if (!TryGetEligibleActiveWindow(out var processName, out var windowTitle))
+            return;
+
         var context = CreateContextSnapshot(sanitizedTyped.Text, processName, windowTitle);
 
         if (_predictionCache.TryGet(buffer, out var cached))

@@ -357,6 +357,12 @@
                             <TextBlock Text="Context, learning, and privacy choices" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="NavAppControlButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="AppControl" Style="{StaticResource NavRadioStyle}">
+                        <StackPanel>
+                            <TextBlock Text="App Control"/>
+                            <TextBlock Text="Choose exactly where Keystroke appears" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavAppearanceButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="Appearance" Style="{StaticResource NavRadioStyle}">
                         <StackPanel>
                             <TextBlock Text="Appearance"/>
@@ -405,6 +411,7 @@
                             <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroEngineStatusText" Text="Connected" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
                             <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroLearningStatusText" Text="Learning off" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
                             <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroContextStatusText" Text="Context on" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroAppControlStatusText" Text="App control: open" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
                             <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroThemeStatusText" Text="Theme: Midnight" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
                         </WrapPanel>
                         <WrapPanel>
@@ -499,8 +506,25 @@
 
                                 <Border Style="{StaticResource SoftCardStyle}">
                                     <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="App Control" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock x:Name="OverviewAppControlSummaryText" Text="Keystroke is available everywhere except blocked apps." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                                <TextBlock x:Name="OverviewAppControlDetailText" Text="Open App Control to decide where the overlay should stay quiet." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="Open App Control" Style="{StaticResource SecondaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="OpenAppControl_Click"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource SoftCardStyle}" Margin="0,18,0,0">
+                                    <StackPanel>
                                         <TextBlock Text="What changes most often" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Use Suggestions when you want Keystroke faster, shorter, or more cautious. Use Personalization when you want it to feel more like you."
+                                        <TextBlock Text="Use Suggestions when you want Keystroke faster, shorter, or more cautious. Use Personalization when you want it to feel more like you. Use App Control when you want the overlay to stay out of specific apps."
                                                    Foreground="{StaticResource TextMuted}"
                                                    FontSize="12"
                                                    Margin="0,8,0,0"
@@ -800,6 +824,121 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel x:Name="AppControlSection" Visibility="Collapsed">
+                        <TextBlock Text="App Control" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="Decide exactly where Keystroke is welcome so you can keep it on without second-guessing the overlay." Style="{StaticResource SectionIntroStyle}"/>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,20,0,18">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="280"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,18,0">
+                                    <TextBlock Text="Per-app availability" Foreground="{StaticResource TextPrimary}" FontSize="18" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Use this when you want Keystroke everywhere except a few noisy apps, or only inside a short trusted list like Discord and Slack." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <ComboBox x:Name="AppFilteringModeCombo" Margin="0,16,0,0" SelectionChanged="AppFilteringModeCombo_Changed">
+                                        <ComboBoxItem Tag="allow_all_except_blocked">All apps except blocked ones</ComboBoxItem>
+                                        <ComboBoxItem Tag="allow_listed_only">Only listed apps</ComboBoxItem>
+                                    </ComboBox>
+                                    <TextBlock x:Name="AppFilteringDescriptionText" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <Border Grid.Column="1" Style="{StaticResource SoftCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="Quick tips" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Block games, remote desktops, terminals, or anything fullscreen if the overlay feels distracting." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Use allow-list mode if you only want Keystroke in a few communication apps." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Use “Add last” for the most recent app you were in, or the running-app picker when you want to choose explicitly." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Style="{StaticResource SoftCardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="Last app you were using" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="LastExternalAppText" Text="No recent app captured yet." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="LastExternalAppMetaText" Text="" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="LastExternalAppHintText" Text="Focus another app before opening Settings, or use the running-app picker on the right." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Button Content="Block last app" Style="{StaticResource SecondaryButton}" Click="AddLastAppToBlocked_Click" Margin="0,0,10,0"/>
+                                        <Button Content="Allow last app" Style="{StaticResource SecondaryButton}" Click="AddLastAppToAllowed_Click"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource SoftCardStyle}" Margin="12,0,0,0">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Running app picker" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                        <Button Grid.Column="1" Content="Refresh" Style="{StaticResource SecondaryButton}" Click="RefreshAppPicker_Click"/>
+                                    </Grid>
+                                    <TextBlock Text="Pick a visible app from the current desktop session when you want an explicit target." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <ComboBox x:Name="RunningAppsCombo" Margin="0,14,0,0" SelectionChanged="RunningAppsCombo_Changed"/>
+                                    <TextBlock x:Name="RunningAppsSelectionDetailText" Text="Select an app to see more detail here." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Button Content="Block selected" Style="{StaticResource SecondaryButton}" Click="AddSelectedAppToBlocked_Click" Margin="0,0,10,0"/>
+                                        <Button Content="Allow selected" Style="{StaticResource SecondaryButton}" Click="AddSelectedAppToAllowed_Click"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border x:Name="BlockedAppsCard" Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="16" Padding="16" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Blocked apps" Foreground="{StaticResource TextPrimary}" FontSize="14" FontWeight="SemiBold"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                            <Button Content="Add last" Style="{StaticResource SecondaryButton}" Click="AddCurrentBlockedApp_Click" Margin="0,0,8,0"/>
+                                            <Button Content="Clear" Style="{StaticResource SecondaryButton}" Click="ClearBlockedApps_Click"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Text="One process name per line. Great for games, fullscreen apps, or anything where the overlay is distracting." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <TextBox x:Name="BlockedAppsBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="160" FontFamily="Consolas" FontSize="12" TextChanged="Setting_Changed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border x:Name="AllowedAppsCard" Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="16" Padding="16" Margin="12,0,0,0">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Allowed apps" Foreground="{StaticResource TextPrimary}" FontSize="14" FontWeight="SemiBold"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                            <Button Content="Add last" Style="{StaticResource SecondaryButton}" Click="AddCurrentAllowedApp_Click" Margin="0,0,8,0"/>
+                                            <Button Content="Clear" Style="{StaticResource SecondaryButton}" Click="ClearAllowedApps_Click"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Text="Used when you want a tight allow list. Anything not listed here stays quiet." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <TextBox x:Name="AllowedAppsBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="160" FontFamily="Consolas" FontSize="12" TextChanged="Setting_Changed"/>
+                                </StackPanel>
+                            </Border>
                         </Grid>
                     </StackPanel>
 
