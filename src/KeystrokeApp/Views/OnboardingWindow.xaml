@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Welcome to Keystroke"
         Width="760"
-        Height="680"
+        Height="760"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="#0B1220">
@@ -95,6 +95,7 @@
 
         <Grid Grid.Row="1" Margin="0,20,0,20">
             <Border x:Name="WelcomeStep" Style="{StaticResource CardStyle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <TextBlock Text="Recommended setup"
                                FontSize="22"
@@ -135,6 +136,7 @@
                         </Border>
                     </UniformGrid>
                 </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <Border x:Name="PrivacyStep" Style="{StaticResource CardStyle}" Visibility="Collapsed">
@@ -198,82 +200,86 @@
             </Border>
 
             <Border x:Name="ApiKeyStep" Style="{StaticResource CardStyle}" Visibility="Collapsed">
-                <StackPanel>
-                    <TextBlock Text="Connect Gemini"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource TextPrimary}"/>
-                    <TextBlock Text="Get a Gemini API key, paste it here, and verify it before Keystroke starts."
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="14"
-                               Margin="0,10,0,0"
-                               TextWrapping="Wrap"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Connect Gemini"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="Get a Gemini API key, paste it here, and verify it before Keystroke starts."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="14"
+                                   Margin="0,10,0,0"
+                                   TextWrapping="Wrap"/>
 
-                    <Border Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="{StaticResource BgSoft}">
-                        <StackPanel>
-                            <TextBlock Text="1. Open Google AI Studio" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                            <TextBlock Text="2. Create or copy a Gemini API key" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
-                            <TextBlock Text="3. Paste it below and click Verify key" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
-                            <WrapPanel Margin="0,14,0,0">
-                                <Button Content="Open Google AI Studio" Style="{StaticResource PrimaryButton}" Click="OpenAiStudio_Click"/>
-                                <Button Content="Open Settings instead" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Click="OpenSettingsInstead_Click"/>
-                            </WrapPanel>
-                        </StackPanel>
-                    </Border>
+                        <Border Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="{StaticResource BgSoft}">
+                            <StackPanel>
+                                <TextBlock Text="1. Open Google AI Studio" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                <TextBlock Text="2. Create or copy a Gemini API key" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
+                                <TextBlock Text="3. Paste it below and click Verify key" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
+                                <WrapPanel Margin="0,14,0,0">
+                                    <Button Content="Open Google AI Studio" Style="{StaticResource PrimaryButton}" Click="OpenAiStudio_Click"/>
+                                    <Button Content="Open Settings instead" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Click="OpenSettingsInstead_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
 
-                    <TextBlock Text="Gemini API key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,20,0,6"/>
-                    <TextBox x:Name="GeminiApiKeyBox" TextChanged="GeminiApiKeyBox_Changed"/>
+                        <TextBlock Text="Gemini API key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,20,0,6"/>
+                        <TextBox x:Name="GeminiApiKeyBox" TextChanged="GeminiApiKeyBox_Changed"/>
 
-                    <WrapPanel Margin="0,16,0,0">
-                        <Button x:Name="VerifyButton" Content="Verify key" Style="{StaticResource PrimaryButton}" Click="VerifyKey_Click"/>
-                        <TextBlock x:Name="VerificationStatusText" Text="Paste a key to verify it." Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="14,0,0,0" TextWrapping="Wrap"/>
-                    </WrapPanel>
+                        <WrapPanel Margin="0,16,0,0">
+                            <Button x:Name="VerifyButton" Content="Verify key" Style="{StaticResource PrimaryButton}" Click="VerifyKey_Click"/>
+                            <TextBlock x:Name="VerificationStatusText" Text="Paste a key to verify it." Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="14,0,0,0" TextWrapping="Wrap"/>
+                        </WrapPanel>
 
-                    <Border Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="#203047">
-                        <StackPanel>
-                            <TextBlock Text="Recommended first-run settings" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                            <TextBlock Text="Provider: Gemini" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
-                            <TextBlock Text="Model: Gemini 3.1 Flash-Lite Preview" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
-                            <TextBlock Text="OCR: on | Rolling context: on | Learning: off" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                        <Border Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="#203047">
+                            <StackPanel>
+                                <TextBlock Text="Recommended first-run settings" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Provider: Gemini" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
+                                <TextBlock Text="Model: Gemini 3.1 Flash-Lite Preview" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
+                                <TextBlock Text="OCR: on | Rolling context: on | Learning: off" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <Border x:Name="ReadyStep" Style="{StaticResource CardStyle}" Visibility="Collapsed">
-                <StackPanel>
-                    <TextBlock Text="Ready to start"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource TextPrimary}"/>
-                    <TextBlock x:Name="ReadySummaryText"
-                               Text="Keystroke is ready to start with Gemini."
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="14"
-                               Margin="0,10,0,0"
-                               TextWrapping="Wrap"/>
-
-                    <UniformGrid Columns="2" Margin="0,20,0,0">
-                        <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
-                            <StackPanel>
-                                <TextBlock Text="What will be active" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="ReadyActiveText" Text="Gemini completions with OCR and rolling context enabled." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource CardStyle}">
-                            <StackPanel>
-                                <TextBlock Text="What you can change later" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="You can switch providers, disable OCR, enable learning, or tighten app controls anytime in Settings." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                    </UniformGrid>
-
-                    <Border x:Name="PausedSummaryCard" Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="#3B2A20" BorderBrush="#6A4C3B" Visibility="Collapsed">
-                        <TextBlock Text="If you finish later, Keystroke will launch paused and wait for you to add a valid Gemini key before predictions start."
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Ready to start"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock x:Name="ReadySummaryText"
+                                   Text="Keystroke is ready to start with Gemini."
                                    Foreground="{StaticResource TextSecondary}"
+                                   FontSize="14"
+                                   Margin="0,10,0,0"
                                    TextWrapping="Wrap"/>
-                    </Border>
-                </StackPanel>
+
+                        <UniformGrid Columns="2" Margin="0,20,0,0">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="What will be active" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="ReadyActiveText" Text="Gemini completions with OCR and rolling context enabled." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="What you can change later" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="You can switch providers, disable OCR, enable learning, or tighten app controls anytime in Settings." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <Border x:Name="PausedSummaryCard" Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="#3B2A20" BorderBrush="#6A4C3B" Visibility="Collapsed">
+                            <TextBlock Text="If you finish later, Keystroke will launch paused and wait for you to add a valid Gemini key before predictions start."
+                                       Foreground="{StaticResource TextSecondary}"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Grid>
 
