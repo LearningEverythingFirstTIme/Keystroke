@@ -58,4 +58,50 @@ public class PerAppSettingsTests
 
         Assert.False(PerAppSettings.IsEnabled(config, "discord"));
     }
+
+    [Fact]
+    public void ApplyPreset_ConfiguresChatAndEmailAllowList()
+    {
+        var config = new AppConfig
+        {
+            AppFilteringMode = PerAppSettings.AllowAllExceptBlocked,
+            BlockedProcesses = ["game"]
+        };
+
+        PerAppSettings.ApplyPreset(config, PerAppSettings.PresetChatAndEmailOnly);
+
+        Assert.Equal(PerAppSettings.AllowListedOnly, config.AppFilteringMode);
+        Assert.Contains("discord", config.AllowedProcesses);
+        Assert.Contains("outlook", config.AllowedProcesses);
+        Assert.Empty(config.BlockedProcesses);
+    }
+
+    [Fact]
+    public void ApplyPreset_ManualAllowListClearsAllowedApps()
+    {
+        var config = new AppConfig
+        {
+            AppFilteringMode = PerAppSettings.AllowListedOnly,
+            AllowedProcesses = ["discord", "slack"]
+        };
+
+        PerAppSettings.ApplyPreset(config, PerAppSettings.PresetManualAllowList);
+
+        Assert.Equal(PerAppSettings.AllowListedOnly, config.AppFilteringMode);
+        Assert.Empty(config.AllowedProcesses);
+    }
+
+    [Fact]
+    public void GetAvailabilityReason_ExplainsWhyProcessIsSuppressed()
+    {
+        var config = new AppConfig
+        {
+            AppFilteringMode = PerAppSettings.AllowListedOnly,
+            AllowedProcesses = ["discord"]
+        };
+
+        var reason = PerAppSettings.GetAvailabilityReason(config, "slack");
+
+        Assert.Equal("Not on the allow list.", reason);
+    }
 }

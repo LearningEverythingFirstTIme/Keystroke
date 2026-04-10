@@ -12,15 +12,39 @@ public enum TextInjectionMethod
     SendInputFallback
 }
 
+public enum TextInjectionOutcome
+{
+    Injected,
+    ClipboardRestoreFailed,
+    ClipboardChangedExternally,
+    FallbackInjected,
+    Cancelled,
+    Failed
+}
+
 public sealed record TextInjectionResult(
-    bool Success,
+    TextInjectionOutcome Outcome,
     TextInjectionMethod Method,
     bool ClipboardCaptured,
     bool ClipboardRestoreAttempted,
     bool ClipboardRestoreSucceeded,
     bool ClipboardChangedExternally,
     string? FailureReason = null
-);
+)
+{
+    public bool Success => DeliveredToTarget;
+    public bool DeliveredToTarget => Outcome is
+        TextInjectionOutcome.Injected or
+        TextInjectionOutcome.ClipboardRestoreFailed or
+        TextInjectionOutcome.ClipboardChangedExternally or
+        TextInjectionOutcome.FallbackInjected;
+
+    public static TextInjectionResult Cancelled(TextInjectionMethod method = TextInjectionMethod.ClipboardPaste) =>
+        new(TextInjectionOutcome.Cancelled, method, false, false, false, false, "Injection cancelled");
+
+    public static TextInjectionResult Failed(TextInjectionMethod method, string? reason) =>
+        new(TextInjectionOutcome.Failed, method, false, false, false, false, reason);
+}
 
 public interface ITextInjector
 {
@@ -51,18 +75,34 @@ public sealed class ClipboardTextInjector : ITextInjector
     {
         if (string.IsNullOrEmpty(text))
         {
-            return new TextInjectionResult(true, TextInjectionMethod.ClipboardPaste, false, false, true, false);
+            return new TextInjectionResult(TextInjectionOutcome.Injected, TextInjectionMethod.ClipboardPaste, false, false, true, false);
         }
 
-        if (!await _injectGate.WaitAsync(0, cancellationToken))
+        try
         {
-            _trace.Trace("injection", "skipped_busy", "Injection skipped because another injection is already running.");
-            return new TextInjectionResult(false, TextInjectionMethod.ClipboardPaste, false, false, false, false, "Injector busy");
+            await _injectGate.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return TextInjectionResult.Cancelled();
         }
 
         try
         {
             return await InjectCoreAsync(text, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _trace.Trace("injection", "cancelled", "Injection cancelled before completion.");
+            return TextInjectionResult.Cancelled();
+        }
+        catch (Exception ex)
+        {
+            _trace.Trace("injection", "failed", "Injection crashed before completion.", new Dictionary<string, string>
+            {
+                ["error"] = ex.Message
+            });
+            return TextInjectionResult.Failed(TextInjectionMethod.ClipboardPaste, ex.Message);
         }
         finally
         {
@@ -114,19 +154,20 @@ public sealed class ClipboardTextInjector : ITextInjector
             await Task.Delay(RestoreDelayMs, cancellationToken);
             var restoreResult = await RestoreClipboardAsync(savedClipboard, clipboardSequenceAfterSet);
 
+            var outcome = restoreResult.ClipboardChangedExternally
+                ? TextInjectionOutcome.ClipboardChangedExternally
+                : restoreResult.RestoreAttempted && !restoreResult.RestoreSucceeded
+                    ? TextInjectionOutcome.ClipboardRestoreFailed
+                    : TextInjectionOutcome.Injected;
+
             return new TextInjectionResult(
-                true,
+                outcome,
                 TextInjectionMethod.ClipboardPaste,
                 clipboardCaptured,
                 restoreResult.RestoreAttempted,
                 restoreResult.RestoreSucceeded || !restoreResult.RestoreAttempted,
                 restoreResult.ClipboardChangedExternally,
                 restoreResult.RestoreSucceeded || !restoreResult.RestoreAttempted ? null : "Clipboard restore failed");
-        }
-        catch (OperationCanceledException)
-        {
-            _trace.Trace("injection", "cancelled", "Injection cancelled before completion.");
-            throw;
         }
         catch (Exception ex)
         {
@@ -156,7 +197,7 @@ public sealed class ClipboardTextInjector : ITextInjector
                     ["length"] = text.Length.ToString()
                 });
 
-            return new TextInjectionResult(true, TextInjectionMethod.SendInputFallback, clipboardCaptured, false, false, false, ex.Message);
+            return new TextInjectionResult(TextInjectionOutcome.FallbackInjected, TextInjectionMethod.SendInputFallback, clipboardCaptured, false, false, false, ex.Message);
         }
     }
 

@@ -1,8 +1,10 @@
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Hardcodet.Wpf.TaskbarNotification;
+using KeystrokeApp.Services;
 
 namespace KeystrokeApp;
 
@@ -12,6 +14,13 @@ namespace KeystrokeApp;
 /// </summary>
 public partial class App
 {
+    private sealed record CurrentAppStatus(
+        string ProcessName,
+        string WindowTitle,
+        bool IsEnabled,
+        string Reason,
+        string Label);
+
     private Icon GetTrayIcon(bool enabled) => enabled
         ? (_iconEnabled  ??= CreateKeyboardIcon(true))
         : (_iconDisabled ??= CreateKeyboardIcon(false));
@@ -75,6 +84,20 @@ public partial class App
             IsEnabled = false
         };
 
+        _setupMenuItem = new MenuItem { Header = "Finish Gemini setup" };
+        _setupMenuItem.Click += (s, e) =>
+        {
+            if (RunOnboardingFlow(isStartup: false))
+                EnsureRuntimeStateFromConfig();
+        };
+
+        _currentAppMenuItem = new MenuItem { Header = "Current app: loading...", IsEnabled = false };
+        _currentAppStatusMenuItem = new MenuItem { Header = "Status: checking...", IsEnabled = false };
+        _currentAppBlockMenuItem = new MenuItem { Header = "Pause in this app" };
+        _currentAppBlockMenuItem.Click += (s, e) => BlockCurrentAppFromTray();
+        _currentAppAllowMenuItem = new MenuItem { Header = "Allow only this app" };
+        _currentAppAllowMenuItem.Click += (s, e) => AllowCurrentAppFromTray();
+
         var showDebugItem = new MenuItem { Header = "Show Debug Window" };
         showDebugItem.Click += (s, e) => ShowDebugWindow();
 
@@ -103,6 +126,11 @@ public partial class App
         menu.Items.Add(new Separator());
         menu.Items.Add(_engineMenuItem);
         menu.Items.Add(_sessionMenuItem);
+        menu.Items.Add(_setupMenuItem);
+        menu.Items.Add(_currentAppMenuItem);
+        menu.Items.Add(_currentAppStatusMenuItem);
+        menu.Items.Add(_currentAppBlockMenuItem);
+        menu.Items.Add(_currentAppAllowMenuItem);
         menu.Items.Add(new Separator());
         menu.Items.Add(settingsItem);
         menu.Items.Add(showDebugItem);
@@ -112,15 +140,22 @@ public partial class App
 
         _trayIcon.ContextMenu = menu;
         _trayIcon.TrayMouseDoubleClick += (s, e) => ShowSettingsWindow();
+        menu.Opened += (_, _) => UpdateTrayCurrentAppActions();
     }
 
     private string BuildToolTip()
     {
+        if (_isSetupIncomplete)
+        {
+            return $"Keystroke - Setup required\n{_setupIncompleteReason}\nRecommended: gemini ({AppConfig.DefaultGeminiModel})";
+        }
+
         var status   = _isEnabled ? "Active" : "Paused";
         var engine   = _config.PredictionEngine;
         var model    = GetCurrentModelName();
         var accepted = _sessionAcceptCount;
-        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session";
+        var currentApp = GetCurrentAppStatus();
+        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session\n{currentApp.Label}: {currentApp.Reason}\nLast accept: {_lastAcceptanceStatus}";
     }
 
     private string GetCurrentModelName() => _config.PredictionEngine.ToLower() switch
@@ -128,7 +163,7 @@ public partial class App
         "gemini" => _config.GeminiModel ?? "default",
         "gpt5"   => _config.Gpt5Model   ?? "default",
         "claude" => _config.ClaudeModel  ?? "default",
-        "ollama" => _config.OllamaModel  ?? "qwen2.5:0.5b",
+        "ollama" => _config.OllamaModel  ?? AppConfig.DefaultOllamaModel,
         _        => "default"
     };
 
@@ -179,6 +214,151 @@ public partial class App
             }
         }
         _trayIcon.ToolTipText = BuildToolTip();
+    }
+
+    private void UpdateTrayCurrentAppActions()
+    {
+        var status = GetCurrentAppStatus();
+        if (_currentAppMenuItem != null)
+            _currentAppMenuItem.Header = $"Current app: {status.Label}";
+        if (_currentAppStatusMenuItem != null)
+            _currentAppStatusMenuItem.Header = $"Status: {status.Reason}";
+
+        if (_setupMenuItem != null)
+        {
+            _setupMenuItem.Visibility = _isSetupIncomplete ? Visibility.Visible : Visibility.Collapsed;
+            _setupMenuItem.IsEnabled = true;
+        }
+
+        var hasProcess = !string.IsNullOrWhiteSpace(status.ProcessName);
+        if (_currentAppBlockMenuItem != null)
+        {
+            _currentAppBlockMenuItem.IsEnabled = hasProcess && !_isSetupIncomplete;
+            _currentAppBlockMenuItem.Header = _isSetupIncomplete
+                ? "Finish setup first"
+                : status.IsEnabled ? "Pause in this app" : "Blocked in this app";
+        }
+
+        if (_currentAppAllowMenuItem != null)
+        {
+            _currentAppAllowMenuItem.IsEnabled = hasProcess && !_isSetupIncomplete;
+            _currentAppAllowMenuItem.Header = _isSetupIncomplete
+                ? "Finish setup first"
+                : PerAppSettings.NormalizeMode(_config.AppFilteringMode) == PerAppSettings.AllowListedOnly
+                ? "Add this app to allow list"
+                : "Allow only this app";
+        }
+
+        if (_trayIcon != null)
+            _trayIcon.ToolTipText = BuildToolTip();
+    }
+
+    private CurrentAppStatus GetCurrentAppStatus()
+    {
+        var (processName, windowTitle) = GetLastExternalWindowOrCurrent();
+        var normalized = PerAppSettings.NormalizeProcessName(processName);
+        if (_isSetupIncomplete)
+        {
+            return new CurrentAppStatus(
+                processName,
+                windowTitle,
+                false,
+                _setupIncompleteReason,
+                string.IsNullOrWhiteSpace(normalized) ? "Setup incomplete" : normalized);
+        }
+
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return new CurrentAppStatus("", "", true, "No active app detected", "No active app");
+        }
+
+        var enabled = IsProcessEnabled(processName);
+        var reason = PerAppSettings.GetAvailabilityReason(_config, processName);
+        var label = string.IsNullOrWhiteSpace(windowTitle)
+            ? normalized
+            : $"{normalized} - {windowTitle}";
+        return new CurrentAppStatus(processName, windowTitle, enabled, reason, label);
+    }
+
+    private void BlockCurrentAppFromTray()
+    {
+        var status = GetCurrentAppStatus();
+        var normalized = PerAppSettings.NormalizeProcessName(status.ProcessName);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        _config.BlockedProcesses = PerAppSettings.NormalizeProcessList(_config.BlockedProcesses.Append(normalized));
+        _config.AllowedProcesses = PerAppSettings.NormalizeProcessList(
+            _config.AllowedProcesses.Where(process => !string.Equals(process, normalized, StringComparison.OrdinalIgnoreCase)));
+        _config.Save();
+        SyncSettingsFromConfig();
+        SuppressForFilteredApp(status.ProcessName);
+        _lastAcceptanceStatus = $"Paused in {normalized}";
+        UpdateTrayCurrentAppActions();
+    }
+
+    private void AllowCurrentAppFromTray()
+    {
+        var status = GetCurrentAppStatus();
+        var normalized = PerAppSettings.NormalizeProcessName(status.ProcessName);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        if (PerAppSettings.NormalizeMode(_config.AppFilteringMode) == PerAppSettings.AllowListedOnly)
+        {
+            _config.AllowedProcesses = PerAppSettings.NormalizeProcessList(_config.AllowedProcesses.Append(normalized));
+        }
+        else
+        {
+            _config.AppFilteringMode = PerAppSettings.AllowListedOnly;
+            _config.AllowedProcesses = [normalized];
+        }
+
+        _config.BlockedProcesses = PerAppSettings.NormalizeProcessList(
+            _config.BlockedProcesses.Where(process => !string.Equals(process, normalized, StringComparison.OrdinalIgnoreCase)));
+        _config.Save();
+        SyncSettingsFromConfig();
+        _lastAcceptanceStatus = PerAppSettings.NormalizeMode(_config.AppFilteringMode) == PerAppSettings.AllowListedOnly
+            ? $"Allow list updated for {normalized}"
+            : $"Only {normalized} allowed";
+        UpdateTrayCurrentAppActions();
+    }
+
+    private void ReportAcceptanceStatus(TextInjectionResult result, string source)
+    {
+        _lastAcceptanceStatus = result.Outcome switch
+        {
+            TextInjectionOutcome.Injected => "Delivered",
+            TextInjectionOutcome.ClipboardRestoreFailed => "Delivered, but clipboard restore failed",
+            TextInjectionOutcome.ClipboardChangedExternally => "Delivered, clipboard changed before restore",
+            TextInjectionOutcome.FallbackInjected => "Delivered via SendInput fallback",
+            TextInjectionOutcome.Cancelled => "Cancelled before delivery",
+            _ => $"Failed: {result.FailureReason ?? "unknown error"}"
+        };
+
+        if (_trayIcon != null)
+            _trayIcon.ToolTipText = BuildToolTip();
+
+        if (_trayIcon == null)
+            return;
+
+        if (result.Outcome is TextInjectionOutcome.Injected)
+            return;
+
+        var title = result.Outcome is TextInjectionOutcome.Failed or TextInjectionOutcome.Cancelled
+            ? "Keystroke accept failed"
+            : "Keystroke accept warning";
+        var message = result.Outcome switch
+        {
+            TextInjectionOutcome.ClipboardRestoreFailed => "Accepted text reached the app, but Keystroke could not restore your previous clipboard contents.",
+            TextInjectionOutcome.ClipboardChangedExternally => "Accepted text reached the app. Keystroke left the clipboard alone because something else changed it first.",
+            TextInjectionOutcome.FallbackInjected => "Accepted text reached the app through the SendInput fallback. Local buffer tracking may lag until you type again.",
+            TextInjectionOutcome.Cancelled => $"The {source.Replace('_', ' ')} action was cancelled before text was delivered.",
+            _ => $"Keystroke could not deliver accepted text: {result.FailureReason ?? "unknown error"}"
+        };
+
+        _trayIcon.ShowBalloonTip(title, message, BalloonIcon.Info);
+        LogToDebug($"{title}: {message}");
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]

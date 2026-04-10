@@ -2,12 +2,14 @@
 
 A system-wide AI autocomplete for Windows. Keystroke runs in the background, listens for your input in any application, and suggests completions powered by your choice of AI engine — Google Gemini, Anthropic Claude, OpenAI GPT, OpenRouter, or local models via Ollama.
 
+Keystroke only activates after consent, exposes live privacy/data-flow details in Settings, and documents its behavior in [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and [DATA_FLOW.md](DATA_FLOW.md).
+
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-purple) ![Windows](https://img.shields.io/badge/platform-Windows-blue) ![Gemini](https://img.shields.io/badge/AI-Gemini%203.1-orange) ![Claude](https://img.shields.io/badge/AI-Claude%20Haiku%204.5-blueviolet) ![GPT](https://img.shields.io/badge/AI-GPT--5.4-green) ![OpenRouter](https://img.shields.io/badge/AI-OpenRouter-red) ![Ollama](https://img.shields.io/badge/AI-Ollama%20(local)-gray)
 
 ## How it works
 
-1. An input listener detects your typing across all applications
-2. After a brief debounce, Keystroke builds a privacy-sanitized context bundle and sends only the allowed parts to the AI engine
+1. An input listener watches the text you type in the currently focused application
+2. After a brief debounce, Keystroke builds a context bundle and strips or blocks sensitive data before any cloud request
 3. A suggestion panel appears near your cursor with the predicted completion
 4. Press **Tab** to accept, **Shift+Tab** to accept one word at a time, **Esc** to dismiss, or just keep typing
 
@@ -218,6 +220,12 @@ src/KeystrokeApp/
 - **No telemetry** — all data stays on your machine. Completion feedback is local-only JSONL, auto-pruned to 2,000 entries.
 - **Consent-first** — input processing only activates after explicit user consent on first launch.
 - **Local-only option** — use Ollama to run predictions entirely on your machine with zero cloud API calls.
+
+Reviewer-oriented references:
+
+- [PRIVACY.md](PRIVACY.md) explains what is captured, what leaves the machine, and how to disable or delete it.
+- [SECURITY.md](SECURITY.md) explains the hook/OCR/clipboard threat model and the guardrails around those features.
+- [DATA_FLOW.md](DATA_FLOW.md) walks through the runtime pipeline from keystroke to suggestion acceptance.
 
 ## Learning system
 

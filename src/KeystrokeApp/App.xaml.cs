@@ -24,6 +24,7 @@ public partial class App : Application
     private DebugWindow?              _debugWindow;
     private SuggestionPanel?         _suggestionPanel;
     private SettingsWindow?          _settingsWindow;
+    private OnboardingWindow?        _onboardingWindow;
     private IPredictionEngine?       _predictionEngine;
     private ScreenReaderService?              _ocrService;
     private Timer?                   _ocrTimer;
@@ -65,6 +66,11 @@ public partial class App : Application
     private MenuItem? _enabledMenuItem;
     private MenuItem? _engineMenuItem;
     private MenuItem? _sessionMenuItem;
+    private MenuItem? _setupMenuItem;
+    private MenuItem? _currentAppMenuItem;
+    private MenuItem? _currentAppStatusMenuItem;
+    private MenuItem? _currentAppBlockMenuItem;
+    private MenuItem? _currentAppAllowMenuItem;
 
     // ── Prediction state (used by App.Prediction.cs) ─────────────────────────
     // _predictionCts and _lastPredictionPrefix are guarded by _predictionCtsLock.
@@ -81,24 +87,25 @@ public partial class App : Application
     //                              0 means no suggestion is currently shown.
     //   _cycleDepth              — count of Ctrl+Up/Down presses since the current suggestion appeared;
     //                              reset to 0 each time a new suggestion arrives.
-    private long _suggestionShownAtTicks = 0;
-    private int  _cycleDepth             = 0;
     private readonly CorrectionDetector _postEditDetector = new();
     private readonly ReliabilityTraceService _reliabilityTrace = new();
+    private readonly OnboardingStateService _onboardingStateService = new();
+    private readonly GeminiApiKeyValidationService _geminiApiKeyValidationService = new();
     private readonly ITextInjector _textInjector;
+    private readonly SuggestionLifecycleController _suggestionLifecycle = new();
+    private readonly SemaphoreSlim _acceptanceGate = new(1, 1);
     private long _predictionRequestCounter;
     private long _activePredictionRequestId;
-    private long _suggestionIdCounter;
     private long _lastBufferTraceTicks;
     private int _lastTracedBufferLength;
     private volatile string _predictionState = "Idle";
-    private readonly object _activeSuggestionLock = new();
-    private string _activeSuggestionId = "";
-    private long _activeSuggestionRequestId;
-    private ContextSnapshot? _activeSuggestionContext;
     private string _lastSuppressedProcessName = "";
     private string _lastExternalProcessName = "";
     private string _lastExternalWindowTitle = "";
+    private string _lastAcceptanceStatus = "Ready";
+    private bool _runtimeActivated;
+    private bool _isSetupIncomplete;
+    private string _setupIncompleteReason = "Finish onboarding to start completions.";
 
     private string _logPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -166,24 +173,6 @@ public partial class App : Application
                 ["learningEnabled"] = _config.LearningEnabled.ToString()
             });
 
-            // First-launch consent — must accept before input processing activates
-            if (!_config.ConsentAccepted)
-            {
-                var consent = new Views.ConsentDialog();
-                consent.ShowDialog();
-
-                if (!consent.Accepted)
-                {
-                    Log("User declined consent. Exiting.");
-                    Shutdown();
-                    return;
-                }
-
-                _config.ConsentAccepted = true;
-                _config.Save();
-                Log("User accepted consent.");
-            }
-
             // Prune completions file if it's grown too large
             _acceptanceTracker.PruneIfNeeded(maxLines: 2000);
             _learningEventService.PruneIfNeeded(maxLines: 4000);
@@ -227,50 +216,34 @@ public partial class App : Application
             // Run on a background thread so file I/O doesn't block the UI thread at startup.
             _ = Task.Run(PruneLogFiles);
 
-            // Initialize prediction engine based on config
-            _predictionEngine = CreatePredictionEngine();
-            _styleProfileService.Engine = _predictionEngine;
-            Log($"Prediction engine: {_predictionEngine?.GetType().Name ?? "none"}");
-
-            // Initialize typing buffer
             _typingBuffer.BufferChanged += OnBufferChanged;
             _typingBuffer.BufferCleared += OnBufferCleared;
 
-            // Initialize debounce timers
-            // Predictions now wait for settled text instead of firing mid-composition.
-            _debounceTimer = new DebounceTimer(_config.DebounceMs);
-            _debounceTimer.DebounceComplete += OnDebounceComplete;
-            _fastDebounceTimer = new DebounceTimer(_config.FastDebounceMs);
-            _fastDebounceTimer.DebounceComplete += OnDebounceComplete;
-
-            // Initialize input listener
-            _inputListener = new InputListenerService();
-            _inputListener.CharacterTyped  += OnCharacterTyped;
-            _inputListener.SpecialKeyPressed += OnSpecialKeyPressed;
-            _inputListener.InputDiagnostic  += msg => LogToDebug(msg);
-            _inputListener.Start();
-            Log("Input listener started.");
-
-            // Create suggestion panel (hidden initially) and apply saved theme
-            _suggestionPanel = new SuggestionPanel();
-            _suggestionPanel.ApplyTheme(ThemeDefinitions.Get(_config.ThemeId));
-            Log("Suggestion panel created.");
-
-            // Initialize OCR service with periodic capture (every 3 seconds)
-            if (_config.OcrEnabled)
-            {
-                _ocrService = new ScreenReaderService();
-                _ocrTimer   = new Timer(OnOcrTimerTick, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
-                Log("OCR service initialized.");
-            }
-            else
-            {
-                Log("OCR disabled in settings.");
-            }
-
             // Create system tray icon
+            _isEnabled = false;
             CreateTrayIcon();
             Log("Tray icon created.");
+
+            if (_onboardingStateService.TryCompleteOnboardingFromExistingSetup(_config))
+            {
+                _config.Save();
+                Log("Existing valid provider setup detected. Marked onboarding complete.");
+            }
+
+            RefreshShellStatus();
+
+            if (ShouldRunOnboarding())
+            {
+                var continueApp = RunOnboardingFlow(isStartup: true);
+                if (!continueApp)
+                {
+                    Log("User exited during onboarding. Exiting.");
+                    Shutdown();
+                    return;
+                }
+            }
+
+            EnsureRuntimeStateFromConfig();
 
             Log("App ready. Right-click tray icon for options.");
             _reliabilityTrace.Trace("startup", "ready", "App startup completed successfully.");
@@ -291,18 +264,204 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         Log("App exiting...");
-        CancelPendingPrediction();
+        DeactivateRuntime();
         _postEditDetector.Dispose();
-        _ocrTimer?.Dispose();
-        _ocrService?.Dispose();
-        _inputListener?.Dispose();
-        (_predictionEngine as IDisposable)?.Dispose();
         _trayIcon?.Dispose();
-        _suggestionPanel?.Close();
-        _debounceTimer?.Dispose();
-        _fastDebounceTimer?.Dispose();
         _suspendTimer?.Dispose();
+        _geminiApiKeyValidationService.Dispose();
         base.OnExit(e);
+    }
+
+    private bool ShouldRunOnboarding()
+    {
+        if (!_config.ConsentAccepted)
+            return true;
+
+        if (_config.OnboardingCompleted)
+            return false;
+
+        return !_onboardingStateService.HasUsableProviderSetup(_config);
+    }
+
+    private bool RunOnboardingFlow(bool isStartup)
+    {
+        _onboardingStateService.ApplyRecommendedGeminiDefaults(_config);
+
+        _onboardingWindow = new OnboardingWindow(_config, _geminiApiKeyValidationService);
+        _onboardingWindow.ShowDialog();
+        var result = _onboardingWindow.Result;
+        _onboardingWindow = null;
+
+        var dialogWasDismissed = !result.ExitApplication &&
+            !result.StartPaused &&
+            !result.OpenSettingsRequested &&
+            !result.OnboardingCompleted &&
+            !result.ConsentAccepted;
+        if (dialogWasDismissed)
+            return !isStartup || _config.ConsentAccepted;
+
+        if (result.ExitApplication)
+            return false;
+
+        if (result.ConsentAccepted)
+            _config.ConsentAccepted = true;
+
+        if (!string.IsNullOrWhiteSpace(result.GeminiApiKey))
+            _config.GeminiApiKey = result.GeminiApiKey.Trim();
+
+        _config.PredictionEngine = "gemini";
+        _config.GeminiModel = AppConfig.DefaultGeminiModel;
+        _config.OcrEnabled = true;
+        _config.RollingContextEnabled = true;
+        _config.LearningEnabled = false;
+        _config.OnboardingCompleted = result.OnboardingCompleted;
+        _config.Save();
+
+        if (result.OpenSettingsRequested)
+            Dispatcher.BeginInvoke(ShowSettingsWindow);
+
+        return true;
+    }
+
+    private void EnsureRuntimeStateFromConfig()
+    {
+        if (_onboardingStateService.TryCompleteOnboardingFromExistingSetup(_config))
+            _config.Save();
+
+        if (_onboardingStateService.CanActivateRuntime(_config))
+        {
+            ActivateRuntimeFromConfig();
+            return;
+        }
+
+        EnterSetupIncompleteState(_onboardingStateService.GetSetupIncompleteReason(_config));
+    }
+
+    private void ActivateRuntimeFromConfig()
+    {
+        if (!_onboardingStateService.CanActivateRuntime(_config))
+        {
+            EnterSetupIncompleteState(_onboardingStateService.GetSetupIncompleteReason(_config));
+            return;
+        }
+
+        DeactivateRuntime();
+
+        _predictionEngine = CreatePredictionEngine();
+        _styleProfileService.Engine = _predictionEngine;
+        Log($"Prediction engine: {_predictionEngine?.GetType().Name ?? "none"}");
+
+        _debounceTimer = new DebounceTimer(_config.DebounceMs);
+        _debounceTimer.DebounceComplete += OnDebounceComplete;
+        _fastDebounceTimer = new DebounceTimer(_config.FastDebounceMs);
+        _fastDebounceTimer.DebounceComplete += OnDebounceComplete;
+
+        _inputListener = new InputListenerService();
+        _inputListener.CharacterTyped += OnCharacterTyped;
+        _inputListener.SpecialKeyPressed += OnSpecialKeyPressed;
+        _inputListener.InputDiagnostic += msg => LogToDebug(msg);
+        _inputListener.Start();
+        Log("Input listener started.");
+
+        _suggestionPanel = new SuggestionPanel();
+        _suggestionPanel.ApplyTheme(ThemeDefinitions.Get(_config.ThemeId));
+        Log("Suggestion panel created.");
+
+        if (_config.OcrEnabled)
+        {
+            _ocrService = new ScreenReaderService();
+            _ocrTimer = new Timer(OnOcrTimerTick, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
+            Log("OCR service initialized.");
+        }
+        else
+        {
+            Log("OCR disabled in settings.");
+        }
+
+        _runtimeActivated = true;
+        _isSetupIncomplete = false;
+        _setupIncompleteReason = "";
+        _isEnabled = true;
+        _lastAcceptanceStatus = "Ready";
+
+        _styleProfileService.CancelGeneration();
+        _styleProfileService.UpdateInterval(_config.StyleProfileInterval);
+        _vocabularyProfileService.CancelGeneration();
+        _vocabularyProfileService.UpdateInterval(_config.StyleProfileInterval);
+
+        if (_config.LearningEnabled && _config.StyleProfileEnabled)
+        {
+            _styleProfileService.Start(_config.StyleProfileInterval);
+            _vocabularyProfileService.Start(_config.StyleProfileInterval);
+        }
+
+        RefreshShellStatus();
+    }
+
+    private void DeactivateRuntime()
+    {
+        CancelPendingPrediction();
+        _fastDebounceTimer?.Cancel();
+        _debounceTimer?.Cancel();
+        _suggestionPanel?.HideSuggestion();
+        ClearActiveSuggestion();
+
+        if (!_typingBuffer.IsEmpty)
+            _typingBuffer.Clear();
+
+        _ocrTimer?.Dispose();
+        _ocrTimer = null;
+        _ocrService?.Dispose();
+        _ocrService = null;
+
+        _inputListener?.Dispose();
+        _inputListener = null;
+
+        (_predictionEngine as IDisposable)?.Dispose();
+        _predictionEngine = null;
+        _styleProfileService.Engine = null;
+
+        _suggestionPanel?.Close();
+        _suggestionPanel = null;
+
+        _debounceTimer?.Dispose();
+        _debounceTimer = null;
+        _fastDebounceTimer?.Dispose();
+        _fastDebounceTimer = null;
+
+        _runtimeActivated = false;
+    }
+
+    private void EnterSetupIncompleteState(string reason)
+    {
+        DeactivateRuntime();
+        _isEnabled = false;
+        _isSetupIncomplete = true;
+        _setupIncompleteReason = reason;
+        _lastAcceptanceStatus = "Setup incomplete";
+        RefreshShellStatus();
+    }
+
+    private void RefreshShellStatus()
+    {
+        if (_trayIcon != null)
+        {
+            _trayIcon.Icon = GetTrayIcon(_isEnabled && !_isSetupIncomplete);
+            _trayIcon.ToolTipText = BuildToolTip();
+        }
+
+        if (_enabledMenuItem != null)
+        {
+            _enabledMenuItem.IsChecked = _isEnabled && !_isSetupIncomplete;
+            _enabledMenuItem.IsEnabled = !_isSetupIncomplete;
+        }
+
+        if (_engineMenuItem != null)
+            _engineMenuItem.Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
+        if (_sessionMenuItem != null)
+            _sessionMenuItem.Header = $"Accepted: {_sessionAcceptCount} this session";
+
+        UpdateTrayCurrentAppActions();
     }
 
     // ==================== Engine creation ====================
@@ -313,22 +472,18 @@ public partial class App : Application
         {
             "gemini" when !string.IsNullOrWhiteSpace(_config.GeminiApiKey)
                 => new GeminiPredictionEngine(_config.GeminiApiKey, _config.GeminiModel),
-            "gemini"
-                => throw new InvalidOperationException("Gemini API key not set. Please configure it in Settings."),
+            "gemini" => new DummyPredictionEngine(),
             "gpt5" when !string.IsNullOrWhiteSpace(_config.OpenAiApiKey)
                 => new Gpt5PredictionEngine(_config.OpenAiApiKey, _config.Gpt5Model),
-            "gpt5"
-                => throw new InvalidOperationException("OpenAI API key not set. Please configure it in Settings."),
+            "gpt5" => new DummyPredictionEngine(),
             "claude" when !string.IsNullOrWhiteSpace(_config.AnthropicApiKey)
                 => new ClaudePredictionEngine(_config.AnthropicApiKey, _config.ClaudeModel),
-            "claude"
-                => throw new InvalidOperationException("Claude API key not set. Please configure it in Settings."),
+            "claude" => new DummyPredictionEngine(),
             "ollama"
                 => new OllamaPredictionEngine(_config.OllamaModel, _config.OllamaEndpoint),
             "openrouter" when !string.IsNullOrWhiteSpace(_config.OpenRouterApiKey)
                 => new OpenRouterPredictionEngine(_config.OpenRouterApiKey, _config.OpenRouterModel),
-            "openrouter"
-                => throw new InvalidOperationException("OpenRouter API key not set. Please configure it in Settings."),
+            "openrouter" => new DummyPredictionEngine(),
             _ => new DummyPredictionEngine()
         };
 
@@ -431,7 +586,8 @@ public partial class App : Application
                 _learningScoreService,
                 _contextPreferencesService,
                 _contextMaintenanceService,
-                GetLastExternalWindowOrCurrent);
+                GetLastExternalWindowOrCurrent,
+                CreatePromptPreviewSnapshot);
             _settingsWindow.ThemeChanged += themeId =>
                 _suggestionPanel?.ApplyTheme(ThemeDefinitions.Get(themeId));
             _settingsWindow.Closed += (s, e) =>
@@ -445,64 +601,20 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Called when the settings window closes. Re-reads config and recreates the engine.
+    /// Called when the settings window closes. Re-reads config and updates runtime state.
     /// </summary>
     private void SyncSettingsFromConfig()
     {
         _config = AppConfig.Load();
         Log("Settings updated from config.");
 
-        // Dispose the old engine's HttpClient before creating a new one
-        (_predictionEngine as IDisposable)?.Dispose();
-        _predictionEngine = CreatePredictionEngine();
-        _styleProfileService.Engine = _predictionEngine;
-        Log($"Prediction engine recreated: {_predictionEngine?.GetType().Name}");
+        if (_onboardingStateService.TryCompleteOnboardingFromExistingSetup(_config))
+            _config.Save();
 
-        _styleProfileService.CancelGeneration();
-        _styleProfileService.UpdateInterval(_config.StyleProfileInterval);
-        _vocabularyProfileService.UpdateInterval(_config.StyleProfileInterval);
+        EnsureRuntimeStateFromConfig();
 
-        if (_config.LearningEnabled && _config.StyleProfileEnabled)
-        {
-            _styleProfileService.Start(_config.StyleProfileInterval);
-            _vocabularyProfileService.Start(_config.StyleProfileInterval);
-        }
-
-        // Update debounce timers
-        _debounceTimer?.Dispose();
-        _debounceTimer = new DebounceTimer(_config.DebounceMs);
-        _debounceTimer.DebounceComplete += OnDebounceComplete;
-        _fastDebounceTimer?.Dispose();
-        _fastDebounceTimer = new DebounceTimer(_config.FastDebounceMs);
-        _fastDebounceTimer.DebounceComplete += OnDebounceComplete;
-
-        // Toggle OCR on/off based on settings
-        if (_config.OcrEnabled && _ocrService == null)
-        {
-            _ocrService = new ScreenReaderService();
-            _ocrTimer   = new Timer(OnOcrTimerTick, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
-            Log("OCR enabled.");
-        }
-        else if (!_config.OcrEnabled && _ocrService != null)
-        {
-            _ocrTimer?.Dispose();
-            _ocrTimer   = null;
-            _ocrService?.Dispose();
-            _ocrService = null;
-            Log("OCR disabled.");
-        }
-
-        if (_trayIcon != null)
-        {
-            _trayIcon.ToolTipText = BuildToolTip();
-            _trayIcon.Icon        = GetTrayIcon(_isEnabled);
-        }
-        if (_engineMenuItem != null)
-            _engineMenuItem.Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
-        if (_sessionMenuItem != null)
-            _sessionMenuItem.Header = $"Accepted: {_sessionAcceptCount} this session";
-
-        RefreshPerAppAvailability();
+        if (_runtimeActivated)
+            RefreshPerAppAvailability();
     }
 
     // ==================== Helpers ====================
@@ -618,26 +730,20 @@ public partial class App : Application
 
     private void RegisterVisibleSuggestion(long requestId, ContextSnapshot context, string prefix, string completion)
     {
-        var suggestionId = $"sugg-{Interlocked.Increment(ref _suggestionIdCounter)}";
-        lock (_activeSuggestionLock)
-        {
-            _activeSuggestionId = suggestionId;
-            _activeSuggestionRequestId = requestId;
-            _activeSuggestionContext = context;
-        }
-        _learningCaptureCoordinator.OnSuggestionShown(suggestionId, requestId, context, prefix, completion);
+        var transition = _suggestionLifecycle.ShowSuggestion(requestId, context, prefix, completion);
+        if (!string.IsNullOrWhiteSpace(transition.ClearedSuggestionId))
+            _learningCaptureCoordinator.ClearSuggestion(transition.ClearedSuggestionId);
+        _learningCaptureCoordinator.OnSuggestionShown(
+            transition.State.SuggestionId,
+            requestId,
+            context,
+            prefix,
+            completion);
     }
 
     private void ClearActiveSuggestion()
     {
-        string idToClear;
-        lock (_activeSuggestionLock)
-        {
-            idToClear = _activeSuggestionId;
-            _activeSuggestionId = "";
-            _activeSuggestionRequestId = 0;
-            _activeSuggestionContext = null;
-        }
+        var idToClear = _suggestionLifecycle.ClearSuggestion();
         if (!string.IsNullOrWhiteSpace(idToClear))
             _learningCaptureCoordinator.ClearSuggestion(idToClear);
     }
@@ -648,10 +754,48 @@ public partial class App : Application
     /// </summary>
     private (string SuggestionId, long RequestId, ContextSnapshot? Context) SnapshotActiveSuggestion()
     {
-        lock (_activeSuggestionLock)
-        {
-            return (_activeSuggestionId, _activeSuggestionRequestId, _activeSuggestionContext);
-        }
+        var state = _suggestionLifecycle.Snapshot();
+        return (state.SuggestionId, state.SuggestionRequestId, state.Context);
+    }
+
+    private PromptPreviewSnapshot CreatePromptPreviewSnapshot()
+    {
+        var (processName, windowTitle) = GetLastExternalWindowOrCurrent();
+        var providerLabel = $"{_config.PredictionEngine} ({GetCurrentModelName()})";
+        var rollingContext = _config.RollingContextEnabled
+            ? _rollingContext.GetContext(processName, windowTitle)
+            : null;
+
+        return PromptPreviewBuilder.Build(
+            _config,
+            providerLabel,
+            _typingBuffer.CurrentText,
+            processName,
+            windowTitle,
+            IsProcessEnabled(processName),
+            _outboundPrivacy,
+            _config.LearningEnabled ? _learningService : null,
+            _config.LearningEnabled && _config.StyleProfileEnabled ? _styleProfileService : null,
+            _config.LearningEnabled && _config.StyleProfileEnabled ? _vocabularyProfileService : null,
+            _ocrService?.CachedText,
+            rollingContext);
+    }
+
+    private int GetSuggestionLatencyMs()
+    {
+        var shownTicks = _suggestionLifecycle.Snapshot().ShownAtTicks;
+        if (shownTicks == 0)
+            return -1;
+
+        return (int)Math.Min(
+            (DateTime.UtcNow.Ticks - shownTicks) / TimeSpan.TicksPerMillisecond,
+            int.MaxValue);
+    }
+
+    private int ConsumeCycleDepth()
+    {
+        var state = _suggestionLifecycle.Snapshot();
+        return state.CycleDepth;
     }
 
     private void LogToDebug(string message)

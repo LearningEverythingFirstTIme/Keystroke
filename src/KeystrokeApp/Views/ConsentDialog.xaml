@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Keystroke — Privacy &amp; Consent"
-        Width="540" Height="520"
+        Width="560" Height="620"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="#1C2128">
@@ -20,40 +20,48 @@
             <TextBlock Text="Welcome to Keystroke"
                        FontSize="22" FontWeight="Bold"
                        Foreground="#F0F6FC"/>
-            <TextBlock Text="Please review how this app works before continuing."
+            <TextBlock Text="Please review exactly what Keystroke captures, stores, and sends before continuing."
                        FontSize="13" Foreground="#8B949E" Margin="0,4,0,0"/>
         </StackPanel>
 
         <!-- Scrollable consent text -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
             <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9" FontSize="13" LineHeight="20">
-                <Bold>Input Processing</Bold><LineBreak/>
-                Keystroke listens for your typed input in order to provide AI-powered
-                text completions. Your input is processed locally and only the current
-                typed text is sent to your chosen AI provider (Google, Anthropic, or
-                OpenAI) for prediction.<LineBreak/>
+                <Bold>What Keystroke captures locally</Bold><LineBreak/>
+                Keystroke watches keyboard input so it can show autocomplete suggestions
+                in the app you are currently using. It keeps the active typed text in
+                memory long enough to build a prediction request and to manage accepts,
+                dismissals, and word-by-word continuation.<LineBreak/>
                 <LineBreak/>
-                <Bold>Screen Context (Optional)</Bold><LineBreak/>
-                When enabled, Keystroke can read text visible on your screen using
-                OCR to improve prediction relevance. This screen text is sent to your
-                AI provider along with your typed text. You can disable this in Settings.<LineBreak/>
+                <Bold>What may be sent to your chosen model</Bold><LineBreak/>
+                When predictions are enabled, Keystroke may send your current typed
+                prefix, a privacy-safe app label, optional OCR text, optional recent
+                accepted text, and optional learning hints to your selected provider.
+                Raw window titles stay local. High-risk active input is blocked instead
+                of being sent.<LineBreak/>
                 <LineBreak/>
-                <Bold>Data Sent to AI Providers</Bold><LineBreak/>
-                Each prediction request sends: your currently typed text, the active
-                application name, and (if enabled) screen context and recent typing
-                history. Sensitive patterns (emails, phone numbers, credit cards, SSNs)
-                are automatically redacted before transmission.<LineBreak/>
+                <Bold>Optional context sources</Bold><LineBreak/>
+                OCR screen reading and rolling context are both optional. If enabled,
+                they help Keystroke stay grounded in the document, conversation, or
+                code you are looking at. You can turn either feature off in Settings
+                at any time.<LineBreak/>
                 <LineBreak/>
-                <Bold>Local Data Storage</Bold><LineBreak/>
-                Your API keys are encrypted on disk using Windows DPAPI. If you opt in
-                to the Learning feature in Settings, accepted completions are logged
-                locally (with PII redacted) to improve future suggestions. No data is
-                stored on external servers by Keystroke.<LineBreak/>
+                <Bold>What stays on your machine</Bold><LineBreak/>
+                API keys are encrypted on disk with Windows DPAPI. If you enable
+                Learning, accepted and dismissed suggestions are stored locally so the
+                app can adapt to your writing style. Keystroke does not run telemetry
+                or upload that local history anywhere on its own.<LineBreak/>
                 <LineBreak/>
-                <Bold>Your Control</Bold><LineBreak/>
-                You can pause input processing at any time via the system tray icon
-                or Ctrl+Shift+K. You can disable screen reading and Learning in Settings.
-                You can clear all local data from Settings at any time.
+                <Bold>How text gets inserted</Bold><LineBreak/>
+                When you accept a suggestion, Keystroke pastes the accepted text into
+                the active app and then attempts to restore your clipboard. If the
+                clipboard changes before restoration, Keystroke leaves it alone instead
+                of overwriting newer clipboard contents.<LineBreak/>
+                <LineBreak/>
+                <Bold>Your controls</Bold><LineBreak/>
+                You can pause Keystroke from the tray icon or with Ctrl+Shift+K, block
+                specific apps, disable OCR, disable learning, inspect the current data
+                flow in Settings, or reset local learning data at any time.
             </TextBlock>
         </ScrollViewer>
 
@@ -62,7 +70,7 @@
                   Foreground="#C9D1D9" FontSize="13"
                   Checked="AgreeCheck_Changed" Unchecked="AgreeCheck_Changed">
             <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9">
-                I understand and consent to input processing and data handling as described above.
+                I understand how Keystroke monitors input, what optional context can be sent, and how to pause or limit it.
             </TextBlock>
         </CheckBox>
 

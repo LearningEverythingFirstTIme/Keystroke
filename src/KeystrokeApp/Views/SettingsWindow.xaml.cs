@@ -11,6 +11,13 @@ namespace KeystrokeApp.Views;
 
 public partial class SettingsWindow : Window
 {
+    private const double PreferredWindowWidth = 1440;
+    private const double PreferredWindowHeight = 920;
+    private const double MinimumWindowWidth = 1180;
+    private const double MinimumWindowHeight = 780;
+    private const double MaxWorkAreaWidthRatio = 0.94;
+    private const double MaxWorkAreaHeightRatio = 0.92;
+
     private sealed class AppChoice
     {
         public string ProcessName { get; init; } = "";
@@ -41,6 +48,7 @@ public partial class SettingsWindow : Window
     private readonly LearningContextPreferencesService _contextPreferencesService;
     private readonly LearningContextMaintenanceService _contextMaintenanceService;
     private readonly Func<(string ProcessName, string WindowTitle)> _appPicker;
+    private readonly Func<PromptPreviewSnapshot>? _promptPreviewProvider;
     private AppChoice? _lastExternalApp;
     private bool _loading = true;
     private DispatcherTimer? _saveDebounceTimer;
@@ -64,7 +72,8 @@ public partial class SettingsWindow : Window
         LearningScoreService?     learningScoreService     = null,
         LearningContextPreferencesService? contextPreferencesService = null,
         LearningContextMaintenanceService? contextMaintenanceService = null,
-        Func<(string ProcessName, string WindowTitle)>? appPicker = null)
+        Func<(string ProcessName, string WindowTitle)>? appPicker = null,
+        Func<PromptPreviewSnapshot>? promptPreviewProvider = null)
     {
         InitializeComponent();
         _config                   = config;
@@ -75,13 +84,20 @@ public partial class SettingsWindow : Window
         _contextPreferencesService = contextPreferencesService ?? new LearningContextPreferencesService();
         _contextMaintenanceService = contextMaintenanceService ?? new LearningContextMaintenanceService();
         _appPicker = appPicker ?? AppContextService.GetActiveWindow;
+        _promptPreviewProvider = promptPreviewProvider;
         LoadValues();
         LoadLearningStats();
         LoadVocabularyProfileStatus();
         UpdateSwatchSelection(_config.ThemeId);
         ShowSection("Overview");
         _loading = false;
+        Loaded += OnLoaded;
         Closed += OnWindowClosed;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ApplyWindowSizing();
     }
 
     private void OnWindowClosed(object? sender, EventArgs e)
@@ -92,6 +108,20 @@ public partial class SettingsWindow : Window
         _modelFetchCts?.Dispose();
         _modelFetchCts = null;
         _learningService = null;
+    }
+
+    private void ApplyWindowSizing()
+    {
+        var workArea = SystemParameters.WorkArea;
+        var maxWidth = Math.Max(MinimumWindowWidth, workArea.Width * MaxWorkAreaWidthRatio);
+        var maxHeight = Math.Max(MinimumWindowHeight, workArea.Height * MaxWorkAreaHeightRatio);
+
+        MaxWidth = workArea.Width;
+        MaxHeight = workArea.Height;
+        MinWidth = Math.Min(MinimumWindowWidth, maxWidth);
+        MinHeight = Math.Min(MinimumWindowHeight, maxHeight);
+        Width = Math.Min(PreferredWindowWidth, maxWidth);
+        Height = Math.Min(PreferredWindowHeight, maxHeight);
     }
 
     private void ShowSection(string section)
@@ -105,6 +135,8 @@ public partial class SettingsWindow : Window
 
         if (section == "AppControl")
             RefreshAppPickerOptions();
+
+        UpdatePrivacyInspector();
     }
 
     private void UpdateExperienceSummary()
@@ -208,6 +240,17 @@ public partial class SettingsWindow : Window
         OverviewAppControlDetailText.Text = allowListOnly
             ? "Great when you only want Keystroke in a small trusted set like chat or email apps."
             : "Open App Control to block noisy apps, games, terminals, or anywhere the overlay should stay quiet.";
+
+        if (AppPresetSummaryText != null)
+        {
+            AppPresetSummaryText.Text = allowListOnly
+                ? allowedCount > 0
+                    ? $"Allow-list mode is active with {allowedCount} app{(allowedCount == 1 ? "" : "s")} ready."
+                    : "Allow-list mode is active. Add the apps where Keystroke should appear."
+                : blockedCount > 0
+                    ? $"Broad mode is active with {blockedCount} blocked app{(blockedCount == 1 ? "" : "s")}."
+                    : "Keystroke is available broadly. Block only the apps where it should stay quiet.";
+        }
     }
 
     private void UpdatePreview()
@@ -312,6 +355,7 @@ public partial class SettingsWindow : Window
         UpdateFeatureCards();
         UpdateExperienceSummary();
         UpdatePreview();
+        UpdatePrivacyInspector();
     }
 
     private void LoadLearningStats()
@@ -1347,7 +1391,7 @@ public partial class SettingsWindow : Window
         OpenRouterPanel.Visibility    = e == 4 ? Visibility.Visible : Visibility.Collapsed;
         ProviderDetailIntroText.Text = e switch
         {
-            0 => "Gemini is active. Add your key and choose the model that matches your latency needs.",
+            0 => "Gemini is active. This is the recommended default provider, and Gemini 3.1 Flash-Lite Preview is the default model because it has given the best speed, accuracy, and cost balance in our testing.",
             1 => "GPT-5 is active. Add your OpenAI key and pick the model size you want.",
             2 => "Claude is active. Add your Anthropic key and choose the tradeoff between speed and quality.",
             3 => "Ollama is active. Make sure your local endpoint and pulled model are ready.",
@@ -1388,10 +1432,10 @@ public partial class SettingsWindow : Window
         _config.OpenRouterApiKey = OpenRouterApiKeyBox.Text;
 
         // Save model selections from Tag values
-        _config.GeminiModel = (GeminiModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "gemini-3.1-flash-lite-preview";
-        _config.Gpt5Model = (Gpt5ModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "gpt-5.4-nano";
-        _config.ClaudeModel = (ClaudeModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "claude-haiku-4-5-20251001";
-        _config.OllamaModel = (OllamaModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "qwen3:30b-a3b";
+        _config.GeminiModel = (GeminiModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? AppConfig.DefaultGeminiModel;
+        _config.Gpt5Model = (Gpt5ModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? AppConfig.DefaultGpt5Model;
+        _config.ClaudeModel = (ClaudeModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? AppConfig.DefaultClaudeModel;
+        _config.OllamaModel = (OllamaModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? AppConfig.DefaultOllamaModel;
         _config.OllamaEndpoint = OllamaEndpointBox.Text.Trim();
 
         // Only overwrite the saved OpenRouter model when the combo has a real selection;
@@ -1422,6 +1466,7 @@ public partial class SettingsWindow : Window
         UpdateFeatureCards();
         UpdateExperienceSummary();
         UpdatePreview();
+        UpdatePrivacyInspector();
         ShowSaveIndicator();
     }
 
@@ -1577,6 +1622,36 @@ public partial class SettingsWindow : Window
         NavAppControlButton.IsChecked = true;
         ShowSection("AppControl");
     }
+
+    private void ApplyAppPreset(string presetId)
+    {
+        _loading = true;
+        try
+        {
+            PerAppSettings.ApplyPreset(_config, presetId);
+            SelectComboItemByTag(AppFilteringModeCombo, _config.AppFilteringMode);
+            BlockedAppsBox.Text = PerAppSettings.FormatProcessList(_config.BlockedProcesses);
+            AllowedAppsBox.Text = PerAppSettings.FormatProcessList(_config.AllowedProcesses);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        SaveSettings();
+    }
+
+    private void AppPresetEverywhere_Click(object sender, RoutedEventArgs e) =>
+        ApplyAppPreset(PerAppSettings.PresetEverywhereExceptBlocked);
+
+    private void AppPresetChatOnly_Click(object sender, RoutedEventArgs e) =>
+        ApplyAppPreset(PerAppSettings.PresetChatAndEmailOnly);
+
+    private void AppPresetWritingOnly_Click(object sender, RoutedEventArgs e) =>
+        ApplyAppPreset(PerAppSettings.PresetWritingAppsOnly);
+
+    private void AppPresetManualAllowList_Click(object sender, RoutedEventArgs e) =>
+        ApplyAppPreset(PerAppSettings.PresetManualAllowList);
 
     private void Setting_Changed(object sender, RoutedEventArgs e) => SaveSettings();
     private void Setting_Changed(object sender, TextChangedEventArgs e) => DebouncedSave();
@@ -1767,6 +1842,7 @@ public partial class SettingsWindow : Window
             RunningAppsCombo.SelectedIndex = 0;
 
         UpdateSelectedAppDetailUi();
+        UpdatePrivacyInspector();
     }
 
     private void RememberLastExternalApp((string ProcessName, string WindowTitle) app)
@@ -1823,6 +1899,34 @@ public partial class SettingsWindow : Window
         RunningAppsSelectionDetailText.Text = string.IsNullOrWhiteSpace(choice.ShortWindowTitle)
             ? $"{choice.DisplayLabel} · process {normalized}"
             : $"{choice.DetailLabel} · process {normalized}";
+    }
+
+    private void UpdatePrivacyInspector()
+    {
+        if (_promptPreviewProvider == null ||
+            PromptProviderStatusText == null ||
+            PromptPreviewText == null)
+        {
+            return;
+        }
+
+        var snapshot = _promptPreviewProvider();
+        PromptProviderStatusText.Text = snapshot.ProviderLabel;
+        PromptAppStatusText.Text = snapshot.AppAvailabilityLabel;
+        PromptAppReasonText.Text = $"{snapshot.ActiveAppLabel} · {snapshot.AppAvailabilityReason}";
+        PromptFilteringStatusText.Text = snapshot.AppFilteringModeLabel;
+        PromptTypedStatusText.Text = snapshot.TypedInputStatus;
+        PromptWillSendText.Text = snapshot.WouldSendPrediction
+            ? "Prediction would be sent if the debounce fires now."
+            : "Prediction would stay local right now.";
+        PromptTypedPreviewText.Text = snapshot.TypedTextPreview;
+        PromptScreenPreviewText.Text = snapshot.ScreenContextPreview;
+        PromptRollingPreviewText.Text = snapshot.RollingContextPreview;
+        PromptLearningPreviewText.Text = snapshot.LearningHintsPreview;
+        PromptLearningStatusText.Text = snapshot.LearningHintsIncluded
+            ? "Learning hints are included."
+            : "No learning hints are included.";
+        PromptPreviewText.Text = snapshot.UserPromptPreview;
     }
 
     private static string GetFriendlyProcessName(string processName)
@@ -1917,7 +2021,7 @@ public partial class SettingsWindow : Window
         try
         {
             var endpoint = OllamaEndpointBox.Text.Trim().TrimEnd('/');
-            var model = (OllamaModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "qwen2.5:0.5b";
+            var model = (OllamaModelCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? AppConfig.DefaultOllamaModel;
 
             var response = await OllamaStatusClient.GetAsync($"{endpoint}/api/tags");
 

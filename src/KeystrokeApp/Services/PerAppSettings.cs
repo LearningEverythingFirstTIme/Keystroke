@@ -4,6 +4,42 @@ public static class PerAppSettings
 {
     public const string AllowAllExceptBlocked = "allow_all_except_blocked";
     public const string AllowListedOnly = "allow_listed_only";
+    public const string PresetEverywhereExceptBlocked = "everywhere_except_blocked";
+    public const string PresetChatAndEmailOnly = "chat_and_email_only";
+    public const string PresetWritingAppsOnly = "writing_apps_only";
+    public const string PresetManualAllowList = "manual_allow_list";
+
+    private static readonly string[] ChatAndEmailProcesses =
+    [
+        "discord",
+        "slack",
+        "teams",
+        "olk",
+        "outlook",
+        "thunderbird",
+        "msteams"
+    ];
+
+    private static readonly string[] WritingProcesses =
+    [
+        "code",
+        "devenv",
+        "discord",
+        "idea",
+        "idea64",
+        "notepad",
+        "notepad++",
+        "obsidian",
+        "olk",
+        "outlook",
+        "pycharm",
+        "slack",
+        "sublime_text",
+        "teams",
+        "thunderbird",
+        "webstorm",
+        "winword"
+    ];
 
     public static bool IsEnabled(AppConfig config, string? processName)
     {
@@ -64,4 +100,49 @@ public static class PerAppSettings
 
     public static string FormatProcessList(IEnumerable<string>? values) =>
         string.Join(Environment.NewLine, NormalizeProcessList(values));
+
+    public static string GetAvailabilityReason(AppConfig config, string? processName)
+    {
+        var normalized = NormalizeProcessName(processName);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return "No active app detected.";
+
+        if (NormalizeProcessList(config.BlockedProcesses).Contains(normalized, StringComparer.OrdinalIgnoreCase))
+            return "Blocked explicitly.";
+
+        return NormalizeMode(config.AppFilteringMode) switch
+        {
+            AllowListedOnly when !NormalizeProcessList(config.AllowedProcesses).Contains(normalized, StringComparer.OrdinalIgnoreCase)
+                => "Not on the allow list.",
+            _ => "Allowed."
+        };
+    }
+
+    public static void ApplyPreset(AppConfig config, string presetId)
+    {
+        switch (presetId)
+        {
+            case PresetChatAndEmailOnly:
+                config.AppFilteringMode = AllowListedOnly;
+                config.AllowedProcesses = NormalizeProcessList(ChatAndEmailProcesses);
+                config.BlockedProcesses = [];
+                break;
+
+            case PresetWritingAppsOnly:
+                config.AppFilteringMode = AllowListedOnly;
+                config.AllowedProcesses = NormalizeProcessList(WritingProcesses);
+                config.BlockedProcesses = [];
+                break;
+
+            case PresetManualAllowList:
+                config.AppFilteringMode = AllowListedOnly;
+                config.AllowedProcesses = [];
+                break;
+
+            default:
+                config.AppFilteringMode = AllowAllExceptBlocked;
+                config.AllowedProcesses = [];
+                break;
+        }
+    }
 }

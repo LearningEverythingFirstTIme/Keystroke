@@ -641,8 +641,8 @@ public abstract class PredictionEngineBase
     }
 
     /// <summary>
-    /// Rejects completions containing phrases that leak from system prompt framing
-    /// (e.g. "the user") which should never appear in first-person typed text.
+    /// Rejects completions containing literal prompt markers from the model input.
+    /// This stays intentionally narrow so normal prose like "the user" is allowed.
     /// </summary>
     protected static string? RejectPromptLeakage(string completion)
     {
@@ -656,17 +656,19 @@ public abstract class PredictionEngineBase
     }
 
     /// <summary>
-    /// Phrases that indicate the model is narrating about its own prompt context
-    /// rather than producing text the person would actually type.
+    /// Literal prompt markers that should never appear in a completion.
     /// </summary>
     private static readonly string[] PromptLeakagePhrases =
     [
-        "the user",
-        "the person",
-        "screen context",
-        "complete_this",
-        "recently_written",
-        "style_hints",
+        "[application:",
+        "<screen_context>",
+        "</screen_context>",
+        "<recently_written>",
+        "</recently_written>",
+        "<complete_this>",
+        "</complete_this>",
+        "<user_style_hints>",
+        "</user_style_hints>",
     ];
 
     /// <summary>

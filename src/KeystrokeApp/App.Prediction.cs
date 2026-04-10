@@ -17,16 +17,22 @@ public partial class App
 
         CancelPendingPrediction();
         _suggestionPanel?.HideSuggestion();
+        ClearActiveSuggestion();
 
         _fastDebounceTimer?.Cancel();
         _debounceTimer?.Cancel();
-        _debounceTimer?.Restart();
+
+        if (newText.Length > 0 && _wordBoundaryChars.Contains(newText[^1]))
+            _debounceTimer?.Restart();
+        else
+            _fastDebounceTimer?.Restart();
     }
 
     private void OnBufferCleared()
     {
         CancelPendingPrediction();
         _suggestionPanel?.HideSuggestion();
+        ClearActiveSuggestion();
         Interlocked.Exchange(ref _lastTracedBufferLength, 0);
         Interlocked.Exchange(ref _lastBufferTraceTicks, 0);
 
@@ -53,7 +59,7 @@ public partial class App
         if (!TryGetEligibleActiveWindow(out var processName, out var windowTitle))
             return;
 
-        var context = CreateContextSnapshot(sanitizedTyped.Text, processName, windowTitle);
+        var context = CreateContextSnapshot(buffer, processName, windowTitle);
 
         if (_predictionCache.TryGet(buffer, out var cached))
         {
@@ -73,8 +79,6 @@ public partial class App
                     if (_typingBuffer.CurrentText != buffer)
                         return;
 
-                    Interlocked.Exchange(ref _cycleDepth, 0);
-                    Interlocked.Exchange(ref _suggestionShownAtTicks, DateTime.UtcNow.Ticks);
                     _suggestionPanel?.ShowSuggestion(buffer, cached);
                     RegisterVisibleSuggestion(cacheRequestId, context, buffer, cached);
                 });
@@ -101,14 +105,12 @@ public partial class App
             _activePredictionRequestId = requestId;
             _lastPredictionPrefix = buffer;
         }
+        _suggestionLifecycle.BeginPrediction(requestId, buffer);
 
         SetPredictionState("Predicting", requestId, new Dictionary<string, string>
         {
             ["bufferLength"] = buffer.Length.ToString()
         });
-
-        Interlocked.Exchange(ref _suggestionShownAtTicks, 0);
-        Interlocked.Exchange(ref _cycleDepth, 0);
 
         Dispatcher.BeginInvoke(() =>
         {
@@ -175,7 +177,6 @@ public partial class App
                     if (_typingBuffer.CurrentText != buffer)
                         return;
 
-                    Interlocked.Exchange(ref _suggestionShownAtTicks, DateTime.UtcNow.Ticks);
                     _suggestionPanel?.OnStreamingComplete();
                     if (completion != null)
                         RegisterVisibleSuggestion(requestId, context, buffer, completion);
@@ -237,7 +238,10 @@ public partial class App
                 }
 
                 if (IsPredictionRequestCurrent(requestId))
+                {
+                    _suggestionLifecycle.CompletePrediction(requestId);
                     SetPredictionState("Idle", requestId);
+                }
             }
         }, ct);
     }
@@ -284,6 +288,7 @@ public partial class App
                     return;
 
                 _suggestionPanel?.SetAlternatives(buffer, alternatives);
+                _suggestionLifecycle.MarkAlternativesReady(requestId);
             });
 
             LogToDebug($"Loaded {alternatives.Count} alternatives for \"{buffer}\"");
@@ -318,6 +323,7 @@ public partial class App
         }
 
         _predictionState = "Idle";
+        _suggestionLifecycle.CancelPrediction();
     }
 
     private void TraceBufferChanged(string newText)

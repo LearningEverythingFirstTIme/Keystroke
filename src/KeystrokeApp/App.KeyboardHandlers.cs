@@ -11,6 +11,22 @@ public partial class App
     private static readonly HashSet<char> _wordBoundaryChars = [' ', '.', ',', '!', '?', ':', ';', ')', ']'];
     private static readonly HashSet<char> _commitBoundaryChars = ['.', '!', '?', ':', ';'];
 
+    private enum AcceptanceMode
+    {
+        Full,
+        NextWord
+    }
+
+    private sealed record AcceptancePreparation(
+        string Buffer,
+        string Completion,
+        string AcceptedText,
+        string ProcessName,
+        string WindowTitle,
+        string SuggestionId,
+        long RequestId,
+        ContextSnapshot Context);
+
     private void OnCharacterTyped(char c)
     {
         if (!_isEnabled)
@@ -156,7 +172,7 @@ public partial class App
             case InputListenerService.SpecialKey.CtrlDownArrow:
                 if (_suggestionPanel?.HasSuggestion == true)
                 {
-                    Interlocked.Increment(ref _cycleDepth);
+                    _suggestionLifecycle.IncrementCycleDepth();
                     var downSnapshot = SnapshotActiveSuggestion();
                     Dispatcher.BeginInvoke(() =>
                     {
@@ -178,7 +194,7 @@ public partial class App
             case InputListenerService.SpecialKey.CtrlUpArrow:
                 if (_suggestionPanel?.HasSuggestion == true)
                 {
-                    Interlocked.Increment(ref _cycleDepth);
+                    _suggestionLifecycle.IncrementCycleDepth();
                     var upSnapshot = SnapshotActiveSuggestion();
                     Dispatcher.BeginInvoke(() =>
                     {
@@ -200,7 +216,7 @@ public partial class App
             case InputListenerService.SpecialKey.ShiftTab:
                 if (_suggestionPanel?.HasSuggestion == true)
                 {
-                    AcceptNextWord("Shift+Tab");
+                    _ = AcceptSuggestionAsync(AcceptanceMode.NextWord, "Shift+Tab", "word_accept");
                     args.ShouldSwallow = true;
                 }
                 break;
@@ -208,7 +224,7 @@ public partial class App
             case InputListenerService.SpecialKey.CtrlRight:
                 if (_suggestionPanel?.HasSuggestion == true)
                 {
-                    AcceptNextWord("Ctrl+Right");
+                    _ = AcceptSuggestionAsync(AcceptanceMode.NextWord, "Ctrl+Right", "word_accept");
                     args.ShouldSwallow = true;
                 }
                 break;
@@ -216,101 +232,7 @@ public partial class App
             case InputListenerService.SpecialKey.Tab:
                 if (_suggestionPanel?.HasSuggestion == true)
                 {
-                    var buffer = _typingBuffer.CurrentText;
-                    var fullText = _suggestionPanel.GetFullSuggestion();
-                    var completion = SuggestionAcceptance.GetRemainingCompletion(buffer, fullText);
-                    if (string.IsNullOrEmpty(completion))
-                    {
-                        _suggestionPanel.HideSuggestion();
-                        ClearActiveSuggestion();
-                        break;
-                    }
-
-                    LogToDebug($"Tab -> Buffer: \"{buffer}\" ({buffer.Length} chars)");
-                    LogToDebug($"Tab -> Full suggestion: \"{fullText}\" ({fullText.Length} chars)");
-                    LogToDebug($"Tab -> Injecting: \"{completion}\" ({completion.Length} chars)");
-
-                    _ = InjectAcceptedTextAsync(completion, "full_accept");
-                    _suggestionPanel.AcceptSuggestion();
-
-                    Interlocked.Increment(ref _sessionAcceptCount);
-                    UpdateTraySessionInfo();
-
-                    var shownTicks = Interlocked.Exchange(ref _suggestionShownAtTicks, 0);
-                    int latencyMs = shownTicks == 0 ? -1
-                        : (int)Math.Min(
-                            (DateTime.UtcNow.Ticks - shownTicks) / TimeSpan.TicksPerMillisecond,
-                            int.MaxValue);
-                    int cycleDepth = Interlocked.Exchange(ref _cycleDepth, 0);
-
-                    var suggestionSnapshot = SnapshotActiveSuggestion();
-                    var captureContext = suggestionSnapshot.Context ?? CreateContextSnapshot(buffer, activeProcessName, activeWindowTitle);
-
-                    if (_config.LearningEnabled)
-                    {
-                        if (_config.StyleProfileEnabled)
-                        {
-                            _styleProfileService.OnAccepted();
-                            _vocabularyProfileService.OnAccepted();
-                        }
-
-                        var capturedBuffer = buffer;
-                        var capturedCompletion = completion;
-                        var capturedProc = activeProcessName;
-                        var capturedTitle = activeWindowTitle;
-                        var capturedLatency = latencyMs;
-                        var capturedDepth = cycleDepth;
-                        var capturedSuggestionId = suggestionSnapshot.SuggestionId;
-                        var capturedRequestId = suggestionSnapshot.RequestId;
-                        var capturedContext = captureContext;
-
-                        var initialQuality = CompletionFeedbackService.ComputeQualityScore(
-                            capturedLatency, capturedDepth, editedAfter: false);
-
-                        _postEditDetector.StartWatching(editedAfter =>
-                        {
-                            _acceptanceTracker.LogAccepted(
-                                capturedBuffer,
-                                capturedCompletion,
-                                capturedProc,
-                                capturedTitle,
-                                capturedLatency,
-                                capturedDepth,
-                                editedAfter);
-
-                            if (_config.LearningV2Enabled)
-                            {
-                                _learningCaptureCoordinator.OnFullAccept(
-                                    capturedSuggestionId,
-                                    capturedRequestId,
-                                    capturedContext,
-                                    capturedBuffer,
-                                    capturedCompletion,
-                                    capturedLatency,
-                                    capturedDepth,
-                                    editedAfter);
-                            }
-
-                            LogToDebug($"Tracked: latency={capturedLatency}ms cycle={capturedDepth} edited={editedAfter} quality={CompletionFeedbackService.ComputeQualityScore(capturedLatency, capturedDepth, editedAfter):F2}");
-                        });
-
-                        _learningService.AddToSession(
-                            capturedBuffer,
-                            capturedCompletion,
-                            string.IsNullOrWhiteSpace(captureContext.SubcontextKey) ? captureContext.Category : captureContext.SubcontextKey,
-                            initialQuality);
-                        LogToDebug($"Session buffer updated ({captureContext.SubcontextLabel}, quality={initialQuality:F2})");
-                    }
-
-                    var fullAcceptedText = buffer + completion;
-                    _rollingContext.AppendAccepted(fullAcceptedText, activeProcessName, activeWindowTitle);
-                    LogToDebug($"Tab -> Rolling context updated (+{fullAcceptedText.Length} chars)");
-
-                    _typingBuffer.Clear();
-                    _suggestionPanel?.HideSuggestion();
-                    ClearActiveSuggestion();
-                    CancelPendingPrediction();
-
+                    _ = AcceptSuggestionAsync(AcceptanceMode.Full, "Tab", "full_accept");
                     args.ShouldSwallow = true;
                     LogToDebug("Tab -> Key swallowed");
                 }
@@ -324,7 +246,7 @@ public partial class App
 
     // ==================== Text Injection ====================
 
-    private async Task InjectAcceptedTextAsync(string text, string source)
+    private async Task<TextInjectionResult> InjectAcceptedTextAsync(string text, string source)
     {
         try
         {
@@ -332,6 +254,7 @@ public partial class App
             var data = new Dictionary<string, string>
             {
                 ["source"] = source,
+                ["outcome"] = result.Outcome.ToString(),
                 ["method"] = result.Method.ToString(),
                 ["restoreAttempted"] = result.ClipboardRestoreAttempted.ToString(),
                 ["restoreSucceeded"] = result.ClipboardRestoreSucceeded.ToString(),
@@ -343,8 +266,8 @@ public partial class App
 
             _reliabilityTrace.Trace(
                 "injection",
-                result.Success ? "completed" : "failed",
-                $"Accepted text injection {(result.Success ? "completed" : "failed")} via {result.Method}.",
+                result.DeliveredToTarget ? "completed" : "failed",
+                $"Accepted text injection {(result.DeliveredToTarget ? "completed" : "failed")} via {result.Method}.",
                 data);
 
             if (result.Method == TextInjectionMethod.SendInputFallback)
@@ -361,13 +284,9 @@ public partial class App
                         ["source"] = source
                     });
             }
-        }
-        catch (OperationCanceledException)
-        {
-            _reliabilityTrace.Trace("injection", "cancelled", "Accepted text injection cancelled.", new Dictionary<string, string>
-            {
-                ["source"] = source
-            });
+
+            ReportAcceptanceStatus(result, source);
+            return result;
         }
         catch (Exception ex)
         {
@@ -377,81 +296,36 @@ public partial class App
                 ["error"] = ex.Message
             });
             LogToDebug($"Injection failed: {ex.Message}");
+            var failed = TextInjectionResult.Failed(TextInjectionMethod.ClipboardPaste, ex.Message);
+            ReportAcceptanceStatus(failed, source);
+            return failed;
         }
     }
 
     // ==================== Word-by-word acceptance ====================
 
-    private void AcceptNextWord(string keyLabel)
+    private async Task AcceptSuggestionAsync(AcceptanceMode mode, string triggerLabel, string source)
     {
-        if (_suggestionPanel == null)
-            return;
-
-        var (procName, winTitle) = AppContextService.GetActiveWindow();
-        if (!IsProcessEnabled(procName))
+        await _acceptanceGate.WaitAsync();
+        try
         {
-            SuppressForFilteredApp(procName);
-            return;
+            var preparation = PrepareAcceptance(mode);
+            if (preparation == null)
+                return;
+
+            LogToDebug($"{triggerLabel} -> Injecting: \"{preparation.AcceptedText}\" ({preparation.AcceptedText.Length} chars)");
+            var result = await InjectAcceptedTextAsync(preparation.AcceptedText, source);
+            if (!result.DeliveredToTarget)
+                return;
+
+            if (mode == AcceptanceMode.Full)
+                ApplyFullAcceptance(preparation);
+            else
+                ApplyPartialAcceptance(triggerLabel, preparation);
         }
-
-        var buffer = _typingBuffer.CurrentText;
-        var fullSugg = _suggestionPanel.GetFullSuggestion();
-        var completion = SuggestionAcceptance.GetRemainingCompletion(buffer, fullSugg);
-        if (string.IsNullOrEmpty(completion))
+        finally
         {
-            _suggestionPanel.HideSuggestion();
-            ClearActiveSuggestion();
-            return;
-        }
-
-        var nextWord = GetNextWord(completion);
-        LogToDebug($"{keyLabel} -> Accepting next word: \"{nextWord}\" (remaining: \"{completion[nextWord.Length..]}\")");
-        _ = InjectAcceptedTextAsync(nextWord, "word_accept");
-
-        var wordSnapshot = SnapshotActiveSuggestion();
-        var context = wordSnapshot.Context ?? CreateContextSnapshot(buffer, procName, winTitle);
-
-        if (_config.LearningEnabled && _config.LearningV2Enabled)
-        {
-            _learningCaptureCoordinator.OnPartialAccept(
-                wordSnapshot.SuggestionId,
-                wordSnapshot.RequestId,
-                context,
-                buffer,
-                completion,
-                nextWord);
-            if (_config.StyleProfileEnabled)
-            {
-                _styleProfileService.OnAccepted();
-                _vocabularyProfileService.OnAccepted();
-            }
-        }
-
-        var newBuffer = buffer + nextWord;
-        _rollingContext.AppendAccepted(newBuffer, procName, winTitle);
-
-        _typingBuffer.SetText(newBuffer);
-        lock (_predictionCtsLock)
-        {
-            _lastPredictionPrefix = newBuffer;
-        }
-
-        CancelPendingPrediction();
-
-        var remaining = completion[nextWord.Length..];
-        if (string.IsNullOrWhiteSpace(remaining))
-        {
-            _suggestionPanel.HideSuggestion();
-            ClearActiveSuggestion();
-        }
-        else
-        {
-            _suggestionPanel.ShowSuggestion(newBuffer, remaining);
-            RegisterVisibleSuggestion(
-                _activeSuggestionRequestId,
-                CreateContextSnapshot(newBuffer, procName, winTitle),
-                newBuffer,
-                remaining);
+            _acceptanceGate.Release();
         }
     }
 
@@ -463,5 +337,162 @@ public partial class App
         int start = completion[0] == ' ' ? 1 : 0;
         int spaceIdx = completion.IndexOf(' ', start);
         return spaceIdx < 0 ? completion : completion[..spaceIdx];
+    }
+
+    private AcceptancePreparation? PrepareAcceptance(AcceptanceMode mode)
+    {
+        if (_suggestionPanel == null)
+            return null;
+
+        var (processName, windowTitle) = AppContextService.GetActiveWindow();
+        if (!IsProcessEnabled(processName))
+        {
+            SuppressForFilteredApp(processName);
+            return null;
+        }
+
+        var buffer = _typingBuffer.CurrentText;
+        var fullSuggestion = _suggestionPanel.GetFullSuggestion();
+        var completion = SuggestionAcceptance.GetRemainingCompletion(buffer, fullSuggestion);
+        if (string.IsNullOrEmpty(completion))
+        {
+            _suggestionPanel.HideSuggestion();
+            ClearActiveSuggestion();
+            return null;
+        }
+
+        var acceptedText = mode == AcceptanceMode.NextWord
+            ? GetNextWord(completion)
+            : completion;
+        var snapshot = SnapshotActiveSuggestion();
+        var context = snapshot.Context ?? CreateContextSnapshot(buffer, processName, windowTitle);
+
+        return new AcceptancePreparation(
+            buffer,
+            completion,
+            acceptedText,
+            processName,
+            windowTitle,
+            snapshot.SuggestionId,
+            snapshot.RequestId,
+            context);
+    }
+
+    private void ApplyFullAcceptance(AcceptancePreparation preparation)
+    {
+        _suggestionPanel?.AcceptSuggestion();
+
+        Interlocked.Increment(ref _sessionAcceptCount);
+        UpdateTraySessionInfo();
+
+        int latencyMs = GetSuggestionLatencyMs();
+        int cycleDepth = _suggestionLifecycle.Snapshot().CycleDepth;
+
+        if (_config.LearningEnabled)
+        {
+            if (_config.StyleProfileEnabled)
+            {
+                _styleProfileService.OnAccepted();
+                _vocabularyProfileService.OnAccepted();
+            }
+
+            var initialQuality = CompletionFeedbackService.ComputeQualityScore(
+                latencyMs,
+                cycleDepth,
+                editedAfter: false);
+
+            _postEditDetector.StartWatching(editedAfter =>
+            {
+                _acceptanceTracker.LogAccepted(
+                    preparation.Buffer,
+                    preparation.Completion,
+                    preparation.ProcessName,
+                    preparation.WindowTitle,
+                    latencyMs,
+                    cycleDepth,
+                    editedAfter);
+
+                if (_config.LearningV2Enabled)
+                {
+                    _learningCaptureCoordinator.OnFullAccept(
+                        preparation.SuggestionId,
+                        preparation.RequestId,
+                        preparation.Context,
+                        preparation.Buffer,
+                        preparation.Completion,
+                        latencyMs,
+                        cycleDepth,
+                        editedAfter);
+                }
+
+                LogToDebug($"Tracked: latency={latencyMs}ms cycle={cycleDepth} edited={editedAfter} quality={CompletionFeedbackService.ComputeQualityScore(latencyMs, cycleDepth, editedAfter):F2}");
+            });
+
+            _learningService.AddToSession(
+                preparation.Buffer,
+                preparation.Completion,
+                string.IsNullOrWhiteSpace(preparation.Context.SubcontextKey)
+                    ? preparation.Context.Category
+                    : preparation.Context.SubcontextKey,
+                initialQuality);
+            LogToDebug($"Session buffer updated ({preparation.Context.SubcontextLabel}, quality={initialQuality:F2})");
+        }
+
+        var fullAcceptedText = preparation.Buffer + preparation.Completion;
+        _rollingContext.AppendAccepted(fullAcceptedText, preparation.ProcessName, preparation.WindowTitle);
+        LogToDebug($"Tab -> Rolling context updated (+{fullAcceptedText.Length} chars)");
+
+        _typingBuffer.Clear();
+        _suggestionPanel?.HideSuggestion();
+        ClearActiveSuggestion();
+        CancelPendingPrediction();
+    }
+
+    private void ApplyPartialAcceptance(string triggerLabel, AcceptancePreparation preparation)
+    {
+        LogToDebug($"{triggerLabel} -> Accepting next word: \"{preparation.AcceptedText}\"");
+
+        if (_config.LearningEnabled && _config.LearningV2Enabled)
+        {
+            _learningCaptureCoordinator.OnPartialAccept(
+                preparation.SuggestionId,
+                preparation.RequestId,
+                preparation.Context,
+                preparation.Buffer,
+                preparation.Completion,
+                preparation.AcceptedText);
+
+            if (_config.StyleProfileEnabled)
+            {
+                _styleProfileService.OnAccepted();
+                _vocabularyProfileService.OnAccepted();
+            }
+        }
+
+        var newBuffer = preparation.Buffer + preparation.AcceptedText;
+        _rollingContext.AppendAccepted(newBuffer, preparation.ProcessName, preparation.WindowTitle);
+
+        _typingBuffer.SetText(newBuffer);
+        lock (_predictionCtsLock)
+        {
+            _lastPredictionPrefix = newBuffer;
+        }
+
+        CancelPendingPrediction();
+
+        var remaining = preparation.Completion[preparation.AcceptedText.Length..];
+        if (string.IsNullOrWhiteSpace(remaining))
+        {
+            _suggestionPanel?.HideSuggestion();
+            ClearActiveSuggestion();
+            return;
+        }
+
+        _suggestionPanel?.ShowSuggestion(newBuffer, remaining);
+        RegisterVisibleSuggestion(
+            preparation.RequestId,
+            CreateContextSnapshot(newBuffer, preparation.ProcessName, preparation.WindowTitle),
+            newBuffer,
+            remaining);
     }
 }

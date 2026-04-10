@@ -11,6 +11,68 @@ namespace KeystrokeApp.Services;
 /// </summary>
 public class AppConfig
 {
+    public const string DefaultGeminiModel = "gemini-3.1-flash-lite-preview";
+    public const string DefaultClaudeModel = "claude-haiku-4-5";
+    public const string DefaultGpt5Model = "gpt-5.4-nano";
+    public const string DefaultOllamaModel = "qwen3:30b-a3b";
+
+    private static readonly HashSet<string> SupportedGeminiModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3-flash-preview",
+        "gemini-3.1-pro-preview"
+    };
+
+    private static readonly HashSet<string> SupportedClaudeModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "claude-haiku-4-5",
+        "claude-sonnet-4-6"
+    };
+
+    private static readonly HashSet<string> SupportedGpt5Models = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "gpt-5.4-nano",
+        "gpt-5.4-mini",
+        "gpt-5.4"
+    };
+
+    private static readonly HashSet<string> SupportedOllamaModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "qwen3:30b-a3b",
+        "qwen3:8b",
+        "mistral:7b",
+        "llama3.1:8b"
+    };
+
+    private static readonly Dictionary<string, string> LegacyGeminiModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["gemini-2.5-flash-lite"] = "gemini-3.1-flash-lite-preview",
+        ["gemini-2.5-flash"] = "gemini-3-flash-preview",
+        ["gemini-2.5-pro"] = "gemini-3.1-pro-preview"
+    };
+
+    private static readonly Dictionary<string, string> LegacyClaudeModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["claude-3-5-haiku-20241022"] = "claude-haiku-4-5",
+        ["claude-haiku-4-5-20251001"] = "claude-haiku-4-5",
+        ["claude-sonnet-4-20250514"] = "claude-sonnet-4-6",
+        ["claude-sonnet-4-5"] = "claude-sonnet-4-6",
+        ["claude-sonnet-4-5-20250214"] = "claude-sonnet-4-6"
+    };
+
+    private static readonly Dictionary<string, string> LegacyGpt5Models = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["gpt-5-nano"] = "gpt-5.4-nano",
+        ["gpt-5-mini"] = "gpt-5.4-mini"
+    };
+
+    private static readonly Dictionary<string, string> LegacyOllamaModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["qwen2.5:7b"] = "qwen3:8b",
+        ["llama3.2:latest"] = "llama3.1:8b",
+        ["qwen2.5:0.5b-base"] = "qwen3:8b"
+    };
+
     // Engine settings — runtime plaintext values (never serialized directly)
     [JsonIgnore] public string? GeminiApiKey { get; set; }
     [JsonIgnore] public string? AnthropicApiKey { get; set; }
@@ -23,12 +85,12 @@ public class AppConfig
     public string? OpenAiApiKeyEncrypted { get; set; }
     public string? OpenRouterApiKeyEncrypted { get; set; }
     public string PredictionEngine { get; set; } = "gemini";
-    public string GeminiModel { get; set; } = "gemini-3.1-flash-lite-preview";
-    public string ClaudeModel { get; set; } = "claude-haiku-4-5-20251001";
-    public string Gpt5Model { get; set; } = "gpt-5.4-nano";
+    public string GeminiModel { get; set; } = DefaultGeminiModel;
+    public string ClaudeModel { get; set; } = DefaultClaudeModel;
+    public string Gpt5Model { get; set; } = DefaultGpt5Model;
 
     // Local LLM (Ollama) settings — no API key needed
-    public string OllamaModel { get; set; } = "qwen3:30b-a3b";
+    public string OllamaModel { get; set; } = DefaultOllamaModel;
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
 
     // OpenRouter settings — proxies hundreds of models via one OpenAI-compatible API
@@ -67,6 +129,7 @@ public class AppConfig
 
     // First-launch consent: must be true before the app activates input processing.
     public bool ConsentAccepted { get; set; } = false;
+    public bool OnboardingCompleted { get; set; } = false;
 
     // Suggestion panel color theme ("midnight", "ember", "forest", "rose", "slate")
     public string ThemeId { get; set; } = "midnight";
@@ -198,6 +261,30 @@ public class AppConfig
         AppFilteringMode = PerAppSettings.NormalizeMode(AppFilteringMode);
         BlockedProcesses = PerAppSettings.NormalizeProcessList(BlockedProcesses);
         AllowedProcesses = PerAppSettings.NormalizeProcessList(AllowedProcesses);
+        NormalizeModelSelections();
+    }
+
+    internal void NormalizeModelSelections()
+    {
+        GeminiModel = NormalizeModelSelection(GeminiModel, DefaultGeminiModel, SupportedGeminiModels, LegacyGeminiModels);
+        ClaudeModel = NormalizeModelSelection(ClaudeModel, DefaultClaudeModel, SupportedClaudeModels, LegacyClaudeModels);
+        Gpt5Model = NormalizeModelSelection(Gpt5Model, DefaultGpt5Model, SupportedGpt5Models, LegacyGpt5Models);
+        OllamaModel = NormalizeModelSelection(OllamaModel, DefaultOllamaModel, SupportedOllamaModels, LegacyOllamaModels);
+    }
+
+    private static string NormalizeModelSelection(
+        string? current,
+        string defaultValue,
+        HashSet<string> supported,
+        Dictionary<string, string> legacyMap)
+    {
+        if (string.IsNullOrWhiteSpace(current))
+            return defaultValue;
+
+        if (legacyMap.TryGetValue(current, out var migrated))
+            current = migrated;
+
+        return supported.Contains(current) ? current : defaultValue;
     }
 
     /// <summary>
