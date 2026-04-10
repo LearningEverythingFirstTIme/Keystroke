@@ -22,7 +22,7 @@ Keystroke only activates after consent, exposes live privacy/data-flow details i
 - **Animated glassmorphism panel** — acrylic-blur overlay with smooth fade-in/slide-up animations
 - **Draggable overlay** — grab the suggestion panel to reposition it; it follows your mouse on the next prediction
 - **Word-by-word acceptance** — press `Shift+Tab` or `Ctrl+Right` to accept one word at a time
-- **Multi-suggestion cycling** — press `Ctrl+Down` / `Ctrl+Up` to browse alternative completions
+- **Multi-suggestion cycling** — fetches multiple alternative completions in parallel and displays a counter (e.g., `1/3`); press `Ctrl+Down` / `Ctrl+Up` to cycle through them
 - **5 color themes** — Midnight, Ember, Forest, Rose, and Slate panel themes
 
 ### Intelligence
@@ -144,6 +144,7 @@ All settings are stored in `%AppData%/Keystroke/config.json` and are editable th
 | GPT Model | gpt-5.4-nano | Options: nano (fastest), mini (balanced), 5.4 (smart) |
 | OpenRouter Model | google/gemini-flash-2.0 | Browse hundreds of models from the settings UI |
 | Ollama Model | llama3.2:latest | Any model you've pulled locally; supports instruct and base models |
+| Max Suggestions | 3 | Number of completions per prediction (1 = single, 2-5 = enables `Ctrl+Up/Down` cycling) |
 | Completion Length | Extended | Brief (3-5 words), Standard (8-15), Extended (15-30), Unlimited (30-50) |
 | Temperature | 0.3 | Lower = more predictable, higher = more creative (auto-adjusted per app category) |
 | Min Characters | 3 | Characters typed before predictions start |

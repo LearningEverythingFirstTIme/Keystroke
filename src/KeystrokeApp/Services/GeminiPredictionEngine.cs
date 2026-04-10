@@ -152,8 +152,8 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
     }
 
     /// <summary>
-    /// Fetch multiple alternative completions using candidateCount.
-    /// Uses the non-streaming endpoint with slightly higher temperature for variety.
+    /// Fetch multiple alternative completions by making parallel requests with higher temperature.
+    /// Each request uses a slightly different temperature for variety.
     /// </summary>
     public async Task<List<string>> FetchAlternativesAsync(ContextSnapshot context, int count = 3, CancellationToken ct = default)
     {
@@ -166,41 +166,43 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
         {
             var systemText     = BuildSystemInstruction(context);
             var dynamicTemp    = GetDynamicTemperature(context);
-            var altTemp        = Math.Min(dynamicTemp + 0.3, 1.5);
             var adaptiveTokens = GetAdaptiveMaxTokens(prefix);
+            var contents       = BuildContents(context);
 
-            var body = new
+            Log($"=== Alternatives for: \"{prefix}\" (count={count}, baseTemp={dynamicTemp:F1}, tokens={adaptiveTokens}) ===");
+
+            var tasks = Enumerable.Range(0, count).Select(async i =>
             {
-                systemInstruction = new { parts = new object[] { new { text = systemText } } },
-                contents          = BuildContents(context),
-                generationConfig  = new
+                var altTemp = Math.Min(dynamicTemp + 0.15 + (i * 0.15), 1.5);
+                var body = new
                 {
-                    maxOutputTokens = adaptiveTokens,
-                    candidateCount  = count,
-                    temperature     = altTemp,
-                    topP            = 0.95,
-                    thinkingConfig  = new { thinkingBudget = 0 }
-                }
-            };
+                    systemInstruction = new { parts = new object[] { new { text = systemText } } },
+                    contents,
+                    generationConfig  = new
+                    {
+                        maxOutputTokens = adaptiveTokens,
+                        temperature     = altTemp,
+                        topP            = 0.95,
+                        thinkingConfig  = new { thinkingBudget = 0 }
+                    }
+                };
+                var json     = JsonSerializer.Serialize(body);
+                var response = await _httpClient.PostAsync(
+                    _endpoint,
+                    new StringContent(json, Encoding.UTF8, "application/json"),
+                    ct);
+                if (!response.IsSuccessStatusCode) return null;
+                var respBody = await response.Content.ReadAsStringAsync(ct);
+                var result   = JsonSerializer.Deserialize<GeminiResponse>(respBody);
+                return result?.Candidates is { Length: > 0 }
+                    ? result.Candidates[0]?.Content?.Parts?[0]?.Text?.Trim()
+                    : null;
+            });
 
-            var json = JsonSerializer.Serialize(body);
-            Log($"=== Alternatives for: \"{prefix}\" (count={count}, temp={altTemp:F1}, tokens={adaptiveTokens}) ===");
+            var completions = await Task.WhenAll(tasks);
 
-            var response = await _httpClient.PostAsync(
-                _endpoint,
-                new StringContent(json, Encoding.UTF8, "application/json"),
-                ct);
-
-            if (!response.IsSuccessStatusCode) return results;
-
-            var respBody = await response.Content.ReadAsStringAsync(ct);
-            var result   = JsonSerializer.Deserialize<GeminiResponse>(respBody);
-
-            if (result?.Candidates == null) return results;
-
-            foreach (var candidate in result.Candidates)
+            foreach (var text in completions)
             {
-                var text = candidate?.Content?.Parts?[0]?.Text?.Trim();
                 var processed = PostProcessCompletion(prefix, text);
                 if (!string.IsNullOrWhiteSpace(processed) && !results.Contains(processed))
                     results.Add(processed);

@@ -158,11 +158,27 @@ public partial class SuggestionPanel : Window
         if (prefix != _currentPrefix || alternatives.Count == 0)
             return;
 
+        // The primary suggestion (from streaming) may have a leading space prepended.
+        // Normalize both sides for dedup so we don't show near-identical suggestions.
+        bool prefixNeedsSpace = !string.IsNullOrEmpty(prefix) && !prefix.EndsWith(" ");
+
         foreach (var alt in alternatives)
         {
             var normalized = alt.Trim().Trim('"');
-            if (!string.IsNullOrWhiteSpace(normalized) && !_suggestions.Contains(normalized, StringComparer.OrdinalIgnoreCase))
-                _suggestions.Add(normalized);
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            // Check if this alternative duplicates any existing suggestion (ignoring leading space)
+            bool isDuplicate = _suggestions.Any(existing =>
+                string.Equals(existing.TrimStart(), normalized.TrimStart(), StringComparison.OrdinalIgnoreCase));
+            if (isDuplicate)
+                continue;
+
+            // Match the leading-space convention of the primary suggestion
+            if (prefixNeedsSpace && !normalized.StartsWith(" "))
+                normalized = " " + normalized;
+
+            _suggestions.Add(normalized);
         }
 
         UpdateCounter();
@@ -289,6 +305,8 @@ public partial class SuggestionPanel : Window
 
     public string GetFullSuggestion() => _currentPrefix + _currentSuggestion;
     public string CurrentCompletion => _currentSuggestion;
+    public string CurrentPrefix => _currentPrefix;
+    public int SuggestionCount => _suggestions.Count;
     public bool HasSuggestion => IsVisible && !string.IsNullOrEmpty(_currentSuggestion);
 
     public void ApplyTheme(PanelTheme theme)

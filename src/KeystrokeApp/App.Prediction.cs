@@ -284,9 +284,12 @@ public partial class App
 
             Dispatcher.BeginInvoke(() =>
             {
-                if (!IsPredictionRequestCurrent(requestId))
-                    return;
-
+                // Don't gate on IsPredictionRequestCurrent — the alternatives fetch
+                // runs in the background and a new prediction often starts (from the
+                // user typing one more character) before alternatives arrive.
+                // SetAlternatives already guards on prefix match, which is the correct
+                // check: alternatives are applied only if the panel is still showing
+                // a suggestion for the same typed prefix.
                 _suggestionPanel?.SetAlternatives(buffer, alternatives);
                 _suggestionLifecycle.MarkAlternativesReady(requestId);
             });
