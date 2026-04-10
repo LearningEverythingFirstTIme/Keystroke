@@ -112,11 +112,13 @@ dotnet publish src/KeystrokeApp/KeystrokeApp.csproj -c Release -r win-x64 --self
 
 ### First-time setup
 
-1. Launch `KeystrokeApp.exe` — it runs in the system tray (look for the keyboard icon)
-2. A consent dialog will appear on first launch — Keystroke only activates after you explicitly opt in
-3. Right-click the tray icon and open **Settings**
-4. Select your preferred AI engine and enter the corresponding API key (or select Ollama for local inference)
-5. Start typing anywhere — suggestions will appear near your cursor
+1. Launch `KeystrokeApp.exe` — a guided onboarding wizard walks you through setup
+2. **Welcome** — overview of what Keystroke does
+3. **Privacy & consent** — review privacy defaults and grant consent (required before any input processing)
+4. **API key** — paste your Gemini API key and verify it with one click (a link to Google AI Studio is provided). You can skip this step and add a key later
+5. **Ready** — confirms your configuration and starts Keystroke with the recommended defaults (Gemini 3.1 Flash-Lite, OCR on, rolling context on, learning off)
+
+After onboarding, Keystroke runs in the system tray. Right-click the tray icon to open **Settings** and switch engines, add additional API keys, or adjust any option. If you skipped the API key step, Keystroke starts paused until you configure one.
 
 ## Keyboard shortcuts
 
@@ -203,9 +205,17 @@ src/KeystrokeApp/
     CursorPositionHelper.cs          # Mouse cursor position for panel placement
     ThemeDefinitions.cs              # Panel color themes (Midnight, Ember, Forest, Rose, Slate)
     ContextSnapshot.cs               # Context bundle for prediction requests
+    SuggestionLifecycleController.cs # Suggestion state machine (pending → visible → accepted/dismissed)
+    SuggestionLifecycleState.cs      # Immutable lifecycle state snapshot
+    PromptPreviewBuilder.cs          # Builds prompt preview for debugging/display
+    PromptPreviewSnapshot.cs         # Prompt preview data snapshot
+    OnboardingStateService.cs        # Tracks first-run onboarding progress
+    GeminiApiKeyValidationService.cs # Validates Gemini API keys via test request
   Views/
     SuggestionPanel.xaml(.cs)        # Glassmorphism overlay with multi-suggestion support
     SettingsWindow.xaml(.cs)         # Settings UI with per-engine model selection
+    OnboardingWindow.xaml(.cs)       # Guided first-run onboarding wizard
+    ConsentDialog.xaml(.cs)          # Standalone consent dialog (legacy/fallback)
 ```
 
 ## Security
@@ -218,7 +228,7 @@ src/KeystrokeApp/
 - **Custom privacy rules** — advanced users can define additional redaction/blocking patterns in `%AppData%/Keystroke/privacy-rules.json`.
 - **Contamination filtering** — prompt-leakage patterns are detected and excluded from all learning data so the model never trains on its own system prompt artifacts.
 - **No telemetry** — all data stays on your machine. Completion feedback is local-only JSONL, auto-pruned to 2,000 entries.
-- **Consent-first** — input processing only activates after explicit user consent on first launch.
+- **Consent-first** — a guided onboarding wizard collects explicit consent and validates your API key before any input processing begins.
 - **Local-only option** — use Ollama to run predictions entirely on your machine with zero cloud API calls.
 
 Reviewer-oriented references:
