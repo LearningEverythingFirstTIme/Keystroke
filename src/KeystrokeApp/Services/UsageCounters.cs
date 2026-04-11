@@ -19,6 +19,12 @@ public class UsageCounters
     /// <summary>The calendar date (yyyy-MM-dd) that <see cref="DailyCount"/> applies to.</summary>
     public string DailyDate { get; set; } = "";
 
+    /// <summary>
+    /// Whether the one-time "activate Personalized AI" nudge balloon has already been shown.
+    /// Persisted so it survives app restarts and fires exactly once per installation.
+    /// </summary>
+    public bool LearningNudgeShown { get; set; } = false;
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "Keystroke",

@@ -123,6 +123,9 @@ public partial class SettingsWindow : Window
         // Advanced
         LimitBypassCheck.IsChecked = !_config.LimitEnabled;
         PromptBox.Text = _config.EffectiveSystemPrompt;
+
+        LoadPersonalizationTeaser();
+        LoadLearningTabState();
     }
 
     private void LoadLearningStats()
@@ -176,40 +179,57 @@ public partial class SettingsWindow : Window
             // Recompute scores now so the panel always reflects the latest data.
             var scores = _learningScoreService?.Recompute() ?? new LearningScores();
 
-            CategoryBreakdownPanel.Children.Clear();
-            if (stats.TotalAccepted > 0)
+            if (_config.LearningEnabled)
             {
-                var allCategories = stats.ByCategory.Keys
-                    .Union(stats.DismissedByCategory.Keys)
-                    .OrderByDescending(cat =>
-                        scores.Categories.TryGetValue(cat, out var ci) ? ci.Score : 0);
+                // Pro: show real intelligence cards
+                CategoryBreakdownPanel.Visibility = Visibility.Visible;
+                CategoryBreakdownLocked.Visibility = Visibility.Collapsed;
+                CategoryBreakdownPanel.Children.Clear();
 
-                foreach (var cat in allCategories)
+                if (stats.TotalAccepted > 0)
                 {
-                    int   accepted   = stats.ByCategory.GetValueOrDefault(cat, 0);
-                    int   dismissed  = stats.DismissedByCategory.GetValueOrDefault(cat, 0);
-                    float avgQuality = stats.AvgQualityByCategory.GetValueOrDefault(cat, 0f);
+                    var allCategories = stats.ByCategory.Keys
+                        .Union(stats.DismissedByCategory.Keys)
+                        .OrderByDescending(cat =>
+                            scores.Categories.TryGetValue(cat, out var ci) ? ci.Score : 0);
 
-                    scores.Categories.TryGetValue(cat, out var intel);
-                    int    score = intel?.Score          ?? 0;
-                    string trend = intel?.Trend          ?? "Stable";
-                    int    delta = intel?.DeltaSinceLast ?? 0;
+                    foreach (var cat in allCategories)
+                    {
+                        int   accepted   = stats.ByCategory.GetValueOrDefault(cat, 0);
+                        int   dismissed  = stats.DismissedByCategory.GetValueOrDefault(cat, 0);
+                        float avgQuality = stats.AvgQualityByCategory.GetValueOrDefault(cat, 0f);
 
-                    var card = CreateIntelligenceCard(cat, score, trend, delta,
-                                                     accepted, dismissed, avgQuality);
-                    CategoryBreakdownPanel.Children.Add(card);
+                        scores.Categories.TryGetValue(cat, out var intel);
+                        int    score = intel?.Score          ?? 0;
+                        string trend = intel?.Trend          ?? "Stable";
+                        int    delta = intel?.DeltaSinceLast ?? 0;
+
+                        var card = CreateIntelligenceCard(cat, score, trend, delta,
+                                                         accepted, dismissed, avgQuality);
+                        CategoryBreakdownPanel.Children.Add(card);
+                    }
+                }
+                else
+                {
+                    CategoryBreakdownPanel.Children.Add(new TextBlock
+                    {
+                        Text       = "No data yet. Accept some suggestions to start building intelligence!",
+                        Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                        FontSize   = 12,
+                        FontStyle  = FontStyles.Italic,
+                        Margin     = new Thickness(0, 8, 0, 0)
+                    });
                 }
             }
             else
             {
-                CategoryBreakdownPanel.Children.Add(new TextBlock
-                {
-                    Text       = "No data yet. Accept some suggestions to start building intelligence!",
-                    Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
-                    FontSize   = 12,
-                    FontStyle  = FontStyles.Italic,
-                    Margin     = new Thickness(0, 8, 0, 0)
-                });
+                // Free: hide real cards, show locked placeholder with passive tracking count
+                CategoryBreakdownPanel.Visibility = Visibility.Collapsed;
+                CategoryBreakdownLocked.Visibility = Visibility.Visible;
+                var countMsg = stats.TotalAccepted > 0
+                    ? $"{stats.TotalAccepted} completions tracked so far. Activate Pro to unlock your intelligence scores."
+                    : "Your completions are being tracked. Activate Pro to see how your AI is learning.";
+                LockedCardSubtitle.Text = countMsg;
             }
         }
         catch (Exception) { /* Learning stats display is non-critical — failure is safe to ignore */ }
@@ -868,6 +888,62 @@ public partial class SettingsWindow : Window
         if (e == 4) _ = LoadOpenRouterModelsAsync();
     }
 
+    /// <summary>
+    /// Updates the General tab teaser card based on whether Personalized AI is active.
+    /// When active, hides the card. When inactive, shows the nudge with passive count.
+    /// </summary>
+    private void LoadPersonalizationTeaser()
+    {
+        bool active = _config.LearningEnabled;
+        if (active)
+        {
+            PersonalizationTeaserCard.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            PersonalizationTeaserCard.Visibility = Visibility.Visible;
+            // Show how much passive data has already been collected
+            try
+            {
+                var stats = _learningService?.GetStats();
+                if (stats != null && stats.TotalAccepted > 0)
+                {
+                    PersonalizationTeaserSubtitle.Text =
+                        $"{stats.TotalAccepted} completions tracked. Activate Pro — your AI profile is already building.";
+                }
+                else
+                {
+                    PersonalizationTeaserSubtitle.Text =
+                        "Pro learns your writing style — adapts to how you sound in email, code, chat, and more.";
+                }
+            }
+            catch (Exception) { /* non-critical */ }
+        }
+    }
+
+    /// <summary>
+    /// Toggles the Pro upgrade banner and intelligence card lock in the AI Profile tab.
+    /// </summary>
+    private void LoadLearningTabState()
+    {
+        bool active = _config.LearningEnabled;
+        LearningUpgradeBanner.Visibility    = active ? Visibility.Collapsed : Visibility.Visible;
+        // The category card visibility is managed inside LoadLearningStats()
+        LoadLearningStats();
+    }
+
+    private void ActivateLearning_Click(object sender, RoutedEventArgs e)
+    {
+        LearningEnabledCheck.IsChecked = true;
+        SaveSettings();
+    }
+
+    private void PersonalizationTeaser_Click(object sender, RoutedEventArgs e)
+    {
+        // Navigate to the AI Profile tab (index 2: General=0, Quality=1, AIProfile=2)
+        MainTabControl.SelectedIndex = 2;
+    }
+
     private void ShowSaveIndicator()
     {
         SaveStatus.Opacity = 1;
@@ -927,6 +1003,8 @@ public partial class SettingsWindow : Window
         _config.Save();
         UpdateGeminiApiKeyStatus();
         ShowSaveIndicator();
+        LoadPersonalizationTeaser();
+        LoadLearningTabState();
     }
 
     // Preset buttons

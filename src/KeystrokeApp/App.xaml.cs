@@ -505,6 +505,29 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Shows a one-time tray balloon nudging free users to activate Personalized AI
+    /// after they have built up enough acceptance history to make it worthwhile.
+    /// Marks the nudge as shown in UsageCounters so it never fires again.
+    /// </summary>
+    internal void ShowLearningNudgeBalloon()
+    {
+        if (_usage.LearningNudgeShown) return;
+        _usage.LearningNudgeShown = true;
+        Task.Run(() => _usage.Save());
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            _trayIcon?.ShowBalloonTip(
+                "Your writing patterns are building up",
+                $"You've accepted {_usage.TotalAccepted} completions. Upgrade to Pro to activate " +
+                "Personalized AI — suggestions that adapt to your tone, vocabulary, and writing style. $20 once.",
+                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+        });
+
+        Log($"Learning nudge shown at {_usage.TotalAccepted} total accepted.");
+    }
+
+    /// <summary>
     /// Shows a tray balloon warning the user they are approaching the daily free limit.
     /// Fires once per session when daily count first reaches or exceeds the warning threshold.
     /// Uses the actual remaining count so it stays accurate if the app was restarted mid-day.

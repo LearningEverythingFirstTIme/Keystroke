@@ -157,6 +157,10 @@ public partial class App
                     if (_config.LimitEnabled && _usage.DailyCount >= UsageCounters.WarningThreshold && !_usage.IsLimitReached())
                         ShowLimitWarningBalloon();
 
+                    // Show learning nudge once after 15 completions (only when Pro learning not yet active)
+                    if (!_config.LearningEnabled && !_usage.LearningNudgeShown && _usage.TotalAccepted >= 15)
+                        ShowLearningNudgeBalloon();
+
                     // ── Sub-Phase A: capture interaction signals ───────────────
                     // Read latency (ms since suggestion became visible) and cycle depth
                     // atomically, then reset both for the next prediction.
@@ -171,38 +175,41 @@ public partial class App
                     // include editedAfter in the quality score. StyleProfileService is notified
                     // immediately — it only increments a counter, so timing doesn't matter.
                     var (procName, winTitle) = ActiveWindowService.GetActiveWindow();
-                    if (_config.LearningEnabled)
+
+                    // Capture locals for the closure — buffer/completion may change by the
+                    // time the post-edit window expires.
+                    var capturedBuffer     = buffer;
+                    var capturedCompletion = completion;
+                    var capturedProc       = procName;
+                    var capturedTitle      = winTitle;
+                    var capturedLatency    = latencyMs;
+                    var capturedDepth      = cycleDepth;
+
+                    // Style/vocab profiling only activates when learning is enabled (makes AI calls)
+                    if (_config.LearningEnabled && _config.StyleProfileEnabled)
                     {
-                        if (_config.StyleProfileEnabled)
-                        {
-                            _styleProfileService.OnAccepted();
-                            _vocabularyProfileService.OnAccepted();
-                        }
+                        _styleProfileService.OnAccepted();
+                        _vocabularyProfileService.OnAccepted();
+                    }
 
-                        // Capture locals for the closure — buffer/completion may change by the
-                        // time the post-edit window expires.
-                        var capturedBuffer     = buffer;
-                        var capturedCompletion = completion;
-                        var capturedProc       = procName;
-                        var capturedTitle      = winTitle;
-                        var capturedLatency    = latencyMs;
-                        var capturedDepth      = cycleDepth;
+                    // Always track to tracking.jsonl — passive data collection for all users.
+                    // Free users build up a full profile so their AI activates immediately on upgrade.
+                    _postEditDetector.StartWatching(editedAfter =>
+                    {
+                        _acceptanceTracker.LogAccepted(
+                            capturedBuffer, capturedCompletion,
+                            capturedProc,   capturedTitle,
+                            capturedLatency, capturedDepth, editedAfter);
 
-                        _postEditDetector.StartWatching(editedAfter =>
-                        {
-                            _acceptanceTracker.LogAccepted(
-                                capturedBuffer, capturedCompletion,
-                                capturedProc,   capturedTitle,
-                                capturedLatency, capturedDepth, editedAfter);
-
+                        if (_config.LearningEnabled)
                             LogToDebug($"Tracked: latency={capturedLatency}ms " +
                                        $"cycle={capturedDepth} edited={editedAfter} " +
                                        $"quality={AcceptanceTracker.ComputeQualityScore(capturedLatency, capturedDepth, editedAfter):F2}");
-                        });
+                    });
 
-                        // Sub-Phase C: feed the in-memory session buffer immediately so
-                        // the next prediction can use this completion as context without
-                        // waiting for the 5-second JSONL file refresh cycle.
+                    // Session buffer feeds the next prompt directly — only when learning is enabled
+                    if (_config.LearningEnabled)
+                    {
                         var sessionCategory = Services.AppCategory
                             .GetEffectiveCategory(capturedProc, capturedTitle).ToString();
                         _learningService.AddToSession(capturedBuffer, capturedCompletion, sessionCategory);

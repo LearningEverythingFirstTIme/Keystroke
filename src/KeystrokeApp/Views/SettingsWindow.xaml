@@ -336,7 +336,7 @@
         </Border>
 
         <!-- Tabbed Content -->
-        <TabControl Grid.Row="1" Margin="16,12,16,0">
+        <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="16,12,16,0">
             
             <!-- GENERAL TAB -->
             <TabItem Header="🧠 General">
@@ -547,6 +547,32 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Personalization Teaser (shown to free users; hidden when Pro learning is active) -->
+                        <Border x:Name="PersonalizationTeaserCard" Style="{StaticResource CardStyle}"
+                                Padding="16" Margin="0,0,0,12"
+                                BorderBrush="{StaticResource Accent}" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock x:Name="PersonalizationTeaserTitle"
+                                               Text="✨ Your AI isn't personalized yet"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimary}"/>
+                                    <TextBlock x:Name="PersonalizationTeaserSubtitle"
+                                               Text="Pro learns your writing style — adapts to how you sound in email, code, chat, and more."
+                                               Foreground="{StaticResource TextMuted}" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                </StackPanel>
+                                <Button x:Name="PersonalizationTeaserBtn" Grid.Column="1"
+                                        Content="See Your Profile →" Margin="12,0,0,0"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Click="PersonalizationTeaser_Click"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Behavior Section -->
                         <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
                             <StackPanel>
@@ -642,10 +668,10 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Text="🎓 Learn From Acceptances" FontSize="13" 
+                                            <TextBlock Text="✨ Personalized AI" FontSize="13"
                                                        Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Matches your style using accepted completions" 
-                                                       Foreground="{StaticResource TextMuted}" FontSize="11" 
+                                            <TextBlock Text="AI suggestions that learn and sound like you"
+                                                       Foreground="{StaticResource TextMuted}" FontSize="11"
                                                        TextWrapping="Wrap" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <CheckBox x:Name="LearningEnabledCheck" Grid.Column="1" IsChecked="True"
@@ -745,15 +771,48 @@
             </TabItem>
 
             <!-- LEARNING TAB -->
-            <TabItem Header="📊 Learning">
+            <TabItem Header="🧠 Your AI Profile">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="8,8,8,16">
-                        
+
+                        <!-- Pro upgrade banner — visible only when Personalized AI is off -->
+                        <Border x:Name="LearningUpgradeBanner" Style="{StaticResource CardStyle}"
+                                Padding="20" Margin="0,0,0,12"
+                                BorderBrush="{StaticResource Accent}" BorderThickness="1"
+                                Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="🔒 Personalized AI is a Pro feature"
+                                           FontSize="15" FontWeight="Bold"
+                                           Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                                <TextBlock TextWrapping="Wrap" Margin="0,0,0,14"
+                                           Foreground="{StaticResource TextSecondary}" FontSize="12">
+                                    Keystroke Pro tracks your accepted completions and builds an AI model of how
+                                    you write — your tone, vocabulary, and sentence structure — so every suggestion
+                                    sounds more like you over time. Your data is already being collected below.
+                                </TextBlock>
+                                <WrapPanel Margin="0,0,0,16">
+                                    <Border Background="#1A2F81F7" CornerRadius="4" Padding="8,4" Margin="0,0,8,4">
+                                        <TextBlock Text="✨ Personalized suggestions" FontSize="11" Foreground="{StaticResource Accent}"/>
+                                    </Border>
+                                    <Border Background="#1A238636" CornerRadius="4" Padding="8,4" Margin="0,0,8,4">
+                                        <TextBlock Text="🧠 Writing style learning" FontSize="11" Foreground="{StaticResource Success}"/>
+                                    </Border>
+                                    <Border Background="#1AF0883E" CornerRadius="4" Padding="8,4" Margin="0,0,0,4">
+                                        <TextBlock Text="📊 Intelligence scores" FontSize="11" Foreground="{StaticResource Warning}"/>
+                                    </Border>
+                                </WrapPanel>
+                                <Button x:Name="ActivateLearningBtn" Content="Activate Personalized AI — $20 once →"
+                                        Style="{StaticResource PrimaryButton}"
+                                        HorizontalAlignment="Left"
+                                        Click="ActivateLearning_Click"/>
+                            </StackPanel>
+                        </Border>
+
                         <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
                             <StackPanel>
-                                <TextBlock Text="Learning Statistics" FontSize="14" FontWeight="SemiBold" 
+                                <TextBlock Text="Your AI Profile" FontSize="14" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="How Keystroke has learned your writing style" 
+                                <TextBlock Text="Watch your AI get smarter with every completion you accept"
                                            Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,16"/>
 
                                 <!-- Stats Grid -->
@@ -799,11 +858,27 @@
                                 </Grid>
 
                                 <!-- Category Intelligence Cards (Sub-Phase D) -->
-                                <TextBlock Text="Learning Intelligence by Category" FontSize="12"
+                                <TextBlock Text="Intelligence by Category" FontSize="12"
                                            Foreground="{StaticResource TextSecondary}" Margin="0,0,0,8"/>
-                                <StackPanel x:Name="CategoryBreakdownPanel">
-                                    <!-- Dynamically populated with CreateIntelligenceCard() -->
-                                </StackPanel>
+
+                                <!-- Shown to Pro users — dynamically populated with CreateIntelligenceCard() -->
+                                <StackPanel x:Name="CategoryBreakdownPanel"/>
+
+                                <!-- Shown to free users instead of real intelligence cards -->
+                                <Border x:Name="CategoryBreakdownLocked" Visibility="Collapsed"
+                                        Background="{StaticResource BgInput}" CornerRadius="8" Padding="20">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="🔒" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Intelligence scores unlock with Pro"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                                        <TextBlock x:Name="LockedCardSubtitle"
+                                                   Text="Your completions are being tracked. Activate Pro to see how your AI is learning."
+                                                   FontSize="11" Foreground="{StaticResource TextMuted}"
+                                                   TextWrapping="Wrap" TextAlignment="Center" MaxWidth="340"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 
@@ -833,9 +908,9 @@
                         <!-- Style Profile -->
                         <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
                             <StackPanel>
-                                <TextBlock Text="Writing Style Profile" FontSize="14" FontWeight="SemiBold" 
+                                <TextBlock Text="Writing Style" FontSize="14" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Periodically analyzes your accepted completions to learn your unique writing style" 
+                                <TextBlock Text="Periodically analyzes your accepted completions to learn your tone, vocabulary, and structure"
                                            Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"/>
 
                                 <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12" Margin="0,0,0,12">
@@ -922,9 +997,9 @@
                         <!-- Vocabulary Fingerprint -->
                         <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12">
                             <StackPanel>
-                                <TextBlock Text="Vocabulary Fingerprint" FontSize="14" FontWeight="SemiBold"
+                                <TextBlock Text="Your Voice" FontSize="14" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Analyses your accepted completions to learn your personal word choices, phrase patterns, and sentence structure — no AI call required"
+                                <TextBlock Text="Learns your personal word choices, phrase patterns, and sentence structure — processed locally, no AI call required"
                                            Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,12"
                                            TextWrapping="Wrap"/>
 
