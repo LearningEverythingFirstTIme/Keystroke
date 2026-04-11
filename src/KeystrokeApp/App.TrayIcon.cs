@@ -71,7 +71,7 @@ public partial class App
 
         _sessionMenuItem = new MenuItem
         {
-            Header    = $"Accepted: {_sessionAcceptCount} this session",
+            Header    = $"Accepted: {_sessionAcceptCount} this session  ({_usage.DailyCount} today)",
             IsEnabled = false
         };
 
@@ -120,7 +120,8 @@ public partial class App
         var engine   = _config.PredictionEngine;
         var model    = GetCurrentModelName();
         var accepted = _sessionAcceptCount;
-        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session";
+        var today    = _usage.DailyCount;
+        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session  ({today} today)";
     }
 
     private string GetCurrentModelName() => _config.PredictionEngine.ToLower() switch
@@ -168,7 +169,7 @@ public partial class App
         {
             if (item is MenuItem mi && mi.Header is string s && s.StartsWith("Accepted:"))
             {
-                mi.Header = $"Accepted: {_sessionAcceptCount} this session";
+                mi.Header = $"Accepted: {_sessionAcceptCount} this session  ({_usage.DailyCount} today)";
                 break;
             }
         }

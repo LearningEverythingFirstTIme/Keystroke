@@ -149,6 +149,8 @@ public partial class App
                     // Show confirmation flash
                     _suggestionPanel?.AcceptSuggestion();
                     _sessionAcceptCount++;
+                    _usage.IncrementAccepted();
+                    Task.Run(() => _usage.Save());
                     UpdateTraySessionInfo();
 
                     // ── Sub-Phase A: capture interaction signals ───────────────

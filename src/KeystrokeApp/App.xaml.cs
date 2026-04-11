@@ -41,6 +41,7 @@ public partial class App : Application
     private LearningScoreService       _learningScoreService      = new();
     private bool                     _isEnabled        = true;
     private int                      _sessionAcceptCount;
+    private UsageCounters            _usage            = new();
 
     // ── Tray icon state (used by App.TrayIcon.cs) ─────────────────────────────
     private Icon?     _iconEnabled;
@@ -104,6 +105,7 @@ public partial class App : Application
         {
             // Load config
             _config = AppConfig.Load();
+            _usage  = UsageCounters.Load();
             Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
 
             // First-launch consent — must accept before keystroke monitoring activates
