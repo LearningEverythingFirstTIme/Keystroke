@@ -71,7 +71,7 @@ public partial class App
 
         _sessionMenuItem = new MenuItem
         {
-            Header    = $"Accepted: {_sessionAcceptCount} this session  ({_usage.DailyCount} today)",
+            Header    = $"Accepted: {_sessionAcceptCount} this session  ({_usage.DailyCount}/{UsageCounters.DailyLimit} today)",
             IsEnabled = false
         };
 
@@ -121,7 +121,10 @@ public partial class App
         var model    = GetCurrentModelName();
         var accepted = _sessionAcceptCount;
         var today    = _usage.DailyCount;
-        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session  ({today} today)";
+        var limitStr = (_config.LimitEnabled && _usage.IsLimitReached())
+            ? $"  ⚠ Limit reached"
+            : $"  ({today}/{UsageCounters.DailyLimit} today)";
+        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session{limitStr}";
     }
 
     private string GetCurrentModelName() => _config.PredictionEngine.ToLower() switch
@@ -169,7 +172,10 @@ public partial class App
         {
             if (item is MenuItem mi && mi.Header is string s && s.StartsWith("Accepted:"))
             {
-                mi.Header = $"Accepted: {_sessionAcceptCount} this session  ({_usage.DailyCount} today)";
+                var limitStr = (_config.LimitEnabled && _usage.IsLimitReached())
+                    ? $"  ⚠ Daily limit reached — go Pro"
+                    : $"  ({_usage.DailyCount}/{UsageCounters.DailyLimit} today)";
+                mi.Header = $"Accepted: {_sessionAcceptCount} this session{limitStr}";
                 break;
             }
         }

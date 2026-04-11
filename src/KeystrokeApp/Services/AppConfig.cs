@@ -61,6 +61,10 @@ public class AppConfig
     // Lower values reduce API costs and latency; higher values give more choices.
     public int MaxSuggestions { get; set; } = 3;
 
+    // Daily completion limit — enforced for free users.
+    // Set to false to bypass the limit (for testing or licensed Pro users).
+    public bool LimitEnabled { get; set; } = true;
+
     // First-launch consent: must be true before the app activates keystroke monitoring.
     public bool ConsentAccepted { get; set; } = false;
 

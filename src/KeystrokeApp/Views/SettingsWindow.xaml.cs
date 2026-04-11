@@ -121,6 +121,7 @@ public partial class SettingsWindow : Window
         LoadStyleProfileProgress();
 
         // Advanced
+        LimitBypassCheck.IsChecked = !_config.LimitEnabled;
         PromptBox.Text = _config.EffectiveSystemPrompt;
     }
 
@@ -918,6 +919,7 @@ public partial class SettingsWindow : Window
         _config.StyleProfileEnabled = StyleProfileCheck.IsChecked == true;
         _config.StyleProfileInterval = (int)StyleProfileIntervalSlider.Value;
         _config.MaxSuggestions = (int)SuggestionsSlider.Value;
+        _config.LimitEnabled = LimitBypassCheck.IsChecked != true;
 
         var promptText = PromptBox.Text.Trim();
         _config.CustomSystemPrompt = (promptText == AppConfig.DefaultSystemPrompt) ? null : promptText;

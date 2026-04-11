@@ -61,6 +61,13 @@ public partial class App
         if (buffer.Length < _config.MinBufferLength)
             return;
 
+        // Enforce daily free-tier limit (skipped when limit is disabled in settings)
+        if (_config.LimitEnabled && _usage.IsLimitReached())
+        {
+            ShowLimitReachedBalloon();
+            return;
+        }
+
         // Check cache first — instant result for repeated/backspaced prefixes
         if (_predictionCache.TryGet(buffer, out var cached))
         {

@@ -39,6 +39,19 @@ public class UsageCounters
         return new UsageCounters();
     }
 
+    /// <summary>The number of free completions allowed per day.</summary>
+    public const int DailyLimit = 50;
+
+    /// <summary>
+    /// Returns true if today's accepted count has reached the daily free limit.
+    /// Always returns false for a new day (counter not yet incremented today).
+    /// </summary>
+    public bool IsLimitReached()
+    {
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        return DailyDate == today && DailyCount >= DailyLimit;
+    }
+
     /// <summary>
     /// Increments both the all-time and today's accepted-completion counters.
     /// Automatically resets the daily counter when the calendar date changes.

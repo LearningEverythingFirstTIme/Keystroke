@@ -1041,7 +1041,34 @@
             <TabItem Header="⚙️ Advanced">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="8,8,8,16">
-                        
+
+                        <!-- Daily Limit Bypass -->
+                        <Border Style="{StaticResource CardStyle}" Padding="16" Margin="0,0,0,12"
+                                BorderBrush="{StaticResource Warning}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Developer Options" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource Warning}" Margin="0,0,0,8"/>
+                                <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Bypass daily completion limit" FontSize="13"
+                                                       Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Disable the 50/day free-tier cap for testing. Turn this off before release."
+                                                       Foreground="{StaticResource TextMuted}" FontSize="11"
+                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="LimitBypassCheck" Grid.Column="1"
+                                                  Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged"
+                                                  VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
                         <Border Style="{StaticResource CardStyle}" Padding="16">
                             <StackPanel>
                                 <Grid Margin="0,0,0,8">

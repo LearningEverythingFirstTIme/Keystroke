@@ -42,6 +42,8 @@ public partial class App : Application
     private bool                     _isEnabled        = true;
     private int                      _sessionAcceptCount;
     private UsageCounters            _usage            = new();
+    // Prevents spamming the limit balloon — show only once per app session.
+    private bool                     _limitBalloonShown;
 
     // ── Tray icon state (used by App.TrayIcon.cs) ─────────────────────────────
     private Icon?     _iconEnabled;
@@ -499,6 +501,31 @@ public partial class App : Application
             }
             catch (Exception) { /* Non-critical: pruning a log file failing is safe to ignore */ }
         }
+    }
+
+    /// <summary>
+    /// Shows a tray balloon informing the user they have hit the daily free limit.
+    /// Only fires once per app session to avoid repeated interruptions.
+    /// </summary>
+    internal void ShowLimitReachedBalloon()
+    {
+        if (_limitBalloonShown) return;
+        _limitBalloonShown = true;
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            _trayIcon?.ShowBalloonTip(
+                "Daily limit reached — completions reset at midnight",
+                $"You've used all {UsageCounters.DailyLimit} free completions for today. " +
+                "Go Pro for unlimited access plus the learning system that adapts to your writing style. " +
+                "$24 once, no subscription.",
+                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+
+            // Refresh tray so the counter shows "50/50 · limit reached"
+            UpdateTraySessionInfo();
+        });
+
+        Log("Daily limit reached — balloon shown.");
     }
 
     /// <summary>
