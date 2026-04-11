@@ -42,6 +42,9 @@ public class UsageCounters
     /// <summary>The number of free completions allowed per day.</summary>
     public const int DailyLimit = 50;
 
+    /// <summary>Daily count at which the approaching-limit warning balloon is shown.</summary>
+    public const int WarningThreshold = 40;
+
     /// <summary>
     /// Returns true if today's accepted count has reached the daily free limit.
     /// Always returns false for a new day (counter not yet incremented today).

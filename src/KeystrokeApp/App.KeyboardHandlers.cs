@@ -153,6 +153,10 @@ public partial class App
                     Task.Run(() => _usage.Save());
                     UpdateTraySessionInfo();
 
+                    // Warn once when the user crosses into the last 10 free completions
+                    if (_config.LimitEnabled && _usage.DailyCount >= UsageCounters.WarningThreshold && !_usage.IsLimitReached())
+                        ShowLimitWarningBalloon();
+
                     // ── Sub-Phase A: capture interaction signals ───────────────
                     // Read latency (ms since suggestion became visible) and cycle depth
                     // atomically, then reset both for the next prediction.

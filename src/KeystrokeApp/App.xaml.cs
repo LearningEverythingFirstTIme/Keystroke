@@ -42,7 +42,8 @@ public partial class App : Application
     private bool                     _isEnabled        = true;
     private int                      _sessionAcceptCount;
     private UsageCounters            _usage            = new();
-    // Prevents spamming the limit balloon — show only once per app session.
+    // Prevents spamming the warning/limit balloons — each shows at most once per app session.
+    private bool                     _warningBalloonShown;
     private bool                     _limitBalloonShown;
 
     // ── Tray icon state (used by App.TrayIcon.cs) ─────────────────────────────
@@ -501,6 +502,28 @@ public partial class App : Application
             }
             catch (Exception) { /* Non-critical: pruning a log file failing is safe to ignore */ }
         }
+    }
+
+    /// <summary>
+    /// Shows a tray balloon warning the user they are approaching the daily free limit.
+    /// Fires once per session when daily count first reaches or exceeds the warning threshold.
+    /// Uses the actual remaining count so it stays accurate if the app was restarted mid-day.
+    /// </summary>
+    internal void ShowLimitWarningBalloon()
+    {
+        if (_warningBalloonShown) return;
+        _warningBalloonShown = true;
+
+        var remaining = UsageCounters.DailyLimit - _usage.DailyCount;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _trayIcon?.ShowBalloonTip(
+                $"Heads up — only {remaining} free completions left today",
+                "Upgrade to Keystroke Pro for unlimited completions, personalized style learning, and no daily limits. $20 once, no subscription.",
+                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+        });
+
+        Log($"Limit warning shown: {_usage.DailyCount}/{UsageCounters.DailyLimit} used.");
     }
 
     /// <summary>
