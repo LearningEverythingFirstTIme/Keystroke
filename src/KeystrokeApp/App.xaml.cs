@@ -518,7 +518,7 @@ public partial class App : Application
                 "Daily limit reached — completions reset at midnight",
                 $"You've used all {UsageCounters.DailyLimit} free completions for today. " +
                 "Go Pro for unlimited access plus the learning system that adapts to your writing style. " +
-                "$24 once, no subscription.",
+                "$20 once, no subscription.",
                 Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
 
             // Refresh tray so the counter shows "50/50 · limit reached"
