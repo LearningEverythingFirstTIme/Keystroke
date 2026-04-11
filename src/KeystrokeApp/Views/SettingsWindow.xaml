@@ -11,311 +11,140 @@
         Background="#0B1220">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="White"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#111827"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/KeystrokeApp;component/Resources/CleanPro.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <SolidColorBrush x:Key="BgWindow" Color="#0B1220"/>
-        <SolidColorBrush x:Key="BgSidebar" Color="#0F172A"/>
-        <SolidColorBrush x:Key="BgCard" Color="#111C2E"/>
-        <SolidColorBrush x:Key="BgCardSoft" Color="#172338"/>
-        <SolidColorBrush x:Key="BgInput" Color="#17263B"/>
-        <SolidColorBrush x:Key="BgHover" Color="#223551"/>
-        <SolidColorBrush x:Key="BgPreview" Color="#0F1A2B"/>
-        <SolidColorBrush x:Key="Accent" Color="#5EA6FF"/>
-        <SolidColorBrush x:Key="Success" Color="#34C38F"/>
-        <SolidColorBrush x:Key="Warning" Color="#F3A74F"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#F8FAFC"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#CBD5E1"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#8CA0BB"/>
-        <SolidColorBrush x:Key="Border" Color="#22324A"/>
-        <SolidColorBrush x:Key="BorderStrong" Color="#39506E"/>
-        <SolidColorBrush x:Key="PrivacyTint" Color="#3B2A20"/>
-        <SolidColorBrush x:Key="PrivacyBorder" Color="#6A4C3B"/>
-        <SolidColorBrush x:Key="LearningTint" Color="#182E2B"/>
-        <SolidColorBrush x:Key="LearningBorder" Color="#245D50"/>
-        <SolidColorBrush x:Key="ExperimentalTint" Color="#33250F"/>
-        <SolidColorBrush x:Key="ExperimentalBorder" Color="#7A5922"/>
+            <SolidColorBrush x:Key="PrivacyTint" Color="#3B2A20"/>
+            <SolidColorBrush x:Key="PrivacyBorder" Color="#6A4C3B"/>
+            <SolidColorBrush x:Key="LearningTint" Color="#182E2B"/>
+            <SolidColorBrush x:Key="LearningBorder" Color="#245D50"/>
+            <SolidColorBrush x:Key="ExperimentalTint" Color="#33250F"/>
+            <SolidColorBrush x:Key="ExperimentalBorder" Color="#7A5922"/>
 
-        <Style TargetType="TextBlock" x:Key="SectionTitleStyle">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="FontSize" Value="22"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-        </Style>
+            <Style TargetType="Border" x:Key="PrivacyCardStyle" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{StaticResource PrivacyTint}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource PrivacyBorder}"/>
+            </Style>
 
-        <Style TargetType="TextBlock" x:Key="SectionIntroStyle">
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Margin" Value="0,6,0,0"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-        </Style>
+            <Style TargetType="Border" x:Key="LearningCardStyle" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{StaticResource LearningTint}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource LearningBorder}"/>
+            </Style>
 
-        <Style TargetType="Border" x:Key="CardStyle">
-            <Setter Property="Background" Value="{StaticResource BgCard}"/>
-            <Setter Property="CornerRadius" Value="18"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="20"/>
-        </Style>
+            <Style TargetType="Border" x:Key="ExperimentalCardStyle" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{StaticResource ExperimentalTint}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource ExperimentalBorder}"/>
+            </Style>
 
-        <Style TargetType="Border" x:Key="SoftCardStyle" BasedOn="{StaticResource CardStyle}">
-            <Setter Property="Background" Value="{StaticResource BgCardSoft}"/>
-        </Style>
+            <Style x:Key="PillStyle" TargetType="Border">
+                <Setter Property="Background" Value="#18263E"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="999"/>
+                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="Margin" Value="0,0,8,8"/>
+            </Style>
 
-        <Style TargetType="Border" x:Key="PrivacyCardStyle" BasedOn="{StaticResource CardStyle}">
-            <Setter Property="Background" Value="{StaticResource PrivacyTint}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource PrivacyBorder}"/>
-        </Style>
+            <Style x:Key="NavRadioStyle" TargetType="RadioButton">
+                <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Margin" Value="0,0,0,8"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <Border x:Name="NavBorder"
+                                    Background="Transparent"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusControl}"
+                                    Padding="14,12">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="NavBorder" Property="Background" Value="#172338"/>
+                                    <Setter TargetName="NavBorder" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+                                    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="NavBorder" Property="Background" Value="#142238"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
-        <Style TargetType="Border" x:Key="LearningCardStyle" BasedOn="{StaticResource CardStyle}">
-            <Setter Property="Background" Value="{StaticResource LearningTint}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource LearningBorder}"/>
-        </Style>
+            <Style x:Key="SwitchCheckBoxStyle" TargetType="CheckBox">
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="CheckBox">
+                            <Grid Width="52" Height="30">
+                                <Border x:Name="Track"
+                                        Background="#415A77"
+                                        CornerRadius="15"
+                                        BorderBrush="#5A7696"
+                                        BorderThickness="1"/>
+                                <Ellipse x:Name="Thumb"
+                                         Width="22"
+                                         Height="22"
+                                         Fill="White"
+                                         Margin="4,0,0,0"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"/>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="Track" Property="Background" Value="{StaticResource Accent}"/>
+                                    <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                    <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Track" Property="Opacity" Value="0.45"/>
+                                    <Setter TargetName="Thumb" Property="Opacity" Value="0.55"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
-        <Style TargetType="Border" x:Key="ExperimentalCardStyle" BasedOn="{StaticResource CardStyle}">
-            <Setter Property="Background" Value="{StaticResource ExperimentalTint}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource ExperimentalBorder}"/>
-        </Style>
+            <Style x:Key="FeatureCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Padding" Value="18"/>
+            </Style>
 
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="{StaticResource BgInput}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,10"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="CaretBrush" Value="{StaticResource TextPrimary}"/>
-        </Style>
+            <Style x:Key="InsetTileStyle" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource BgInput}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusCard}"/>
+                <Setter Property="Padding" Value="14"/>
+            </Style>
 
-        <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="{StaticResource BgInput}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid x:Name="MainGrid" SnapsToDevicePixels="True">
-                            <ToggleButton x:Name="DropDownToggle"
-                                          Background="{TemplateBinding Background}"
-                                          BorderBrush="{TemplateBinding BorderBrush}"
-                                          BorderThickness="{TemplateBinding BorderThickness}"
-                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                          ClickMode="Press">
-                                <ToggleButton.Template>
-                                    <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="ComboBorder"
-                                                Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="10">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="32"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                                                           Foreground="{StaticResource TextPrimary}"
-                                                           FontSize="13"
-                                                           VerticalAlignment="Center"
-                                                           Margin="12,0,0,0"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <Path Grid.Column="1"
-                                                      Fill="{StaticResource TextSecondary}"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"
-                                                      Data="M 0 0 L 4 4 L 8 0 Z"/>
-                                            </Grid>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
-                                            </Trigger>
-                                            <Trigger Property="IsChecked" Value="True">
-                                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{StaticResource Accent}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </ToggleButton.Template>
-                            </ToggleButton>
+            <Style x:Key="InsetPanelStyle" TargetType="Border" BasedOn="{StaticResource InsetTileStyle}">
+                <Setter Property="Padding" Value="16"/>
+            </Style>
 
-                            <Popup x:Name="PART_Popup"
-                                   Placement="Bottom"
-                                   IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
-                                   AllowsTransparency="True"
-                                   Focusable="False"
-                                   PopupAnimation="Fade"
-                                   StaysOpen="False">
-                                <Border Background="White"
-                                        BorderBrush="{StaticResource BorderStrong}"
-                                        BorderThickness="1"
-                                        CornerRadius="10"
-                                        MinWidth="{Binding ActualWidth, ElementName=MainGrid}"
-                                        MaxHeight="360">
-                                    <ScrollViewer Margin="4" Focusable="False">
-                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+            <Style x:Key="ThemeCardButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+            </Style>
 
-        <Style TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#111827"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="ComboItemBorder"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="8"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ComboItemBorder" Property="Background" Value="#E8F0FE"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ComboItemBorder" Property="Background" Value="#D2E3FC"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Accent}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-
-        <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BgHover}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-
-        <Style x:Key="PillStyle" TargetType="Border">
-            <Setter Property="Background" Value="#203047"/>
-            <Setter Property="CornerRadius" Value="999"/>
-            <Setter Property="Padding" Value="10,4"/>
-            <Setter Property="Margin" Value="0,0,8,8"/>
-        </Style>
-
-        <Style x:Key="NavRadioStyle" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="NavBorder"
-                                Background="Transparent"
-                                BorderBrush="Transparent"
-                                BorderThickness="1"
-                                CornerRadius="12"
-                                Padding="14,12">
-                            <ContentPresenter/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="NavBorder" Property="Background" Value="#172338"/>
-                                <Setter TargetName="NavBorder" Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="NavBorder" Property="Background" Value="#142238"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="FontSize" Value="13"/>
-        </Style>
-
-        <Style x:Key="SwitchCheckBoxStyle" TargetType="CheckBox">
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <Grid Width="52" Height="30">
-                            <Border x:Name="Track"
-                                    Background="#415A77"
-                                    CornerRadius="15"
-                                    BorderBrush="#5A7696"
-                                    BorderThickness="1"/>
-                            <Ellipse x:Name="Thumb"
-                                     Width="22"
-                                     Height="22"
-                                     Fill="White"
-                                     Margin="4,0,0,0"
-                                     HorizontalAlignment="Left"
-                                     VerticalAlignment="Center"/>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="Background" Value="{StaticResource Accent}"/>
-                                <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource Accent}"/>
-                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
-                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Track" Property="Opacity" Value="0.45"/>
-                                <Setter TargetName="Thumb" Property="Opacity" Value="0.55"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="FeatureCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-            <Setter Property="Padding" Value="18"/>
-        </Style>
-
-        <Style x:Key="ThemeCardButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-
-        <Style x:Key="PresetButton" TargetType="Button">
-            <Setter Property="Background" Value="#16263C"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="14,10"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
+            <Style x:Key="PresetButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                <Setter Property="Background" Value="#16263C"/>
+                <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+                <Setter Property="Padding" Value="14,10"/>
+                <Setter Property="FontSize" Value="12"/>
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Grid Background="{StaticResource BgWindow}">
@@ -353,8 +182,8 @@
                     </RadioButton>
                     <RadioButton x:Name="NavPersonalizationButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="Personalization" Style="{StaticResource NavRadioStyle}">
                         <StackPanel>
-                            <TextBlock Text="Personalization"/>
-                            <TextBlock Text="Context, learning, and privacy choices" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="Your AI Profile"/>
+                            <TextBlock Text="Profile building, personalization, and privacy" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="NavAppControlButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="AppControl" Style="{StaticResource NavRadioStyle}">
@@ -421,7 +250,7 @@
                         </WrapPanel>
                     </StackPanel>
 
-                    <Border Grid.Column="1" x:Name="PreviewBorder" Background="{StaticResource BgPreview}" BorderBrush="{StaticResource BorderStrong}" BorderThickness="1" CornerRadius="18" Padding="16">
+                    <Border Grid.Column="1" x:Name="PreviewBorder" Background="{StaticResource BgPreview}" BorderBrush="{StaticResource BorderStrong}" BorderThickness="1" CornerRadius="4" Padding="16">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -432,10 +261,10 @@
                                 <TextBlock Text="Live preview" Foreground="{StaticResource TextSecondary}" FontSize="12" FontWeight="SemiBold" Margin="8,0,0,0"/>
                             </StackPanel>
                             <StackPanel Grid.Row="1" Margin="0,14,0,0">
-                                <Border Background="#132238" CornerRadius="12" Padding="14" BorderBrush="#263B5B" BorderThickness="1">
+                                <Border Background="#132238" CornerRadius="4" Padding="14" BorderBrush="#263B5B" BorderThickness="1">
                                     <TextBlock x:Name="PreviewInputText" Text="Can you send the latest draft when you have a minute" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" FontSize="13"/>
                                 </Border>
-                                <Border x:Name="PreviewSuggestionBubble" Margin="26,12,0,0" Background="#1C3150" CornerRadius="14" Padding="14" BorderBrush="#3B6293" BorderThickness="1">
+                                <Border x:Name="PreviewSuggestionBubble" Margin="26,12,0,0" Background="#1C3150" CornerRadius="4" Padding="14" BorderBrush="#3B6293" BorderThickness="1">
                                     <StackPanel>
                                         <TextBlock x:Name="PreviewSuggestionText" Text=", I can tighten it up before we send it." Foreground="{StaticResource TextPrimary}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                         <TextBlock x:Name="PreviewMetaText" Text="Extended • 3 suggestions • Balanced creativity" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0"/>
@@ -504,6 +333,23 @@
                                     </StackPanel>
                                 </Border>
 
+                                <Border Style="{StaticResource SoftCardStyle}" Margin="0,0,0,18">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="AI Profile" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                                <TextBlock x:Name="OverviewProfileSummaryText" Text="Keystroke has not started building your profile yet." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                                <TextBlock x:Name="OverviewProfileDetailText" Text="Open Your AI Profile to see what Keystroke is collecting and whether it is being used." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="Open AI Profile" Style="{StaticResource SecondaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="OpenAiProfile_Click"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
                                 <Border Style="{StaticResource SoftCardStyle}">
                                     <StackPanel>
                                         <Grid>
@@ -524,7 +370,7 @@
                                 <Border Style="{StaticResource SoftCardStyle}" Margin="0,18,0,0">
                                     <StackPanel>
                                         <TextBlock Text="What changes most often" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Use Suggestions when you want Keystroke faster, shorter, or more cautious. Use Personalization when you want it to feel more like you. Use App Control when you want the overlay to stay out of specific apps."
+                                        <TextBlock Text="Use Suggestions when you want Keystroke faster, shorter, or more cautious. Use Your AI Profile when you want to understand what Keystroke is learning and whether it is actively personalizing. Use App Control when you want the overlay to stay out of specific apps."
                                                    Foreground="{StaticResource TextMuted}"
                                                    FontSize="12"
                                                    Margin="0,8,0,0"
@@ -636,8 +482,33 @@
                     </StackPanel>
 
                     <StackPanel x:Name="PersonalizationSection" Visibility="Collapsed">
-                        <TextBlock Text="Personalization" Style="{StaticResource SectionTitleStyle}"/>
-                        <TextBlock Text="Choose how much context Keystroke uses and how much it learns from your writing." Style="{StaticResource SectionIntroStyle}"/>
+                        <TextBlock Text="Your AI Profile" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="See what Keystroke is learning quietly in the background, and choose whether that profile should actively shape completions." Style="{StaticResource SectionIntroStyle}"/>
+
+                        <Border x:Name="ProfileStatusCard" Style="{StaticResource LearningCardStyle}" Margin="0,20,0,18">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock x:Name="ProfileStatusTitleText" Text="Your AI profile has not started yet." Foreground="{StaticResource TextPrimary}" FontSize="17" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="ProfileStatusBodyText" Text="Accept a few suggestions and Keystroke will start building a profile you can keep passive or turn on for active personalization." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Border Style="{StaticResource PillStyle}">
+                                            <TextBlock x:Name="ProfileSignalsBadgeText" Text="0 signals" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                        </Border>
+                                        <Border Style="{StaticResource PillStyle}">
+                                            <TextBlock x:Name="ProfileContextsBadgeText" Text="No contexts yet" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                        </Border>
+                                        <Border Style="{StaticResource PillStyle}">
+                                            <TextBlock x:Name="ProfileModeBadgeText" Text="Passive capture only" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                        </Border>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <Button x:Name="ProfileStatusActionButton" Grid.Column="1" Content="Turn On Personalized AI" Style="{StaticResource SecondaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="ActivatePersonalizedAi_Click"/>
+                            </Grid>
+                        </Border>
 
                         <Grid Margin="0,20,0,18">
                             <Grid.ColumnDefinitions>
@@ -687,7 +558,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock Text="Learn from accepted suggestions" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Personalized AI" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
                                         <TextBlock x:Name="LearningFeatureStatusText" Text="Keystroke can use your accepted completions to better match your writing." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <CheckBox x:Name="LearningEnabledCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged" VerticalAlignment="Center"/>
@@ -702,7 +573,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Text="Style profile" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Writing style" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold"/>
                                             <TextBlock x:Name="StyleProfileFeatureText" Text="Builds a writing profile over time so phrasing and tone feel more like you." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <CheckBox x:Name="StyleProfileCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="StyleProfileCheck_Changed" Unchecked="StyleProfileCheck_Changed" VerticalAlignment="Center"/>
@@ -713,7 +584,7 @@
                                         <TextBlock x:Name="StyleProfileIntervalLabel" Text="30" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
                                     </Grid>
                                     <Slider x:Name="StyleProfileIntervalSlider" Minimum="10" Maximum="100" Value="30" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="StyleProfileIntervalSlider_Changed"/>
-                                    <TextBlock x:Name="StyleProfileDependencyText" Text="Needs learning to be on." Foreground="{StaticResource Warning}" FontSize="11" Margin="0,10,0,0" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="StyleProfileDependencyText" Text="Needs Personalized AI to be on." Foreground="{StaticResource Warning}" FontSize="11" Margin="0,10,0,0" Visibility="Collapsed"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -753,29 +624,29 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <Border Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="0,0,12,12">
+                                    <Border Grid.Column="0" Style="{StaticResource InsetTileStyle}" Margin="0,0,12,12">
                                         <StackPanel>
                                             <TextBlock Text="Typed prefix (redacted preview)" Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold"/>
                                             <TextBlock x:Name="PromptTypedPreviewText" Text="Type in another app to populate this." Foreground="{StaticResource TextSecondary}" FontFamily="Consolas" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
 
-                                    <Border Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="12,0,0,12">
+                                    <Border Grid.Column="1" Style="{StaticResource InsetTileStyle}" Margin="12,0,0,12">
                                         <StackPanel>
-                                            <TextBlock Text="Learning hints" Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Profile hints" Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold"/>
                                             <TextBlock x:Name="PromptLearningStatusText" Text="Learning hint status appears here." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                             <TextBlock x:Name="PromptLearningPreviewText" Text="Learning hints preview appears here." Foreground="{StaticResource TextSecondary}" FontFamily="Consolas" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
 
-                                    <Border Grid.Column="0" Grid.Row="1" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="0,0,12,0">
+                                    <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource InsetTileStyle}" Margin="0,0,12,0">
                                         <StackPanel>
                                             <TextBlock Text="Screen context" Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold"/>
                                             <TextBlock x:Name="PromptScreenPreviewText" Text="Screen context preview appears here." Foreground="{StaticResource TextSecondary}" FontFamily="Consolas" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
 
-                                    <Border Grid.Column="1" Grid.Row="1" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="12,0,0,0">
+                                    <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource InsetTileStyle}" Margin="12,0,0,0">
                                         <StackPanel>
                                             <TextBlock Text="Recently written context" Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold"/>
                                             <TextBlock x:Name="PromptRollingPreviewText" Text="Rolling context preview appears here." Foreground="{StaticResource TextSecondary}" FontFamily="Consolas" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
@@ -797,26 +668,26 @@
                             <StackPanel Margin="0,0,18,0">
                                 <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
                                     <StackPanel>
-                                        <TextBlock Text="Learning snapshot" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Your AI profile" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
                                         <Grid Margin="0,16,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="0,0,8,0">
+                                            <Border Grid.Column="0" Style="{StaticResource InsetTileStyle}" Margin="0,0,8,0">
                                                 <StackPanel>
                                                     <TextBlock x:Name="StatsTotalAccepted" Text="0" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Accent}"/>
-                                                    <TextBlock Text="Accepted" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                                    <TextBlock Text="Accepted signals" Foreground="{StaticResource TextMuted}" FontSize="11"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="4,0">
+                                            <Border Grid.Column="1" Style="{StaticResource InsetTileStyle}" Margin="4,0">
                                                 <StackPanel>
                                                     <TextBlock x:Name="StatsAcceptRate" Text="-" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Success}"/>
                                                     <TextBlock Text="Accept rate" Foreground="{StaticResource TextMuted}" FontSize="11"/>
                                                 </StackPanel>
                                             </Border>
-                                            <Border Grid.Column="2" Background="{StaticResource BgInput}" CornerRadius="14" Padding="14" Margin="8,0,0,0">
+                                            <Border Grid.Column="2" Style="{StaticResource InsetTileStyle}" Margin="8,0,0,0">
                                                 <StackPanel>
                                                     <TextBlock x:Name="StatsLastActivity" Text="Never" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,5,0,0"/>
                                                     <TextBlock Text="Last activity" Foreground="{StaticResource TextMuted}" FontSize="11"/>
@@ -837,10 +708,10 @@
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Data management" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
-                                            <Button Grid.Column="1" Content="Reset learning data" Style="{StaticResource SecondaryButton}" Click="ResetLearning_Click"/>
+                                            <TextBlock Text="Profile data" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                            <Button Grid.Column="1" Content="Reset AI profile" Style="{StaticResource SecondaryButton}" Click="ResetLearning_Click"/>
                                         </Grid>
-                                        <TextBlock Text="Clear saved completions and rebuild your profile from scratch if Keystroke has drifted." Foreground="{StaticResource TextMuted}" FontSize="12" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Clear saved profile signals and rebuild from scratch if Keystroke starts feeling out of sync with how you write." Foreground="{StaticResource TextMuted}" FontSize="12" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -848,7 +719,7 @@
                             <StackPanel Grid.Column="1">
                                 <Border Style="{StaticResource LearningCardStyle}" Margin="0,0,0,18">
                                     <StackPanel>
-                                        <TextBlock Text="Style profile progress" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Writing style" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
                                         <TextBlock x:Name="StyleProfileStatus" Text="" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                         <Grid x:Name="StyleProgressPanel" Margin="0,16,0,12" Visibility="Collapsed">
                                             <Grid.ColumnDefinitions>
@@ -878,7 +749,7 @@
 
                                 <Border Style="{StaticResource SoftCardStyle}">
                                     <StackPanel>
-                                        <TextBlock Text="Vocabulary fingerprint" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Your voice" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
                                         <TextBlock x:Name="VocabProfileStatus" Text="No fingerprint generated yet." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,10" TextWrapping="Wrap"/>
                                         <WrapPanel x:Name="VocabCategoryBadgesPanel"/>
                                     </StackPanel>
@@ -977,7 +848,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
-                            <Border x:Name="BlockedAppsCard" Grid.Column="0" Background="{StaticResource BgInput}" CornerRadius="16" Padding="16" Margin="0,0,12,0">
+                            <Border x:Name="BlockedAppsCard" Grid.Column="0" Style="{StaticResource InsetPanelStyle}" Margin="0,0,12,0">
                                 <StackPanel>
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
@@ -995,7 +866,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border x:Name="AllowedAppsCard" Grid.Column="1" Background="{StaticResource BgInput}" CornerRadius="16" Padding="16" Margin="12,0,0,0">
+                            <Border x:Name="AllowedAppsCard" Grid.Column="1" Style="{StaticResource InsetPanelStyle}" Margin="12,0,0,0">
                                 <StackPanel>
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
@@ -1244,7 +1115,7 @@
                 </Grid>
             </ScrollViewer>
 
-            <Border Grid.Row="2" Background="{StaticResource BgSidebar}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="16" Padding="18,14" Margin="0,18,0,0">
+            <Border Grid.Row="2" Background="{StaticResource BgSidebar}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="4" Padding="18,14" Margin="0,18,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

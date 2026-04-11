@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using KeystrokeApp.Services;
 
@@ -41,6 +42,26 @@ public partial class OnboardingWindow : Window
         UpdateUi();
     }
 
+    private void SetStepIndicator(Border border, int stepIndex)
+    {
+        bool isActive = _currentStep == stepIndex;
+        bool isComplete = _currentStep > stepIndex;
+
+        border.Background = new SolidColorBrush(
+            isActive
+                ? Color.FromRgb(23, 38, 59)
+                : isComplete
+                    ? Color.FromRgb(20, 32, 51)
+                    : Color.FromRgb(16, 25, 42));
+
+        border.BorderBrush = new SolidColorBrush(
+            isActive
+                ? Color.FromRgb(94, 166, 255)
+                : isComplete
+                    ? Color.FromRgb(57, 80, 110)
+                    : Color.FromRgb(34, 50, 74));
+    }
+
     private void UpdateUi()
     {
         WelcomeStep.Visibility = _currentStep == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -48,10 +69,10 @@ public partial class OnboardingWindow : Window
         ApiKeyStep.Visibility = _currentStep == 2 ? Visibility.Visible : Visibility.Collapsed;
         ReadyStep.Visibility = _currentStep == 3 ? Visibility.Visible : Visibility.Collapsed;
 
-        StepIndicator1.Background = _currentStep == 0 ? new SolidColorBrush(Color.FromRgb(34, 53, 81)) : new SolidColorBrush(Color.FromRgb(17, 28, 46));
-        StepIndicator2.Background = _currentStep == 1 ? new SolidColorBrush(Color.FromRgb(34, 53, 81)) : new SolidColorBrush(Color.FromRgb(17, 28, 46));
-        StepIndicator3.Background = _currentStep == 2 ? new SolidColorBrush(Color.FromRgb(34, 53, 81)) : new SolidColorBrush(Color.FromRgb(17, 28, 46));
-        StepIndicator4.Background = _currentStep == 3 ? new SolidColorBrush(Color.FromRgb(34, 53, 81)) : new SolidColorBrush(Color.FromRgb(17, 28, 46));
+        SetStepIndicator(StepIndicator1, 0);
+        SetStepIndicator(StepIndicator2, 1);
+        SetStepIndicator(StepIndicator3, 2);
+        SetStepIndicator(StepIndicator4, 3);
 
         SubtitleText.Text = _currentStep switch
         {
@@ -71,7 +92,7 @@ public partial class OnboardingWindow : Window
             var consentAccepted = ConsentCheck.IsChecked == true || _config.ConsentAccepted;
             var canStart = consentAccepted && _keyVerified;
             ReadySummaryText.Text = canStart
-                ? "Keystroke is ready to start with Gemini, Gemini 3.1 Flash-Lite Preview, OCR on, rolling context on, and learning off."
+                ? "Keystroke is ready to start with Gemini, Gemini 3.1 Flash-Lite Preview, OCR on, rolling context on, and Personalized AI off."
                 : "You can still start Keystroke later, but it will stay paused until you add and verify a Gemini API key.";
             ReadyActiveText.Text = canStart
                 ? "Gemini completions will start immediately with the recommended default setup."

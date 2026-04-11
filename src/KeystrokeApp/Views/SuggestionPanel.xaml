@@ -1,7 +1,6 @@
 <Window x:Class="KeystrokeApp.Views.SuggestionPanel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        
         WindowStyle="None"
         AllowsTransparency="True"
         Topmost="True"
@@ -11,15 +10,23 @@
         Background="Transparent"
         Opacity="0"
         SizeToContent="WidthAndHeight"
-        MaxWidth="600"
+        MaxWidth="620"
         ResizeMode="NoResize">
-    
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/KeystrokeApp;component/Resources/CleanPro.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
     <Border x:Name="SuggestionBorder"
-            Background="#80161B22"
-            CornerRadius="10"
-            Padding="14,10"
-            Margin="4"
-            BorderBrush="#306080FF"
+            Background="#D8101825"
+            CornerRadius="{StaticResource RadiusCard}"
+            Padding="16,12"
+            Margin="6"
+            BorderBrush="#4A5B7390"
             BorderThickness="1"
             Cursor="SizeAll"
             MouseLeftButtonDown="Border_MouseLeftButtonDown"
@@ -30,54 +37,60 @@
 
         <Border.RenderTransform>
             <TransformGroup>
-                <ScaleTransform x:Name="ScaleTransform" ScaleX="0.85" ScaleY="0.85"/>
-                <TranslateTransform x:Name="SlideTransform" X="12" Y="24"/>
+                <ScaleTransform x:Name="ScaleTransform" ScaleX="0.92" ScaleY="0.92"/>
+                <TranslateTransform x:Name="SlideTransform" X="8" Y="18"/>
             </TransformGroup>
         </Border.RenderTransform>
-        
+
         <Border.Effect>
-            <!-- ShadowDepth=0 centers the glow as a halo rather than a cast shadow -->
             <DropShadowEffect x:Name="PanelGlow"
                               Color="#5050E8"
-                              Opacity="0.5"
-                              BlurRadius="32"
+                              Opacity="0.18"
+                              BlurRadius="22"
                               ShadowDepth="0"/>
         </Border.Effect>
-        
+
         <StackPanel>
-            <StackPanel x:Name="LoadingIndicator" 
-                        Orientation="Horizontal" 
+            <StackPanel x:Name="LoadingIndicator"
+                        Orientation="Horizontal"
                         Visibility="Collapsed"
-                        Margin="0,0,0,4">
-                <TextBlock Text="Thinking" 
-                           FontFamily="Segoe UI" FontSize="12"
-                           Foreground="#8B949E"
+                        Margin="0,0,0,6">
+                <TextBlock Text="Thinking"
+                           FontFamily="Segoe UI"
+                           FontSize="11"
+                           Foreground="{StaticResource TextMuted}"
                            VerticalAlignment="Center"/>
-                <TextBlock x:Name="LoadingDots" 
-                           FontFamily="Segoe UI" FontSize="12"
-                           Foreground="#8B949E"
+                <TextBlock x:Name="LoadingDots"
+                           FontFamily="Segoe UI"
+                           FontSize="11"
+                           Foreground="{StaticResource TextMuted}"
                            VerticalAlignment="Center"/>
             </StackPanel>
-            
-            <TextBlock x:Name="CompletionText"
-                       FontFamily="Cascadia Code, Consolas" FontSize="14"
-                       Foreground="#E0E0F0" FontWeight="SemiBold"
-                       TextWrapping="Wrap"
-                       MaxWidth="560"/>
 
-            <WrapPanel x:Name="CompletionWordsPanel" 
-                       MaxWidth="560"
+            <TextBlock x:Name="CompletionText"
+                       FontFamily="Cascadia Code, Consolas"
+                       FontSize="14"
+                       Foreground="{StaticResource TextPrimary}"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap"
+                       MaxWidth="580"/>
+
+            <WrapPanel x:Name="CompletionWordsPanel"
+                       MaxWidth="580"
                        Visibility="Collapsed"/>
 
-            <DockPanel Margin="0,6,0,0">
+            <DockPanel Margin="0,8,0,0">
                 <TextBlock x:Name="CounterText"
                            DockPanel.Dock="Right"
-                           FontFamily="Segoe UI" FontSize="10"
-                           Foreground="#7A7AAA" Margin="8,0,0,0"
+                           FontFamily="Segoe UI"
+                           FontSize="10"
+                           Foreground="#98AAC6"
+                           Margin="10,0,0,0"
                            Visibility="Collapsed"/>
                 <TextBlock x:Name="HintText"
-                           FontFamily="Segoe UI" FontSize="10"
-                           Foreground="#5A5A7A"
+                           FontFamily="Segoe UI"
+                           FontSize="10"
+                           Foreground="{StaticResource TextMuted}"
                            Text="Tab accept · Ctrl+&#x2192; word · Esc dismiss"/>
             </DockPanel>
         </StackPanel>

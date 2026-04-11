@@ -66,6 +66,7 @@ public partial class App : Application
     private MenuItem? _enabledMenuItem;
     private MenuItem? _engineMenuItem;
     private MenuItem? _sessionMenuItem;
+    private MenuItem? _profileMenuItem;
     private MenuItem? _setupMenuItem;
     private MenuItem? _currentAppMenuItem;
     private MenuItem? _currentAppStatusMenuItem;
@@ -460,6 +461,8 @@ public partial class App : Application
             _engineMenuItem.Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
         if (_sessionMenuItem != null)
             _sessionMenuItem.Header = $"Accepted: {_sessionAcceptCount} this session";
+        if (_profileMenuItem != null)
+            _profileMenuItem.Header = BuildProfileMenuHeader();
 
         UpdateTrayCurrentAppActions();
     }
@@ -494,9 +497,9 @@ public partial class App : Application
             baseEngine.LengthInstruction = _config.CompletionLengthInstruction;
             baseEngine.Temperature       = _config.Temperature;
             baseEngine.MaxOutputTokens   = _config.PresetMaxOutputTokens;
-            baseEngine.LearningService          = _learningService;
-            baseEngine.StyleProfileService      = _config.StyleProfileEnabled ? _styleProfileService      : null;
-            baseEngine.VocabularyProfileService = _config.StyleProfileEnabled ? _vocabularyProfileService : null;
+            baseEngine.LearningService          = _config.LearningEnabled ? _learningService : null;
+            baseEngine.StyleProfileService      = _config.LearningEnabled && _config.StyleProfileEnabled ? _styleProfileService : null;
+            baseEngine.VocabularyProfileService = _config.LearningEnabled && _config.StyleProfileEnabled ? _vocabularyProfileService : null;
         }
 
         // Ollama uses a fixed low temperature for local models

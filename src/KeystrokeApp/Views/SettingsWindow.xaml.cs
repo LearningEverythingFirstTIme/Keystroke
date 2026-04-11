@@ -40,6 +40,17 @@ public partial class SettingsWindow : Window
         public override string ToString() => DisplayLabel;
     }
 
+    private sealed record ProfileSummary(
+        bool PersonalizedAiEnabled,
+        int AcceptedSignals,
+        int DismissedSignals,
+        int ContextCount,
+        bool HasStyleProfile,
+        bool HasVoiceProfile)
+    {
+        public bool HasSignals => AcceptedSignals > 0;
+    }
+
     private AppConfig _config;
     private AcceptanceLearningService?  _learningService;
     private StyleProfileService?        _styleProfileService;
@@ -162,11 +173,9 @@ public partial class SettingsWindow : Window
         HeroSubtitleText.Text = $"It feels {speedLabel}, with {SuggestionsSlider.Value:0} option{(SuggestionsSlider.Value == 1 ? "" : "s")} ready when you pause.";
 
         var engineName = (EngineCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Gemini";
-        var learningOn = LearningEnabledCheck.IsChecked == true;
         var contextOn = RollingContextCheck.IsChecked == true || OcrEnabledCheck.IsChecked == true;
 
         HeroEngineStatusText.Text = engineName;
-        HeroLearningStatusText.Text = learningOn ? "Learning on" : "Learning off";
         HeroContextStatusText.Text = contextOn ? "Context on" : "Context light";
         HeroThemeStatusText.Text = $"Theme: {ThemeDefinitions.Get(_config.ThemeId).DisplayName}";
 
@@ -176,15 +185,12 @@ public partial class SettingsWindow : Window
         OverviewSuggestionSummaryText.Text = $"{(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} shown";
 
         OverviewEngineStatusText.Text = $"{engineName} is active.";
-        OverviewLearningStatusText.Text = learningOn
-            ? "Using accepted suggestions to shape future completions."
-            : "Learning is off, so Keystroke will not adapt from acceptances.";
 
         var privacyBits = new List<string>();
         privacyBits.Add(OcrEnabledCheck.IsChecked == true ? "screen context on" : "screen context off");
         privacyBits.Add(RollingContextCheck.IsChecked == true ? "recent text memory on" : "recent text memory off");
         OverviewPrivacyStatusText.Text = string.Join(", ", privacyBits) + ".";
-        OverviewPrivacyDetailText.Text = $"Screen reading is {(OcrEnabledCheck.IsChecked == true ? "on" : "off")}. Learning is {(learningOn ? "on" : "off")}.";
+        UpdateProfileMessaging();
     }
 
     private void UpdateFeatureCards()
@@ -197,18 +203,103 @@ public partial class SettingsWindow : Window
             ? "Visible text on screen helps ground suggestions in what you are looking at."
             : "No screen text is captured, which keeps privacy tighter but reduces grounding.";
 
-        LearningFeatureStatusText.Text = LearningEnabledCheck.IsChecked == true
-            ? "Accepted suggestions will feed back into your writing profile."
-            : "Accepted suggestions are not stored for learning right now.";
-
         bool learningOn = LearningEnabledCheck.IsChecked == true;
         StyleProfileCheck.IsEnabled = learningOn;
         StyleProfileIntervalSlider.IsEnabled = learningOn && StyleProfileCheck.IsChecked == true;
         StyleProfileDependencyText.Visibility = learningOn ? Visibility.Collapsed : Visibility.Visible;
         StyleProfileCard.Opacity = learningOn ? 1.0 : 0.72;
-        StyleProfileFeatureText.Text = learningOn
-            ? "Builds a writing profile over time so phrasing and tone feel more like you."
-            : "Turn on learning first if you want Keystroke to build a style profile.";
+        UpdateProfileMessaging();
+    }
+
+    private ProfileSummary GetProfileSummary()
+    {
+        var stats = _learningService?.GetStats();
+        var styleProfile = _styleProfileService?.GetProfile();
+        var vocabProfile = _vocabularyProfileService?.GetProfile();
+
+        return new ProfileSummary(
+            LearningEnabledCheck.IsChecked == true,
+            stats?.TotalAccepted ?? 0,
+            stats?.TotalDismissed ?? 0,
+            stats?.ContextSummaries.Count ?? 0,
+            styleProfile != null && !string.IsNullOrWhiteSpace(styleProfile.GeneralProfile),
+            vocabProfile != null && vocabProfile.Categories.Count > 0);
+    }
+
+    private void UpdateProfileMessaging()
+    {
+        var summary = GetProfileSummary();
+        var acceptedText = $"{summary.AcceptedSignals} accepted signal{(summary.AcceptedSignals == 1 ? "" : "s")}";
+        var contextText = summary.ContextCount > 0
+            ? $"{summary.ContextCount} context{(summary.ContextCount == 1 ? "" : "s")}"
+            : "no repeated contexts yet";
+
+        HeroLearningStatusText.Text = summary.PersonalizedAiEnabled
+            ? "AI profile active"
+            : summary.HasSignals
+                ? "AI profile building"
+                : "AI profile off";
+
+        OverviewLearningStatusText.Text = summary.PersonalizedAiEnabled
+            ? summary.HasSignals
+                ? $"{acceptedText} are actively shaping future completions."
+                : "Personalized AI is on, but it needs a few accepted suggestions before it can adapt."
+            : summary.HasSignals
+                ? $"Your AI profile is quietly building from {acceptedText}, but none of it is used in completions yet."
+                : "Personalized AI is off. Accept a few suggestions and Keystroke will start building a profile you can activate later.";
+
+        OverviewPrivacyDetailText.Text = $"Screen reading is {(OcrEnabledCheck.IsChecked == true ? "on" : "off")}. AI profile is {(summary.PersonalizedAiEnabled ? "active" : summary.HasSignals ? "building quietly" : "idle")}.";
+
+        OverviewProfileSummaryText.Text = summary.PersonalizedAiEnabled
+            ? summary.HasSignals
+                ? $"{acceptedText} are live, with {contextText} helping Keystroke match your tone."
+                : "Personalized AI is on and waiting for your first accepted suggestion."
+            : summary.HasSignals
+                ? $"{acceptedText} are already saved locally. Turn on Personalized AI when you want Keystroke to use them."
+                : "Keystroke has not started building your profile yet.";
+
+        OverviewProfileDetailText.Text = summary.PersonalizedAiEnabled
+            ? summary.HasStyleProfile || summary.HasVoiceProfile
+                ? "Writing style and voice hints are ready in at least some contexts."
+                : "Keystroke is collecting enough signal to generate richer writing-style hints."
+            : summary.HasSignals
+                ? "Profile signals stay local until you turn Personalized AI on."
+                : "Open Your AI Profile to see what Keystroke collects before any personalization turns on.";
+
+        ProfileStatusTitleText.Text = summary.PersonalizedAiEnabled
+            ? summary.HasSignals
+                ? "Personalized AI is active."
+                : "Personalized AI is on and waiting for signal."
+            : summary.HasSignals
+                ? "Your AI profile is already building."
+                : "Your AI profile has not started yet.";
+
+        ProfileStatusBodyText.Text = summary.PersonalizedAiEnabled
+            ? summary.HasSignals
+                ? $"{acceptedText} across {contextText} can now influence completions, while screen and recent-text context keep suggestions grounded."
+                : "Keystroke will start adapting after your first few accepted suggestions."
+            : summary.HasSignals
+                ? $"{acceptedText} are already stored locally across {contextText}. Keystroke will not send those hints upstream until you turn Personalized AI on."
+                : "Accept a few suggestions and Keystroke will start building a profile you can keep passive or turn on for active personalization.";
+
+        ProfileSignalsBadgeText.Text = acceptedText;
+        ProfileContextsBadgeText.Text = summary.ContextCount > 0
+            ? $"{summary.ContextCount} context{(summary.ContextCount == 1 ? "" : "s")}"
+            : "No contexts yet";
+        ProfileModeBadgeText.Text = summary.PersonalizedAiEnabled ? "Personalized AI active" : "Passive capture only";
+        ProfileStatusActionButton.Visibility = summary.PersonalizedAiEnabled ? Visibility.Collapsed : Visibility.Visible;
+
+        LearningFeatureStatusText.Text = summary.PersonalizedAiEnabled
+            ? summary.HasSignals
+                ? $"{acceptedText} are helping Keystroke better match your phrasing."
+                : "Personalized AI is ready. Accept a few suggestions and Keystroke will start adapting."
+            : summary.HasSignals
+                ? $"Keystroke is still collecting {acceptedText}, but they stay local until you turn Personalized AI on."
+                : "Keystroke can start by quietly collecting accepted suggestions, then use them later if you turn Personalized AI on.";
+
+        StyleProfileFeatureText.Text = summary.PersonalizedAiEnabled
+            ? "Builds a writing-style summary so phrasing and tone feel more like you over time."
+            : "Keystroke only generates a writing-style summary when Personalized AI is on.";
     }
 
     private void UpdateAppFilteringUi()
@@ -472,7 +563,7 @@ public partial class SettingsWindow : Window
             {
                 CategoryBreakdownPanel.Children.Add(new TextBlock
                 {
-                    Text       = "No data yet. Accept some suggestions to start building intelligence!",
+                    Text       = "No profile data yet. Accept a few suggestions and Keystroke will start mapping what feels natural to you.",
                     Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
                     FontSize   = 12,
                     FontStyle  = FontStyles.Italic,
@@ -488,7 +579,7 @@ public partial class SettingsWindow : Window
                 {
                     ContextBreakdownPanel.Children.Add(new TextBlock
                     {
-                        Text = "No context data yet. Keystroke will start grouping repeated patterns after a few committed suggestions or manual continuations.",
+                        Text = "No context data yet. Keystroke will start grouping repeated patterns after a few accepted suggestions or manual continuations.",
                         Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
                         FontSize = 12,
                         FontStyle = FontStyles.Italic,
@@ -505,13 +596,19 @@ public partial class SettingsWindow : Window
     {
         try
         {
+            if (LearningEnabledCheck.IsChecked != true)
+            {
+                StyleProfileStatus.Text = "Personalized AI is off. Keystroke can still collect profile signals quietly, but it will not generate a writing-style summary yet.";
+                return;
+            }
+
             var profilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "Keystroke", "style-profile.json");
 
             if (!File.Exists(profilePath))
             {
-                StyleProfileStatus.Text = "No profile generated yet. Accept suggestions to build one.";
+                StyleProfileStatus.Text = "No writing-style summary generated yet. Accept suggestions to build one.";
                 return;
             }
 
@@ -537,10 +634,14 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            var showProgress = StyleProfileCheck.IsChecked == true;
+            var showProgress = LearningEnabledCheck.IsChecked == true && StyleProfileCheck.IsChecked == true;
             StyleProgressPanel.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
 
-            if (!showProgress || _styleProfileService == null) return;
+            if (!showProgress || _styleProfileService == null)
+            {
+                LoadCategoryBadges([]);
+                return;
+            }
 
             var (current, _) = _styleProfileService.GetProgress();
             var target = (int)StyleProfileIntervalSlider.Value;
@@ -589,6 +690,13 @@ public partial class SettingsWindow : Window
     {
         try
         {
+            if (LearningEnabledCheck.IsChecked != true)
+            {
+                VocabProfileStatus.Text = "Personalized AI is off. Keystroke is not generating a voice fingerprint yet, even if profile signals are already being collected.";
+                VocabCategoryBadgesPanel.Children.Clear();
+                return;
+            }
+
             var profile = _vocabularyProfileService?.GetProfile();
 
             if (profile == null || profile.Categories.Count == 0)
@@ -1293,6 +1401,8 @@ public partial class SettingsWindow : Window
         LoadStyleProfileStatus();
         LoadStyleProfileProgress();
         LoadVocabularyProfileStatus();
+        UpdateProfileMessaging();
+        UpdateExperienceSummary();
         ShowSaveIndicator();
     }
 
@@ -1465,6 +1575,9 @@ public partial class SettingsWindow : Window
         UpdateAppFilteringUi();
         UpdateFeatureCards();
         UpdateExperienceSummary();
+        LoadStyleProfileStatus();
+        LoadStyleProfileProgress();
+        LoadVocabularyProfileStatus();
         UpdatePreview();
         UpdatePrivacyInspector();
         ShowSaveIndicator();
@@ -1539,8 +1652,8 @@ public partial class SettingsWindow : Window
     private void ResetLearning_Click(object sender, RoutedEventArgs e)
     {
         var result = MessageBox.Show(
-            "This will clear all learning data. The app will forget your writing style and start fresh.\n\nContinue?",
-            "Reset Learning Data",
+            "This will clear your AI profile data. Keystroke will forget the patterns it has learned about your writing and start fresh.\n\nContinue?",
+            "Reset AI Profile",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
 
@@ -1576,7 +1689,9 @@ public partial class SettingsWindow : Window
                 LoadStyleProfileStatus();
                 LoadStyleProfileProgress();
                 LoadVocabularyProfileStatus();
-                MessageBox.Show("Learning data has been reset.", "Reset Complete",
+                UpdateProfileMessaging();
+                UpdateExperienceSummary();
+                MessageBox.Show("Your AI profile has been reset.", "Reset Complete",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -1615,6 +1730,34 @@ public partial class SettingsWindow : Window
     {
         if (sender is RadioButton { Tag: string section })
             ShowSection(section);
+    }
+
+    private void OpenAiProfile_Click(object sender, RoutedEventArgs e)
+    {
+        NavPersonalizationButton.IsChecked = true;
+        ShowSection("Personalization");
+    }
+
+    private void ActivatePersonalizedAi_Click(object sender, RoutedEventArgs e)
+    {
+        if (LearningEnabledCheck.IsChecked == true)
+            return;
+
+        _loading = true;
+        try
+        {
+            LearningEnabledCheck.IsChecked = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        SaveSettings();
+        LoadStyleProfileStatus();
+        LoadStyleProfileProgress();
+        LoadVocabularyProfileStatus();
+        UpdateProfileMessaging();
     }
 
     private void OpenAppControl_Click(object sender, RoutedEventArgs e)
@@ -1923,9 +2066,14 @@ public partial class SettingsWindow : Window
         PromptScreenPreviewText.Text = snapshot.ScreenContextPreview;
         PromptRollingPreviewText.Text = snapshot.RollingContextPreview;
         PromptLearningPreviewText.Text = snapshot.LearningHintsPreview;
+        var profile = GetProfileSummary();
         PromptLearningStatusText.Text = snapshot.LearningHintsIncluded
-            ? "Learning hints are included."
-            : "No learning hints are included.";
+            ? "AI profile hints are included in this request."
+            : profile.PersonalizedAiEnabled
+                ? "Personalized AI is on, but no profile hints are ready for this context yet."
+                : profile.HasSignals
+                    ? "Profile signals exist, but Personalized AI is off so they stay local."
+                    : "No AI profile hints yet.";
         PromptPreviewText.Text = snapshot.UserPromptPreview;
     }
 

@@ -6,60 +6,49 @@
         Height="760"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        Background="#0B1220">
+        Background="{StaticResource BgWindow}">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="BgCard" Color="#111C2E"/>
-        <SolidColorBrush x:Key="BgSoft" Color="#172338"/>
-        <SolidColorBrush x:Key="BgInput" Color="#17263B"/>
-        <SolidColorBrush x:Key="Accent" Color="#5EA6FF"/>
-        <SolidColorBrush x:Key="Success" Color="#34C38F"/>
-        <SolidColorBrush x:Key="Warning" Color="#F3A74F"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#F8FAFC"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#CBD5E1"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#8CA0BB"/>
-        <SolidColorBrush x:Key="Border" Color="#22324A"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/KeystrokeApp;component/Resources/CleanPro.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <Style TargetType="Border" x:Key="CardStyle">
-            <Setter Property="Background" Value="{StaticResource BgCard}"/>
-            <Setter Property="CornerRadius" Value="18"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="20"/>
-        </Style>
+            <SolidColorBrush x:Key="PrivacyTint" Color="#3B2A20"/>
+            <SolidColorBrush x:Key="PrivacyBorder" Color="#6A4C3B"/>
+            <SolidColorBrush x:Key="LearningTint" Color="#182E2B"/>
+            <SolidColorBrush x:Key="LearningBorder" Color="#245D50"/>
+            <SolidColorBrush x:Key="StepIdleFill" Color="#10192A"/>
+            <SolidColorBrush x:Key="StepDoneFill" Color="#142033"/>
+            <SolidColorBrush x:Key="StepActiveFill" Color="#17263B"/>
+            <SolidColorBrush x:Key="StepDoneBorder" Color="#39506E"/>
+            <SolidColorBrush x:Key="StepActiveBorder" Color="#5EA6FF"/>
 
-        <Style TargetType="Button" x:Key="PrimaryButton">
-            <Setter Property="Background" Value="{StaticResource Accent}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="18,10"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
+            <Style x:Key="StepIndicatorStyle" TargetType="Border" BasedOn="{StaticResource SoftCardStyle}">
+                <Setter Property="Background" Value="{StaticResource StepIdleFill}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+                <Setter Property="Padding" Value="14,12"/>
+            </Style>
 
-        <Style TargetType="Button" x:Key="SecondaryButton">
-            <Setter Property="Background" Value="{StaticResource BgSoft}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,10"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
+            <Style x:Key="OnboardingMetricCardStyle" TargetType="Border" BasedOn="{StaticResource SoftCardStyle}">
+                <Setter Property="Padding" Value="18"/>
+            </Style>
 
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="{StaticResource BgInput}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="12,10"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="CaretBrush" Value="{StaticResource TextPrimary}"/>
-        </Style>
+            <Style x:Key="PrivacyCalloutStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{StaticResource PrivacyTint}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource PrivacyBorder}"/>
+                <Setter Property="Padding" Value="18"/>
+            </Style>
+
+            <Style x:Key="LearningCalloutStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{StaticResource LearningTint}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource LearningBorder}"/>
+                <Setter Property="Padding" Value="18"/>
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
-    <Grid Margin="28">
+    <Grid Margin="32">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -68,78 +57,91 @@
 
         <StackPanel Grid.Row="0">
             <TextBlock Text="Welcome to Keystroke"
-                       FontSize="26"
-                       FontWeight="Bold"
+                       FontSize="24"
+                       FontWeight="SemiBold"
                        Foreground="{StaticResource TextPrimary}"/>
             <TextBlock x:Name="SubtitleText"
                        Text="A quick setup will get you to live completions fast."
                        FontSize="13"
-                       Margin="0,6,0,0"
-                       Foreground="{StaticResource TextMuted}"/>
+                       Margin="0,8,0,0"
+                       Foreground="{StaticResource TextSecondary}"
+                       TextWrapping="Wrap"/>
 
-            <UniformGrid Columns="4" Margin="0,18,0,0">
-                <Border x:Name="StepIndicator1" Style="{StaticResource CardStyle}" Margin="0,0,10,0" Padding="12">
-                    <TextBlock Text="1. Welcome" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
+            <UniformGrid Columns="4" Margin="0,22,0,0">
+                <Border x:Name="StepIndicator1" Style="{StaticResource StepIndicatorStyle}" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="Step 1" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="SemiBold"/>
+                        <TextBlock Text="Welcome" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    </StackPanel>
                 </Border>
-                <Border x:Name="StepIndicator2" Style="{StaticResource CardStyle}" Margin="0,0,10,0" Padding="12">
-                    <TextBlock Text="2. Privacy" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
+                <Border x:Name="StepIndicator2" Style="{StaticResource StepIndicatorStyle}" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="Step 2" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="SemiBold"/>
+                        <TextBlock Text="Privacy" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    </StackPanel>
                 </Border>
-                <Border x:Name="StepIndicator3" Style="{StaticResource CardStyle}" Margin="0,0,10,0" Padding="12">
-                    <TextBlock Text="3. Gemini key" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
+                <Border x:Name="StepIndicator3" Style="{StaticResource StepIndicatorStyle}" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="Step 3" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="SemiBold"/>
+                        <TextBlock Text="Gemini key" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    </StackPanel>
                 </Border>
-                <Border x:Name="StepIndicator4" Style="{StaticResource CardStyle}" Padding="12">
-                    <TextBlock Text="4. Ready" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
+                <Border x:Name="StepIndicator4" Style="{StaticResource StepIndicatorStyle}">
+                    <StackPanel>
+                        <TextBlock Text="Step 4" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="SemiBold"/>
+                        <TextBlock Text="Ready" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    </StackPanel>
                 </Border>
             </UniformGrid>
         </StackPanel>
 
-        <Grid Grid.Row="1" Margin="0,20,0,20">
-            <Border x:Name="WelcomeStep" Style="{StaticResource CardStyle}">
+        <Grid Grid.Row="1" Margin="0,24,0,20">
+            <Border x:Name="WelcomeStep" Style="{StaticResource CardStyle}" Padding="24">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <TextBlock Text="Recommended setup"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource TextPrimary}"/>
-                    <TextBlock Text="For most people, the best Keystroke experience starts with Gemini and Gemini 3.1 Flash-Lite Preview."
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="14"
-                               Margin="0,10,0,0"
-                               TextWrapping="Wrap"/>
-                    <TextBlock Text="This is the setup we have tested the most, and it gives a strong balance of speed, accuracy, and cost for day-to-day autocomplete."
-                               Foreground="{StaticResource TextMuted}"
-                               FontSize="13"
-                               Margin="0,8,0,0"
-                               TextWrapping="Wrap"/>
+                    <StackPanel>
+                        <TextBlock Text="Recommended setup"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="For most people, the best Keystroke experience starts with Gemini and Gemini 3.1 Flash-Lite Preview."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="14"
+                                   Margin="0,10,0,0"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="This setup is the fastest path to a stable, low-friction first run with strong autocomplete quality."
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="13"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"/>
 
-                    <UniformGrid Columns="3" Margin="0,22,0,0">
-                        <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
-                            <StackPanel>
-                                <TextBlock Text="Provider" Foreground="{StaticResource TextMuted}" FontSize="12"/>
-                                <TextBlock Text="Gemini" Foreground="{StaticResource TextPrimary}" FontSize="18" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                                <TextBlock Text="Recommended default for most users." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
-                            <StackPanel>
-                                <TextBlock Text="Model" Foreground="{StaticResource TextMuted}" FontSize="12"/>
-                                <TextBlock Text="Gemini 3.1 Flash-Lite Preview" Foreground="{StaticResource TextPrimary}" FontSize="18" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                <TextBlock Text="Low latency, reliable quality, and low cost." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource CardStyle}">
-                            <StackPanel>
-                                <TextBlock Text="Goal" Foreground="{StaticResource TextMuted}" FontSize="12"/>
-                                <TextBlock Text="See completions fast" Foreground="{StaticResource TextPrimary}" FontSize="18" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                                <TextBlock Text="This setup gets you typing with minimal friction." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Border>
-                    </UniformGrid>
-                </StackPanel>
+                        <UniformGrid Columns="3" Margin="0,24,0,0">
+                            <Border Style="{StaticResource OnboardingMetricCardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="Provider" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Gemini" Foreground="{StaticResource TextPrimary}" FontSize="17" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                    <TextBlock Text="Recommended for a fast, reliable first setup." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource OnboardingMetricCardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="Model" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Gemini 3.1 Flash-Lite Preview" Foreground="{StaticResource TextPrimary}" FontSize="17" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Low latency, predictable output, and low cost." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource OnboardingMetricCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Outcome" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Start typing fast" Foreground="{StaticResource TextPrimary}" FontSize="17" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                    <TextBlock Text="Minimal setup, strong defaults, and quick time to first completion." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                    </StackPanel>
                 </ScrollViewer>
             </Border>
 
-            <Border x:Name="PrivacyStep" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+            <Border x:Name="PrivacyStep" Style="{StaticResource CardStyle}" Padding="24" Visibility="Collapsed">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -148,36 +150,36 @@
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock Text="Privacy and advanced features"
-                                       FontSize="22"
+                            <TextBlock Text="Privacy and defaults"
+                                       FontSize="20"
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimary}"/>
-                            <TextBlock Text="Keystroke needs your consent before it can watch typing, gather optional context, and send prediction requests."
+                            <TextBlock Text="Keystroke needs consent before it can watch typing, gather optional context, and send prediction requests."
                                        Foreground="{StaticResource TextSecondary}"
                                        FontSize="14"
                                        Margin="0,10,0,0"
                                        TextWrapping="Wrap"/>
 
-                            <Border Style="{StaticResource CardStyle}" Margin="0,20,0,0" Background="#3B2A20" BorderBrush="#6A4C3B">
+                            <Border Style="{StaticResource PrivacyCalloutStyle}" Margin="0,20,0,0">
                                 <StackPanel>
                                     <TextBlock Text="What Keystroke captures locally" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
                                     <TextBlock Text="Keystroke watches typing and keeps the active text in memory long enough to generate, accept, and dismiss suggestions." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource CardStyle}" Margin="0,12,0,0" Background="#182E2B" BorderBrush="#245D50">
+                            <Border Style="{StaticResource LearningCalloutStyle}" Margin="0,12,0,0">
                                 <StackPanel>
                                     <TextBlock Text="Recommended default features" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
                                     <TextBlock Text="OCR: on" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
                                     <TextBlock Text="Visible screen text helps keep completions grounded in the document, chat, or code you are looking at." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
                                     <TextBlock Text="Rolling context: on" Foreground="{StaticResource TextSecondary}" Margin="0,12,0,0"/>
                                     <TextBlock Text="Recent text helps Keystroke stay coherent across a sentence or thought." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Learning: off" Foreground="{StaticResource TextSecondary}" Margin="0,12,0,0"/>
-                                    <TextBlock Text="Keystroke will not store accepted suggestions for adaptation until you opt in later." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Personalized AI: off" Foreground="{StaticResource TextSecondary}" Margin="0,12,0,0"/>
+                                    <TextBlock Text="Your AI profile can keep building quietly, but adaptation stays off until you choose to enable it later." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Text="You can pause Keystroke from the tray, inspect the current data flow in Settings, block specific apps, or turn OCR and learning off at any time."
+                            <TextBlock Text="You can pause Keystroke from the tray, inspect the current data flow in Settings, block specific apps, or turn OCR and personalization off at any time."
                                        Foreground="{StaticResource TextMuted}"
                                        FontSize="13"
                                        Margin="0,18,0,0"
@@ -185,25 +187,25 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <CheckBox x:Name="ConsentCheck"
-                              Grid.Row="1"
-                              Margin="0,18,0,0"
-                              Foreground="{StaticResource TextPrimary}"
-                              FontSize="13"
-                              Checked="ConsentCheck_Changed"
-                              Unchecked="ConsentCheck_Changed">
-                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}">
-                            I understand how Keystroke monitors input, what optional context can be sent, and how to pause or limit it.
-                        </TextBlock>
-                    </CheckBox>
+                    <Border Grid.Row="1" Style="{StaticResource SoftCardStyle}" Padding="16" Margin="0,18,0,0">
+                        <CheckBox x:Name="ConsentCheck"
+                                  Foreground="{StaticResource TextPrimary}"
+                                  FontSize="13"
+                                  Checked="ConsentCheck_Changed"
+                                  Unchecked="ConsentCheck_Changed">
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}">
+                                I understand how Keystroke monitors input, what optional context can be sent, and how to pause or limit it.
+                            </TextBlock>
+                        </CheckBox>
+                    </Border>
                 </Grid>
             </Border>
 
-            <Border x:Name="ApiKeyStep" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+            <Border x:Name="ApiKeyStep" Style="{StaticResource CardStyle}" Padding="24" Visibility="Collapsed">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="Connect Gemini"
-                                   FontSize="22"
+                                   FontSize="20"
                                    FontWeight="SemiBold"
                                    Foreground="{StaticResource TextPrimary}"/>
                         <TextBlock Text="Get a Gemini API key, paste it here, and verify it before Keystroke starts."
@@ -212,10 +214,11 @@
                                    Margin="0,10,0,0"
                                    TextWrapping="Wrap"/>
 
-                        <Border Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="{StaticResource BgSoft}">
+                        <Border Style="{StaticResource SoftCardStyle}" Margin="0,18,0,0" Padding="18">
                             <StackPanel>
-                                <TextBlock Text="1. Open Google AI Studio" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                <TextBlock Text="2. Create or copy a Gemini API key" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
+                                <TextBlock Text="Connection checklist" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                <TextBlock Text="1. Open Google AI Studio" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
+                                <TextBlock Text="2. Create or copy a Gemini API key" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
                                 <TextBlock Text="3. Paste it below and click Verify key" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
                                 <WrapPanel Margin="0,14,0,0">
                                     <Button Content="Open Google AI Studio" Style="{StaticResource PrimaryButton}" Click="OpenAiStudio_Click"/>
@@ -232,23 +235,23 @@
                             <TextBlock x:Name="VerificationStatusText" Text="Paste a key to verify it." Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="14,0,0,0" TextWrapping="Wrap"/>
                         </WrapPanel>
 
-                        <Border Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="#203047">
+                        <Border Style="{StaticResource SoftCardStyle}" Margin="0,18,0,0" Padding="18">
                             <StackPanel>
                                 <TextBlock Text="Recommended first-run settings" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
                                 <TextBlock Text="Provider: Gemini" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0"/>
                                 <TextBlock Text="Model: Gemini 3.1 Flash-Lite Preview" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,0"/>
-                                <TextBlock Text="OCR: on | Rolling context: on | Learning: off" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
+                                <TextBlock Text="OCR: on | Rolling context: on | Personalized AI: off" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
 
-            <Border x:Name="ReadyStep" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+            <Border x:Name="ReadyStep" Style="{StaticResource CardStyle}" Padding="24" Visibility="Collapsed">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="Ready to start"
-                                   FontSize="22"
+                                   FontSize="20"
                                    FontWeight="SemiBold"
                                    Foreground="{StaticResource TextPrimary}"/>
                         <TextBlock x:Name="ReadySummaryText"
@@ -259,21 +262,21 @@
                                    TextWrapping="Wrap"/>
 
                         <UniformGrid Columns="2" Margin="0,20,0,0">
-                            <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                            <Border Style="{StaticResource OnboardingMetricCardStyle}" Margin="0,0,12,0">
                                 <StackPanel>
-                                    <TextBlock Text="What will be active" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Active at launch" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
                                     <TextBlock x:Name="ReadyActiveText" Text="Gemini completions with OCR and rolling context enabled." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
-                            <Border Style="{StaticResource CardStyle}">
+                            <Border Style="{StaticResource OnboardingMetricCardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="What you can change later" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="You can switch providers, disable OCR, enable learning, or tighten app controls anytime in Settings." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Easy to adjust later" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="You can switch providers, disable OCR, enable personalization, or tighten app controls anytime in Settings." Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </UniformGrid>
 
-                        <Border x:Name="PausedSummaryCard" Style="{StaticResource CardStyle}" Margin="0,18,0,0" Background="#3B2A20" BorderBrush="#6A4C3B" Visibility="Collapsed">
+                        <Border x:Name="PausedSummaryCard" Style="{StaticResource PrivacyCalloutStyle}" Margin="0,18,0,0" Visibility="Collapsed">
                             <TextBlock Text="If you finish later, Keystroke will launch paused and wait for you to add a valid Gemini key before predictions start."
                                        Foreground="{StaticResource TextSecondary}"
                                        TextWrapping="Wrap"/>
@@ -283,18 +286,20 @@
             </Border>
         </Grid>
 
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+        <Border Grid.Row="2" Style="{StaticResource SoftCardStyle}" Padding="18,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <Button x:Name="ExitButton" Grid.Column="0" Content="Decline &amp; Exit" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="ExitButton_Click"/>
-            <Button x:Name="BackButton" Grid.Column="1" Content="Back" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="BackButton_Click"/>
-            <Button x:Name="LaterButton" Grid.Column="2" Content="Finish later (start paused)" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Visibility="Collapsed" Click="LaterButton_Click"/>
-            <Button x:Name="NextButton" Grid.Column="3" Content="Next" Style="{StaticResource PrimaryButton}" Click="NextButton_Click"/>
-        </Grid>
+                <Button x:Name="ExitButton" Grid.Column="0" Content="Decline &amp; Exit" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="ExitButton_Click"/>
+                <Button x:Name="BackButton" Grid.Column="1" Content="Back" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="BackButton_Click"/>
+                <Button x:Name="LaterButton" Grid.Column="2" Content="Finish later (start paused)" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Visibility="Collapsed" Click="LaterButton_Click"/>
+                <Button x:Name="NextButton" Grid.Column="3" Content="Next" Style="{StaticResource PrimaryButton}" Click="NextButton_Click"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

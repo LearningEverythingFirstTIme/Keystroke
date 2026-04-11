@@ -42,7 +42,7 @@ public partial class App
         _typingBuffer.AddChar(c);
         var currentBuffer = _typingBuffer.CurrentText;
 
-        if (_config.LearningEnabled && _config.LearningV2Enabled)
+        if (_config.LearningV2Enabled)
         {
             var context = CreateContextSnapshot(currentBuffer, processName, windowTitle);
             _learningCaptureCoordinator.OnBufferChanged(currentBuffer, context);
@@ -50,6 +50,7 @@ public partial class App
             if (_commitBoundaryChars.Contains(c))
             {
                 if (_learningCaptureCoordinator.OnManualCommit(currentBuffer, context, "punctuation") &&
+                    _config.LearningEnabled &&
                     _config.StyleProfileEnabled)
                 {
                     _styleProfileService.OnAccepted();
@@ -99,7 +100,7 @@ public partial class App
                     var oldBuffer = _typingBuffer.CurrentText;
                     var context = CreateContextSnapshot(oldBuffer, activeProcessName, activeWindowTitle);
 
-                    if (_config.LearningEnabled && _suggestionPanel?.HasSuggestion == true)
+                    if (_suggestionPanel?.HasSuggestion == true)
                     {
                         var fullSuggestion = _suggestionPanel.GetFullSuggestion();
                         var dismissed = SuggestionAcceptance.GetRemainingCompletion(oldBuffer, fullSuggestion);
@@ -120,10 +121,11 @@ public partial class App
                         }
                     }
 
-                    if (_config.LearningEnabled && _config.LearningV2Enabled &&
+                    if (_config.LearningV2Enabled &&
                         key == InputListenerService.SpecialKey.Enter &&
                         !string.IsNullOrWhiteSpace(oldBuffer) &&
                         _learningCaptureCoordinator.OnManualCommit(oldBuffer, context, "enter") &&
+                        _config.LearningEnabled &&
                         _config.StyleProfileEnabled)
                     {
                         _styleProfileService.OnAccepted();
@@ -152,9 +154,10 @@ public partial class App
                     var oldBuffer = _typingBuffer.CurrentText;
                     var context = CreateContextSnapshot(oldBuffer, activeProcessName, activeWindowTitle);
 
-                    if (_config.LearningEnabled && _config.LearningV2Enabled &&
+                    if (_config.LearningV2Enabled &&
                         !string.IsNullOrWhiteSpace(oldBuffer) &&
                         _learningCaptureCoordinator.OnManualCommit(oldBuffer, context, "navigation") &&
+                        _config.LearningEnabled &&
                         _config.StyleProfileEnabled)
                     {
                         _styleProfileService.OnAccepted();
@@ -388,46 +391,46 @@ public partial class App
         int latencyMs = GetSuggestionLatencyMs();
         int cycleDepth = _suggestionLifecycle.Snapshot().CycleDepth;
 
-        if (_config.LearningEnabled)
+        if (_config.LearningEnabled && _config.StyleProfileEnabled)
         {
-            if (_config.StyleProfileEnabled)
-            {
-                _styleProfileService.OnAccepted();
-                _vocabularyProfileService.OnAccepted();
-            }
+            _styleProfileService.OnAccepted();
+            _vocabularyProfileService.OnAccepted();
+        }
 
-            var initialQuality = CompletionFeedbackService.ComputeQualityScore(
+        var initialQuality = CompletionFeedbackService.ComputeQualityScore(
+            latencyMs,
+            cycleDepth,
+            editedAfter: false);
+
+        _postEditDetector.StartWatching(editedAfter =>
+        {
+            _acceptanceTracker.LogAccepted(
+                preparation.Buffer,
+                preparation.Completion,
+                preparation.ProcessName,
+                preparation.WindowTitle,
                 latencyMs,
                 cycleDepth,
-                editedAfter: false);
+                editedAfter);
 
-            _postEditDetector.StartWatching(editedAfter =>
+            if (_config.LearningV2Enabled)
             {
-                _acceptanceTracker.LogAccepted(
+                _learningCaptureCoordinator.OnFullAccept(
+                    preparation.SuggestionId,
+                    preparation.RequestId,
+                    preparation.Context,
                     preparation.Buffer,
                     preparation.Completion,
-                    preparation.ProcessName,
-                    preparation.WindowTitle,
                     latencyMs,
                     cycleDepth,
                     editedAfter);
+            }
 
-                if (_config.LearningV2Enabled)
-                {
-                    _learningCaptureCoordinator.OnFullAccept(
-                        preparation.SuggestionId,
-                        preparation.RequestId,
-                        preparation.Context,
-                        preparation.Buffer,
-                        preparation.Completion,
-                        latencyMs,
-                        cycleDepth,
-                        editedAfter);
-                }
+            LogToDebug($"Tracked: latency={latencyMs}ms cycle={cycleDepth} edited={editedAfter} quality={CompletionFeedbackService.ComputeQualityScore(latencyMs, cycleDepth, editedAfter):F2}");
+        });
 
-                LogToDebug($"Tracked: latency={latencyMs}ms cycle={cycleDepth} edited={editedAfter} quality={CompletionFeedbackService.ComputeQualityScore(latencyMs, cycleDepth, editedAfter):F2}");
-            });
-
+        if (_config.LearningEnabled)
+        {
             _learningService.AddToSession(
                 preparation.Buffer,
                 preparation.Completion,
@@ -452,7 +455,7 @@ public partial class App
     {
         LogToDebug($"{triggerLabel} -> Accepting next word: \"{preparation.AcceptedText}\"");
 
-        if (_config.LearningEnabled && _config.LearningV2Enabled)
+        if (_config.LearningV2Enabled)
         {
             _learningCaptureCoordinator.OnPartialAccept(
                 preparation.SuggestionId,
@@ -462,7 +465,7 @@ public partial class App
                 preparation.Completion,
                 preparation.AcceptedText);
 
-            if (_config.StyleProfileEnabled)
+            if (_config.LearningEnabled && _config.StyleProfileEnabled)
             {
                 _styleProfileService.OnAccepted();
                 _vocabularyProfileService.OnAccepted();

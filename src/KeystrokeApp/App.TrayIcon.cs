@@ -21,6 +21,14 @@ public partial class App
         string Reason,
         string Label);
 
+    private sealed record ProfileStatusSummary(
+        bool PersonalizedAiEnabled,
+        int AcceptedSignals,
+        int ContextCount)
+    {
+        public bool HasSignals => AcceptedSignals > 0;
+    }
+
     private Icon GetTrayIcon(bool enabled) => enabled
         ? (_iconEnabled  ??= CreateKeyboardIcon(true))
         : (_iconDisabled ??= CreateKeyboardIcon(false));
@@ -84,6 +92,12 @@ public partial class App
             IsEnabled = false
         };
 
+        _profileMenuItem = new MenuItem
+        {
+            Header = BuildProfileMenuHeader(),
+            IsEnabled = false
+        };
+
         _setupMenuItem = new MenuItem { Header = "Finish Gemini setup" };
         _setupMenuItem.Click += (s, e) =>
         {
@@ -126,6 +140,7 @@ public partial class App
         menu.Items.Add(new Separator());
         menu.Items.Add(_engineMenuItem);
         menu.Items.Add(_sessionMenuItem);
+        menu.Items.Add(_profileMenuItem);
         menu.Items.Add(_setupMenuItem);
         menu.Items.Add(_currentAppMenuItem);
         menu.Items.Add(_currentAppStatusMenuItem);
@@ -155,7 +170,7 @@ public partial class App
         var model    = GetCurrentModelName();
         var accepted = _sessionAcceptCount;
         var currentApp = GetCurrentAppStatus();
-        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session\n{currentApp.Label}: {currentApp.Reason}\nLast accept: {_lastAcceptanceStatus}";
+        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session\nAI profile: {BuildProfileTooltipSummary()}\n{currentApp.Label}: {currentApp.Reason}\nLast accept: {_lastAcceptanceStatus}";
     }
 
     private string GetCurrentModelName() => _config.PredictionEngine.ToLower() switch
@@ -213,6 +228,10 @@ public partial class App
                 break;
             }
         }
+
+        if (_profileMenuItem != null)
+            _profileMenuItem.Header = BuildProfileMenuHeader();
+
         _trayIcon.ToolTipText = BuildToolTip();
     }
 
@@ -359,6 +378,50 @@ public partial class App
 
         _trayIcon.ShowBalloonTip(title, message, BalloonIcon.Info);
         LogToDebug($"{title}: {message}");
+    }
+
+    private string BuildProfileMenuHeader()
+    {
+        var profile = GetProfileStatusSummary();
+        return profile.PersonalizedAiEnabled
+            ? profile.HasSignals
+                ? $"AI Profile: active ({profile.AcceptedSignals} signals)"
+                : "AI Profile: active, waiting for first signal"
+            : profile.HasSignals
+                ? $"AI Profile: building quietly ({profile.AcceptedSignals} signals)"
+                : "AI Profile: off, no signals yet";
+    }
+
+    private string BuildProfileTooltipSummary()
+    {
+        var profile = GetProfileStatusSummary();
+        var contextText = profile.ContextCount > 0
+            ? $" across {profile.ContextCount} context{(profile.ContextCount == 1 ? "" : "s")}"
+            : "";
+
+        return profile.PersonalizedAiEnabled
+            ? profile.HasSignals
+                ? $"active with {profile.AcceptedSignals} signal{(profile.AcceptedSignals == 1 ? "" : "s")}{contextText}"
+                : "active, waiting for first accepted suggestion"
+            : profile.HasSignals
+                ? $"building from {profile.AcceptedSignals} signal{(profile.AcceptedSignals == 1 ? "" : "s")}{contextText}"
+                : "off until you accept a few suggestions";
+    }
+
+    private ProfileStatusSummary GetProfileStatusSummary()
+    {
+        try
+        {
+            var stats = _learningService.GetStats();
+            return new ProfileStatusSummary(
+                _config.LearningEnabled,
+                stats.TotalAccepted,
+                stats.ContextSummaries.Count);
+        }
+        catch
+        {
+            return new ProfileStatusSummary(_config.LearningEnabled, 0, 0);
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]

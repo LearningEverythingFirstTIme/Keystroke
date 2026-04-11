@@ -35,7 +35,7 @@ public partial class SuggestionPanel : Window
     private static readonly IEasingFunction ShowScaleEase = new BackEase
     {
         EasingMode = EasingMode.EaseOut,
-        Amplitude = 0.4
+        Amplitude = 0.25
     };
     private static readonly IEasingFunction HideEase = new QuadraticEase { EasingMode = EasingMode.EaseIn };
     private static readonly IEasingFunction WordRevealEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
@@ -265,11 +265,11 @@ public partial class SuggestionPanel : Window
         borderBrush.BeginAnimation(SolidColorBrush.ColorProperty, borderFlash);
 
         // Background: brief green-tinted wash so the whole panel acknowledges the accept
-        var bgBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x16, 0x1B, 0x22));
+        var bgBrush = new SolidColorBrush(Color.FromArgb(0xD8, 0x10, 0x18, 0x25));
         SuggestionBorder.Background = bgBrush;
         var bgFlash = new ColorAnimation(
-            Color.FromArgb(0x80, 0x16, 0x1B, 0x22),
-            Color.FromArgb(0x80, 0x18, 0x30, 0x1E),
+            Color.FromArgb(0xD8, 0x10, 0x18, 0x25),
+            Color.FromArgb(0xD8, 0x13, 0x27, 0x22),
             TimeSpan.FromMilliseconds(100))
         {
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
@@ -469,7 +469,7 @@ public partial class SuggestionPanel : Window
             Text = word + " ",
             FontFamily = new FontFamily("Cascadia Code, Consolas"),
             FontSize = 14,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xF0)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0xF1, 0xF5, 0xF9)),
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0)
         };
@@ -544,9 +544,9 @@ public partial class SuggestionPanel : Window
     {
         _isAnimatingHide = false;
 
-        // Scale: springy settle from 85% to full size
-        var scaleX = new DoubleAnimation(0.85, 1.0, ShowDuration) { EasingFunction = ShowScaleEase };
-        var scaleY = new DoubleAnimation(0.85, 1.0, ShowDuration) { EasingFunction = ShowScaleEase };
+        // Scale: restrained settle from 92% to full size
+        var scaleX = new DoubleAnimation(0.92, 1.0, ShowDuration) { EasingFunction = ShowScaleEase };
+        var scaleY = new DoubleAnimation(0.92, 1.0, ShowDuration) { EasingFunction = ShowScaleEase };
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX);
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY);
 
@@ -555,10 +555,10 @@ public partial class SuggestionPanel : Window
         BeginAnimation(OpacityProperty, fadeIn);
 
         // Fly in from below-right — panel sweeps up-left to settle at caret
-        var slideX = new DoubleAnimation(12, 0, ShowDuration) { EasingFunction = ShowPositionEase };
+        var slideX = new DoubleAnimation(8, 0, ShowDuration) { EasingFunction = ShowPositionEase };
         SlideTransform.BeginAnimation(TranslateTransform.XProperty, slideX);
 
-        var slideY = new DoubleAnimation(24, 0, ShowDuration) { EasingFunction = ShowPositionEase };
+        var slideY = new DoubleAnimation(18, 0, ShowDuration) { EasingFunction = ShowPositionEase };
         SlideTransform.BeginAnimation(TranslateTransform.YProperty, slideY);
     }
 
@@ -573,9 +573,9 @@ public partial class SuggestionPanel : Window
         SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
         SlideTransform.X = 0;
 
-        // Scale UP slightly — panel "dissolves outward" rather than shrinking away
-        var scaleUpX = new DoubleAnimation(1.0, 1.04, HideDuration) { EasingFunction = HideEase };
-        var scaleUpY = new DoubleAnimation(1.0, 1.04, HideDuration) { EasingFunction = HideEase };
+        // Scale UP slightly so the panel clears the eye without feeling floaty
+        var scaleUpX = new DoubleAnimation(1.0, 1.02, HideDuration) { EasingFunction = HideEase };
+        var scaleUpY = new DoubleAnimation(1.0, 1.02, HideDuration) { EasingFunction = HideEase };
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleUpX);
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleUpY);
 
@@ -589,19 +589,19 @@ public partial class SuggestionPanel : Window
                 Hide();
 
                 // Reset to fly-in starting state for next appearance
-                ScaleTransform.ScaleX = 0.85;
-                ScaleTransform.ScaleY = 0.85;
-                SlideTransform.X = 12;
-                SlideTransform.Y = 24;
+                ScaleTransform.ScaleX = 0.92;
+                ScaleTransform.ScaleY = 0.92;
+                SlideTransform.X = 8;
+                SlideTransform.Y = 18;
 
                 SuggestionBorder.BorderBrush = new SolidColorBrush(_normalBorderColor);
-                SuggestionBorder.Background = new SolidColorBrush(Color.FromArgb(0x80, 0x16, 0x1B, 0x22));
+                SuggestionBorder.Background = new SolidColorBrush(Color.FromArgb(0xD8, 0x10, 0x18, 0x25));
             }
         };
         BeginAnimation(OpacityProperty, fadeOut);
 
         // Drift upward as it fades — float away toward the caret
-        var driftUp = new DoubleAnimation(0, -8, HideDuration) { EasingFunction = HideEase };
+        var driftUp = new DoubleAnimation(0, -6, HideDuration) { EasingFunction = HideEase };
         SlideTransform.BeginAnimation(TranslateTransform.YProperty, driftUp);
     }
 
@@ -613,7 +613,7 @@ public partial class SuggestionPanel : Window
     {
         // Only animate Opacity — BlurRadius animation forces a full software re-render
         // every frame (AllowsTransparency=True disables GPU acceleration), which is expensive.
-        var glowUp = new DoubleAnimation(0.5, 0.8, TimeSpan.FromMilliseconds(150))
+        var glowUp = new DoubleAnimation(0.18, 0.32, TimeSpan.FromMilliseconds(150))
         {
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
         };
@@ -622,7 +622,7 @@ public partial class SuggestionPanel : Window
 
     private void Border_MouseLeave(object sender, MouseEventArgs e)
     {
-        var glowDown = new DoubleAnimation(0.8, 0.5, TimeSpan.FromMilliseconds(250))
+        var glowDown = new DoubleAnimation(0.32, 0.18, TimeSpan.FromMilliseconds(250))
         {
             EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
         };
@@ -758,12 +758,12 @@ public partial class SuggestionPanel : Window
 
     private void EnableAcrylic()
     {
-        // Dark tint that blends with the blurred background — ABGR for #161B22 at ~63% opacity
+        // Dark tint that blends with the blurred background — ABGR for #101825 at ~75% opacity
         var accent = new AccentPolicy
         {
             AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
             AccentFlags = 0,
-            GradientColor = 0xA0221B16
+            GradientColor = 0xC0251810
         };
 
         int size = Marshal.SizeOf(accent);
