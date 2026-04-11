@@ -11,6 +11,12 @@ namespace KeystrokeApp.Views;
 
 public partial class SettingsWindow : Window
 {
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        DarkTitleBarHelper.Apply(this);
+    }
+
     private const double PreferredWindowWidth = 1440;
     private const double PreferredWindowHeight = 920;
     private const double MinimumWindowWidth = 1180;

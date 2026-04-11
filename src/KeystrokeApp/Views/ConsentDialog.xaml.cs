@@ -1,4 +1,5 @@
 using System.Windows;
+using KeystrokeApp.Services;
 
 namespace KeystrokeApp.Views;
 
@@ -12,6 +13,12 @@ public partial class ConsentDialog : Window
     public ConsentDialog()
     {
         InitializeComponent();
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        DarkTitleBarHelper.Apply(this);
     }
 
     private void AgreeCheck_Changed(object sender, RoutedEventArgs e)

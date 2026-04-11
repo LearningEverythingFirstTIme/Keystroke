@@ -6,7 +6,9 @@
         mc:Ignorable="d"
         Title="Keystroke — Debug" Height="400" Width="500"
         Topmost="True"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgWindow}">
+
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -14,17 +16,17 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="Keystroke Debug — type anywhere to see events"
-                   FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
-        
+                   FontSize="14" FontWeight="Bold"
+                   Foreground="{StaticResource TextPrimary}"
+                   Margin="0,0,0,10"/>
+
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <TextBox x:Name="LogTextBox" 
-                     IsReadOnly="True" 
+            <TextBox x:Name="LogTextBox"
+                     IsReadOnly="True"
                      TextWrapping="Wrap"
                      FontFamily="Consolas"
                      FontSize="12"
-                     VerticalScrollBarVisibility="Auto"
-                     Background="#1E1E2E"
-                     Foreground="#CDD6F4"/>
+                     VerticalScrollBarVisibility="Auto"/>
         </ScrollViewer>
     </Grid>
 </Window>

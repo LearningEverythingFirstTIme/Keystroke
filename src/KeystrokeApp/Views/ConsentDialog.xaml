@@ -5,7 +5,7 @@
         Width="560" Height="620"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        Background="#1C2128">
+        Background="{StaticResource BgWindow}">
 
     <Grid Margin="32,24,32,24">
         <Grid.RowDefinitions>
@@ -19,14 +19,14 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
             <TextBlock Text="Welcome to Keystroke"
                        FontSize="22" FontWeight="Bold"
-                       Foreground="#F0F6FC"/>
+                       Foreground="{StaticResource TextPrimary}"/>
             <TextBlock Text="Please review exactly what Keystroke captures, stores, and sends before continuing."
-                       FontSize="13" Foreground="#8B949E" Margin="0,4,0,0"/>
+                       FontSize="13" Foreground="{StaticResource TextMuted}" Margin="0,4,0,0"/>
         </StackPanel>
 
         <!-- Scrollable consent text -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
-            <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9" FontSize="13" LineHeight="20">
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}" FontSize="13" LineHeight="20">
                 <Bold>What Keystroke captures locally</Bold><LineBreak/>
                 Keystroke watches keyboard input so it can show autocomplete suggestions
                 in the app you are currently using. It keeps the active typed text in
@@ -67,9 +67,9 @@
 
         <!-- Checkbox -->
         <CheckBox x:Name="AgreeCheck" Grid.Row="2" Margin="0,0,0,16"
-                  Foreground="#C9D1D9" FontSize="13"
+                  Foreground="{StaticResource TextSecondary}" FontSize="13"
                   Checked="AgreeCheck_Changed" Unchecked="AgreeCheck_Changed">
-            <TextBlock TextWrapping="Wrap" Foreground="#C9D1D9">
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}">
                 I understand how Keystroke monitors input, what optional context can be sent, and how to pause or limit it.
             </TextBlock>
         </CheckBox>
@@ -77,18 +77,13 @@
         <!-- Buttons -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="DeclineBtn" Content="Decline &amp; Exit"
-                    Width="120" Height="34" Margin="0,0,12,0"
-                    Click="Decline_Click"
-                    Background="#30363D" Foreground="#C9D1D9"
-                    BorderBrush="#484F58" BorderThickness="1"
-                    Cursor="Hand"/>
+                    Style="{StaticResource SecondaryButton}"
+                    Margin="0,0,12,0"
+                    Click="Decline_Click"/>
             <Button x:Name="AcceptBtn" Content="Accept &amp; Continue"
-                    Width="150" Height="34"
+                    Style="{StaticResource SuccessButton}"
                     IsEnabled="False"
-                    Click="Accept_Click"
-                    Background="#238636" Foreground="#FFFFFF"
-                    BorderBrush="#2EA043" BorderThickness="1"
-                    Cursor="Hand"/>
+                    Click="Accept_Click"/>
         </StackPanel>
     </Grid>
 </Window>

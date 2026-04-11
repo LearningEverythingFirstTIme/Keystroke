@@ -8,6 +8,12 @@ namespace KeystrokeApp.Views;
 
 public partial class OnboardingWindow : Window
 {
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        DarkTitleBarHelper.Apply(this);
+    }
+
     public sealed record Outcome(
         bool ExitApplication,
         bool StartPaused,

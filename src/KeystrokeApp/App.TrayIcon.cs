@@ -153,6 +153,23 @@ public partial class App
         menu.Items.Add(new Separator());
         menu.Items.Add(exitItem);
 
+        // Apply dark-themed styles from the design system
+        var themeDict = new ResourceDictionary
+        {
+            Source = new Uri("/KeystrokeApp;component/Resources/CleanPro.xaml", UriKind.Relative)
+        };
+        if (themeDict["TrayContextMenuStyle"] is Style menuStyle)
+            menu.Style = menuStyle;
+        var itemStyle = themeDict["TrayMenuItemStyle"] as Style;
+        var separatorStyle = themeDict["TrayMenuSeparatorStyle"] as Style;
+        foreach (var item in menu.Items)
+        {
+            if (item is MenuItem mi && itemStyle != null)
+                mi.Style = itemStyle;
+            else if (item is Separator sep && separatorStyle != null)
+                sep.Style = separatorStyle;
+        }
+
         _trayIcon.ContextMenu = menu;
         _trayIcon.TrayMouseDoubleClick += (s, e) => ShowSettingsWindow();
         menu.Opened += (_, _) => UpdateTrayCurrentAppActions();
@@ -432,22 +449,38 @@ public partial class App
         using var bitmap = new Bitmap(32, 32);
         using var g = Graphics.FromImage(bitmap);
 
-        g.Clear(System.Drawing.Color.FromArgb(30, 30, 46));
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+        g.Clear(System.Drawing.Color.Transparent);
 
-        using var bodyBrush   = new SolidBrush(System.Drawing.Color.FromArgb(200, 200, 220));
-        using var smallBrush  = new SolidBrush(System.Drawing.Color.FromArgb(30, 30, 46));
-        using var statusGreen = new SolidBrush(System.Drawing.Color.FromArgb(47, 186, 78));
-        using var statusGray  = new SolidBrush(System.Drawing.Color.FromArgb(100, 100, 120));
+        // Keyboard body — rounded rectangle
+        var bodyColor = System.Drawing.Color.FromArgb(200, 210, 225);
+        using var bodyBrush = new SolidBrush(bodyColor);
+        using var bodyPath = CreateRoundedRect(2, 9, 27, 16, 3);
+        g.FillPath(bodyBrush, bodyPath);
 
-        g.FillRectangle(bodyBrush, 2, 8, 28, 16);
+        // Key rows — dark insets
+        var keyColor = System.Drawing.Color.FromArgb(20, 26, 42);
+        using var keyBrush = new SolidBrush(keyColor);
 
+        // Top row: 5 keys
         for (int i = 0; i < 5; i++)
-        {
-            g.FillRectangle(smallBrush, 4 + i * 5, 10, 4, 4);
-        }
-        g.FillRectangle(smallBrush, 8, 18, 16, 3);
+            g.FillRectangle(keyBrush, 5 + i * 5, 12, 3, 3);
 
-        g.FillEllipse(enabled ? statusGreen : statusGray, 22, 2, 8, 8);
+        // Bottom row: spacebar
+        using var spacePath = CreateRoundedRect(9, 18, 14, 3, 1);
+        g.FillPath(keyBrush, spacePath);
+
+        // Status dot — accent blue when enabled, muted when disabled
+        var dotColor = enabled
+            ? System.Drawing.Color.FromArgb(94, 166, 255)   // Accent #5EA6FF
+            : System.Drawing.Color.FromArgb(140, 160, 187); // TextMuted #8CA0BB
+        using var dotBrush = new SolidBrush(dotColor);
+        g.FillEllipse(dotBrush, 22, 2, 8, 8);
+
+        // Subtle ring around dot
+        using var ringPen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(80, dotColor), 1f);
+        g.DrawEllipse(ringPen, 21.5f, 1.5f, 9f, 9f);
 
         var hIcon   = bitmap.GetHicon();
         var tempIcon = Icon.FromHandle(hIcon);
@@ -455,5 +488,17 @@ public partial class App
         tempIcon.Dispose();
         DestroyIcon(hIcon);
         return icon;
+    }
+
+    private static System.Drawing.Drawing2D.GraphicsPath CreateRoundedRect(float x, float y, float w, float h, float r)
+    {
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        float d = r * 2;
+        path.AddArc(x, y, d, d, 180, 90);
+        path.AddArc(x + w - d, y, d, d, 270, 90);
+        path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+        path.AddArc(x, y + h - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }

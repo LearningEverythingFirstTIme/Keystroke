@@ -12,10 +12,6 @@
 
     <Window.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/KeystrokeApp;component/Resources/CleanPro.xaml"/>
-            </ResourceDictionary.MergedDictionaries>
-
             <SolidColorBrush x:Key="PrivacyTint" Color="#3B2A20"/>
             <SolidColorBrush x:Key="PrivacyBorder" Color="#6A4C3B"/>
             <SolidColorBrush x:Key="LearningTint" Color="#182E2B"/>

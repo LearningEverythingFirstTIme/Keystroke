@@ -13,14 +13,6 @@
         MaxWidth="620"
         ResizeMode="NoResize">
 
-    <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/KeystrokeApp;component/Resources/CleanPro.xaml"/>
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </Window.Resources>
-
     <Border x:Name="SuggestionBorder"
             Background="#D8101825"
             CornerRadius="{StaticResource RadiusCard}"

@@ -1,4 +1,5 @@
 using System.Windows;
+using KeystrokeApp.Services;
 
 namespace KeystrokeApp.Views;
 
@@ -11,6 +12,12 @@ public partial class DebugWindow : Window
     public DebugWindow()
     {
         InitializeComponent();
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        DarkTitleBarHelper.Apply(this);
     }
 
     public void Log(string message)
