@@ -5,11 +5,11 @@ namespace KeystrokeApp.Tests;
 public class AppConfigTests
 {
     [Fact]
-    public void LimitEnabled_DefaultsTrue()
+    public void LicenseKeyEncrypted_DefaultsNull()
     {
         var config = new AppConfig();
 
-        Assert.True(config.LimitEnabled);
+        Assert.Null(config.LicenseKeyEncrypted);
     }
 
     [Fact]

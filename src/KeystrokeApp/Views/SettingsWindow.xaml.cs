@@ -68,6 +68,7 @@ public partial class SettingsWindow : Window
     private readonly Func<(string ProcessName, string WindowTitle)> _appPicker;
     private readonly Func<PromptPreviewSnapshot>? _promptPreviewProvider;
     private AppChoice? _lastExternalApp;
+    private bool _isPro;
     private bool _loading = true;
     private DispatcherTimer? _saveDebounceTimer;
     private DispatcherTimer? _previewTimingTimer;
@@ -107,6 +108,7 @@ public partial class SettingsWindow : Window
         _contextMaintenanceService = contextMaintenanceService ?? new LearningContextMaintenanceService();
         _appPicker = appPicker ?? AppContextService.GetActiveWindow;
         _promptPreviewProvider = promptPreviewProvider;
+        _isPro = LicenseService.IsPro(_config.LicenseKeyEncrypted);
         LoadValues();
         LoadLearningStats();
         LoadVocabularyProfileStatus();
@@ -235,11 +237,12 @@ public partial class SettingsWindow : Window
             ? "Visible text on screen helps ground suggestions in what you are looking at."
             : "No screen text is captured, which keeps privacy tighter but reduces grounding.";
 
-        bool learningOn = LearningEnabledCheck.IsChecked == true;
-        StyleProfileCheck.IsEnabled = learningOn;
-        StyleProfileIntervalSlider.IsEnabled = learningOn && StyleProfileCheck.IsChecked == true;
-        StyleProfileDependencyText.Visibility = learningOn ? Visibility.Collapsed : Visibility.Visible;
-        StyleProfileCard.Opacity = learningOn ? 1.0 : 0.72;
+        LearningEnabledCheck.IsChecked = _isPro;
+        LearningEnabledCheck.IsEnabled = _isPro;
+        StyleProfileCheck.IsEnabled = _isPro;
+        StyleProfileIntervalSlider.IsEnabled = _isPro && StyleProfileCheck.IsChecked == true;
+        StyleProfileDependencyText.Visibility = _isPro ? Visibility.Collapsed : Visibility.Visible;
+        StyleProfileCard.Opacity = _isPro ? 1.0 : 0.72;
         UpdateProfileMessaging();
     }
 
@@ -252,7 +255,7 @@ public partial class SettingsWindow : Window
         var vocabProfile = _vocabularyProfileService?.GetProfile();
 
         return new ProfileSummary(
-            LearningEnabledCheck.IsChecked == true,
+            _isPro,
             stats?.TotalAccepted ?? 0,
             stats?.TotalDismissed ?? 0,
             stats?.ContextSummaries.Count ?? 0,
@@ -357,7 +360,7 @@ public partial class SettingsWindow : Window
         if (CategoryBreakdownLockedBodyText != null)
         {
             CategoryBreakdownLockedBodyText.Text = usage.TotalAcceptedSuggestions > 0
-                ? $"{trackedText} — activate Personalized AI to unlock category intelligence, writing style, and voice guidance."
+                ? $"{trackedText} — enter a license key to unlock category intelligence, writing style, and voice guidance."
                 : "No completions tracked yet — accept a few suggestions and Keystroke will start building your AI profile.";
         }
     }
@@ -616,8 +619,9 @@ public partial class SettingsWindow : Window
         // Quality settings - feature toggles (stored in config, add properties as needed)
         OcrEnabledCheck.IsChecked = _config.OcrEnabled;
         RollingContextCheck.IsChecked = _config.RollingContextEnabled;
-        LearningEnabledCheck.IsChecked = _config.LearningEnabled;
-        LimitEnabledCheck.IsChecked = _config.LimitEnabled;
+        LearningEnabledCheck.IsChecked = _isPro;
+        LearningEnabledCheck.IsEnabled = _isPro;
+        UpdateLicenseUi();
 
         StyleProfileCheck.IsChecked = _config.StyleProfileEnabled;
         StyleProfileIntervalSlider.Value = _config.StyleProfileInterval;
@@ -785,9 +789,9 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            if (LearningEnabledCheck.IsChecked != true)
+            if (!_isPro)
             {
-                StyleProfileStatus.Text = "Personalized AI is off. Keystroke can still collect profile signals quietly, but it will not generate a writing-style summary yet.";
+                StyleProfileStatus.Text = "Activate a license key to enable writing-style profile generation.";
                 return;
             }
 
@@ -823,7 +827,7 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            var showProgress = LearningEnabledCheck.IsChecked == true && StyleProfileCheck.IsChecked == true;
+            var showProgress = _isPro && StyleProfileCheck.IsChecked == true;
             StyleProgressPanel.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
 
             if (!showProgress || _styleProfileService == null)
@@ -879,9 +883,9 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            if (LearningEnabledCheck.IsChecked != true)
+            if (!_isPro)
             {
-                VocabProfileStatus.Text = "Personalized AI is off. Keystroke is not generating a voice fingerprint yet, even if profile signals are already being collected.";
+                VocabProfileStatus.Text = "Activate a license key to enable voice fingerprint generation.";
                 VocabCategoryBadgesPanel.Children.Clear();
                 return;
             }
@@ -1749,8 +1753,7 @@ public partial class SettingsWindow : Window
         _config.FastDebounceMs = (int)FastDebounceSlider.Value;
         _config.OcrEnabled = OcrEnabledCheck.IsChecked == true;
         _config.RollingContextEnabled = RollingContextCheck.IsChecked == true;
-        _config.LearningEnabled = LearningEnabledCheck.IsChecked == true;
-        _config.LimitEnabled = LimitEnabledCheck.IsChecked == true;
+        _config.LearningEnabled = _isPro;
         _config.StyleProfileEnabled = StyleProfileCheck.IsChecked == true;
         _config.StyleProfileInterval = (int)StyleProfileIntervalSlider.Value;
         _config.MaxSuggestions = (int)SuggestionsSlider.Value;
@@ -1785,7 +1788,6 @@ public partial class SettingsWindow : Window
             FastDebounceSlider.Value = 200;
             OcrEnabledCheck.IsChecked = false;
             RollingContextCheck.IsChecked = false;
-            LearningEnabledCheck.IsChecked = false;
             StyleProfileCheck.IsChecked = false;
             StyleProfileIntervalSlider.Value = 30;
             StyleProfileIntervalLabel.Text = "30";
@@ -1808,7 +1810,6 @@ public partial class SettingsWindow : Window
             FastDebounceSlider.Value = 100;
             OcrEnabledCheck.IsChecked = true;
             RollingContextCheck.IsChecked = true;
-            LearningEnabledCheck.IsChecked = false;
             StyleProfileCheck.IsChecked = false;
             TempSlider.Value = 0.3;
             SuggestionsSlider.Value = 3;
@@ -1829,7 +1830,6 @@ public partial class SettingsWindow : Window
             FastDebounceSlider.Value = 80;
             OcrEnabledCheck.IsChecked = true;
             RollingContextCheck.IsChecked = true;
-            LearningEnabledCheck.IsChecked = false;
             StyleProfileCheck.IsChecked = false;
             TempSlider.Value = 0.4;
             SuggestionsSlider.Value = 5;
@@ -1935,24 +1935,64 @@ public partial class SettingsWindow : Window
 
     private void ActivateLearning_Click(object sender, RoutedEventArgs e)
     {
-        if (LearningEnabledCheck.IsChecked == true)
+        if (_isPro)
             return;
 
-        _loading = true;
-        try
-        {
-            LearningEnabledCheck.IsChecked = true;
-        }
-        finally
-        {
-            _loading = false;
-        }
-
-        SaveSettings();
-        RefreshUsageState();
+        // Navigate to the Advanced section where the license key entry is
+        NavAdvancedButton.IsChecked = true;
+        ShowSection("Advanced");
+        LicenseKeyBox.Focus();
     }
 
     private void ActivatePersonalizedAi_Click(object sender, RoutedEventArgs e) => ActivateLearning_Click(sender, e);
+
+    private void ActivateLicense_Click(object sender, RoutedEventArgs e)
+    {
+        var keyText = LicenseKeyBox.Text?.Trim();
+        var info = LicenseService.Validate(keyText);
+
+        if (!info.IsValid || info.Tier != LicenseTier.Pro)
+        {
+            LicenseValidationText.Text = "Invalid license key. Check for typos and try again.";
+            LicenseValidationText.Foreground = new SolidColorBrush(Color.FromRgb(0xF0, 0x60, 0x60));
+            return;
+        }
+
+        _config.LicenseKey = keyText;
+        _config.LearningEnabled = true;
+        _config.Save();
+
+        _isPro = true;
+        LicenseValidationText.Text = "License activated! Personalized AI and unlimited completions are now enabled.";
+        LicenseValidationText.Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0xD0, 0x80));
+        UpdateLicenseUi();
+        RefreshUsageState();
+
+        // Show the Pro welcome walkthrough
+        var welcome = new ProWelcomeWindow { Owner = this };
+        welcome.ShowDialog();
+    }
+
+    private void UpdateLicenseUi()
+    {
+        if (LicenseStatusText == null)
+            return;
+
+        LicenseStatusText.Text = _isPro
+            ? "Pro — unlimited completions, Personalized AI active"
+            : "Free tier — 30 completions per day";
+        LicenseKeyBox.IsEnabled = !_isPro;
+        ActivateLicenseButton.IsEnabled = !_isPro;
+        LearningEnabledCheck.IsChecked = _isPro;
+        LearningEnabledCheck.IsEnabled = _isPro;
+
+        if (_isPro)
+        {
+            LicenseKeyBox.Text = "••••-••••-••••-••••";
+            LicenseValidationText.Text = "License active.";
+            LicenseValidationText.Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0xD0, 0x80));
+        }
+    }
 
     public void RefreshUsageState()
     {

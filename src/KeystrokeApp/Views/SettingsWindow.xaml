@@ -466,14 +466,14 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <TextBlock Text="Personalized AI is ready when you are" Foreground="{StaticResource TextPrimary}" FontSize="17" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Keystroke is already tracking your accepted completions locally. Activate Personalized AI to turn that passive profile into live prompt guidance." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Keystroke is already tracking your accepted completions locally. Enter a license key to turn that passive profile into live prompt guidance." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                     <WrapPanel Margin="0,14,0,0">
                                         <Border Style="{StaticResource PillStyle}"><TextBlock Text="Matches your phrasing" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
                                         <Border Style="{StaticResource PillStyle}"><TextBlock Text="Builds writing style hints" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
                                         <Border Style="{StaticResource PillStyle}"><TextBlock Text="Uses your voice" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
                                     </WrapPanel>
                                 </StackPanel>
-                                <Button Grid.Column="1" Content="Activate Personalized AI — $20 once →" Style="{StaticResource PrimaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="ActivateLearning_Click"/>
+                                <Button Grid.Column="1" Content="Unlock with License Key →" Style="{StaticResource PrimaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="ActivateLearning_Click"/>
                             </Grid>
                         </Border>
 
@@ -498,7 +498,7 @@
                                         </Border>
                                     </WrapPanel>
                                 </StackPanel>
-                                <Button x:Name="ProfileStatusActionButton" Grid.Column="1" Content="Turn On Personalized AI" Style="{StaticResource SecondaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="ActivateLearning_Click"/>
+                                <Button x:Name="ProfileStatusActionButton" Grid.Column="1" Content="Unlock with License Key" Style="{StaticResource SecondaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="ActivateLearning_Click"/>
                             </Grid>
                         </Border>
 
@@ -696,7 +696,7 @@
                                             <Border Style="{StaticResource InsetTileStyle}">
                                                 <StackPanel>
                                                     <TextBlock x:Name="CategoryBreakdownLockedTitleText" Text="Profile intelligence is locked for free users." Foreground="{StaticResource TextPrimary}" FontSize="14" FontWeight="SemiBold"/>
-                                                    <TextBlock x:Name="CategoryBreakdownLockedBodyText" Text="0 completions tracked — activate Personalized AI to unlock category intelligence, writing style, and voice guidance." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                                    <TextBlock x:Name="CategoryBreakdownLockedBodyText" Text="0 completions tracked — enter a license key to unlock category intelligence, writing style, and voice guidance." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
@@ -991,17 +991,19 @@
                         </Border>
 
                         <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="Free-tier limit" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Developer/testing bypass only. Leave this on to enforce the 50 free completions per day limit for non-Pro users." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="LimitEnabledCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="Setting_CheckChanged" Unchecked="Setting_CheckChanged" VerticalAlignment="Center"/>
-                            </Grid>
+                            <StackPanel>
+                                <TextBlock Text="License" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="LicenseStatusText" Text="Free tier — 30 completions per day" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="LicenseKeyBox" Margin="0,0,8,0" FontFamily="Consolas" FontSize="13"/>
+                                    <Button x:Name="ActivateLicenseButton" Grid.Column="1" Content="Activate" Style="{StaticResource PrimaryButton}" VerticalAlignment="Center" Click="ActivateLicense_Click"/>
+                                </Grid>
+                                <TextBlock x:Name="LicenseValidationText" Text="" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">

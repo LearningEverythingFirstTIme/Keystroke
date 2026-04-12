@@ -23,6 +23,7 @@ nul
 **/secrets.json
 **/credentials.json
 **/appsettings.*.json
+private-key.pem
 
 # AI tool workspace files
 .openclaw/

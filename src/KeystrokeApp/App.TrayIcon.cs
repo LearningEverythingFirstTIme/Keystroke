@@ -438,13 +438,13 @@ public partial class App
         {
             var stats = _learningService.GetStats();
             return new ProfileStatusSummary(
-                _config.LearningEnabled,
+                _isProTier,
                 stats.TotalAccepted,
                 stats.ContextSummaries.Count);
         }
         catch
         {
-            return new ProfileStatusSummary(_config.LearningEnabled, 0, 0);
+            return new ProfileStatusSummary(_isProTier, 0, 0);
         }
     }
 

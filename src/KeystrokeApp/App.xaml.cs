@@ -110,6 +110,7 @@ public partial class App : Application
     private bool _isSetupIncomplete;
     private bool _sessionFreeLimitWarningShown;
     private bool _sessionDailyLimitReachedShown;
+    private bool _isProTier;
     private string _setupIncompleteReason = "Finish onboarding to start completions.";
 
     private string _logPath = Path.Combine(
@@ -172,11 +173,12 @@ public partial class App : Application
             _config = AppConfig.Load();
             _usageCounters.GetSnapshot();
             Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
+            RefreshLicenseStatus();
             _reliabilityTrace.Trace("startup", "config_loaded", "Loaded app configuration.", new Dictionary<string, string>
             {
                 ["engine"] = _config.PredictionEngine,
                 ["ocrEnabled"] = _config.OcrEnabled.ToString(),
-                ["learningEnabled"] = _config.LearningEnabled.ToString()
+                ["licenseTier"] = _isProTier ? "Pro" : "Free"
             });
 
             // Prune completions file if it's grown too large
@@ -212,7 +214,7 @@ public partial class App : Application
                 });
             };
 
-            if (_config.LearningEnabled && _config.StyleProfileEnabled)
+            if (_isProTier && _config.StyleProfileEnabled)
             {
                 _styleProfileService.Start(_config.StyleProfileInterval);
                 _vocabularyProfileService.Start(_config.StyleProfileInterval);
@@ -237,6 +239,15 @@ public partial class App : Application
             }
 
             RefreshShellStatus();
+
+            if (_config.LegacyTierMigrated)
+            {
+                _trayIcon?.ShowBalloonTip(
+                    "Keystroke now uses license keys",
+                    "Enter your license key in Settings to restore Personalized AI and unlimited completions.",
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+                Log("Legacy tier migration notification shown.");
+            }
 
             if (ShouldRunOnboarding())
             {
@@ -395,7 +406,8 @@ public partial class App : Application
         _vocabularyProfileService.CancelGeneration();
         _vocabularyProfileService.UpdateInterval(_config.StyleProfileInterval);
 
-        if (_config.LearningEnabled && _config.StyleProfileEnabled)
+        RefreshLicenseStatus();
+        if (_isProTier && _config.StyleProfileEnabled)
         {
             _styleProfileService.Start(_config.StyleProfileInterval);
             _vocabularyProfileService.Start(_config.StyleProfileInterval);
@@ -502,9 +514,9 @@ public partial class App : Application
             baseEngine.LengthInstruction = _config.CompletionLengthInstruction;
             baseEngine.Temperature       = _config.Temperature;
             baseEngine.MaxOutputTokens   = _config.PresetMaxOutputTokens;
-            baseEngine.LearningService          = _config.LearningEnabled ? _learningService : null;
-            baseEngine.StyleProfileService      = _config.LearningEnabled && _config.StyleProfileEnabled ? _styleProfileService : null;
-            baseEngine.VocabularyProfileService = _config.LearningEnabled && _config.StyleProfileEnabled ? _vocabularyProfileService : null;
+            baseEngine.LearningService          = _isProTier ? _learningService : null;
+            baseEngine.StyleProfileService      = _isProTier && _config.StyleProfileEnabled ? _styleProfileService : null;
+            baseEngine.VocabularyProfileService = _isProTier && _config.StyleProfileEnabled ? _vocabularyProfileService : null;
         }
 
         // Ollama uses a fixed low temperature for local models
@@ -791,15 +803,17 @@ public partial class App : Application
             windowTitle,
             IsProcessEnabled(processName),
             _outboundPrivacy,
-            _config.LearningEnabled ? _learningService : null,
-            _config.LearningEnabled && _config.StyleProfileEnabled ? _styleProfileService : null,
-            _config.LearningEnabled && _config.StyleProfileEnabled ? _vocabularyProfileService : null,
+            _isProTier ? _learningService : null,
+            _isProTier && _config.StyleProfileEnabled ? _styleProfileService : null,
+            _isProTier && _config.StyleProfileEnabled ? _vocabularyProfileService : null,
             _ocrService?.CachedText,
             rollingContext);
     }
 
-    private bool IsFreeTierLimitActive()
-        => _config.LimitEnabled && !_config.LearningEnabled;
+    private bool IsFreeTierLimitActive() => !_isProTier;
+
+    private void RefreshLicenseStatus()
+        => _isProTier = LicenseService.IsPro(_config.LicenseKeyEncrypted);
 
     private bool IsPredictionBlockedByDailyLimit(string buffer)
     {
@@ -834,7 +848,7 @@ public partial class App : Application
         if (_sessionFreeLimitWarningShown || !IsFreeTierLimitActive())
             return;
 
-        if (snapshot.DailyAcceptedSuggestions < 40 || snapshot.IsDailyLimitReached)
+        if (snapshot.DailyAcceptedSuggestions < 20 || snapshot.IsDailyLimitReached)
             return;
 
         _sessionFreeLimitWarningShown = true;
@@ -861,13 +875,13 @@ public partial class App : Application
         _sessionDailyLimitReachedShown = true;
         _trayIcon?.ShowBalloonTip(
             "Free limit reached",
-            "Daily limit reached — completions reset at midnight / $20 once, no subscription",
+            "Daily limit reached — completions resume at midnight. Enter a license key for unlimited ($20 once).",
             Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
     }
 
     private void MaybeShowLearningNudge(UsageCountersSnapshot snapshot)
     {
-        if (_config.LearningEnabled || snapshot.TotalAcceptedSuggestions < 15)
+        if (_isProTier || snapshot.TotalAcceptedSuggestions < 15)
             return;
 
         if (!_usageCounters.MarkLearningNudgeShown())
@@ -875,7 +889,7 @@ public partial class App : Application
 
         _trayIcon?.ShowBalloonTip(
             "Your AI profile is building",
-            "15 completions tracked — activate Personalized AI anytime for $20 once, no subscription",
+            "15 completions tracked — enter a license key in Settings to unlock Personalized AI ($20 once)",
             Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
         NotifySettingsWindowUsageChanged();
     }
@@ -883,16 +897,20 @@ public partial class App : Application
     private string BuildSessionMenuHeader()
     {
         var usage = _usageCounters.GetSnapshot();
-        return IsFreeTierLimitActive() && usage.IsDailyLimitReached
-            ? "⚠ Daily limit reached — go Pro"
+        if (_isProTier)
+            return $"Accepted: {_sessionAcceptCount} this session (unlimited)";
+        return usage.IsDailyLimitReached
+            ? "⚠ Daily limit reached — unlock unlimited"
             : $"Accepted: {_sessionAcceptCount} this session ({usage.DailyAcceptedSuggestions}/{UsageCounters.DailyFreeLimit} today)";
     }
 
     private string BuildUsageTooltipSummary()
     {
         var usage = _usageCounters.GetSnapshot();
-        return IsFreeTierLimitActive() && usage.IsDailyLimitReached
-            ? "⚠ Daily limit reached — go Pro"
+        if (_isProTier)
+            return $"{_sessionAcceptCount} this session (unlimited)";
+        return usage.IsDailyLimitReached
+            ? "⚠ Daily limit reached — unlock unlimited"
             : $"{_sessionAcceptCount} this session ({usage.DailyAcceptedSuggestions}/{UsageCounters.DailyFreeLimit} today)";
     }
 

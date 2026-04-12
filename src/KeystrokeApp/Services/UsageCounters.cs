@@ -5,7 +5,7 @@ namespace KeystrokeApp.Services;
 
 public sealed class UsageCounters
 {
-    public const int DailyFreeLimit = 50;
+    public const int DailyFreeLimit = 30;
 
     private readonly string _dataPath;
     private readonly Func<DateOnly> _todayProvider;

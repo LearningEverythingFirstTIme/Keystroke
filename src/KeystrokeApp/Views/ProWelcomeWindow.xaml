@@ -1,0 +1,241 @@
+<Window x:Class="KeystrokeApp.Views.ProWelcomeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Keystroke Pro"
+        Width="760"
+        Height="680"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="{StaticResource BgWindow}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <SolidColorBrush x:Key="StepIdleFill" Color="#10192A"/>
+            <SolidColorBrush x:Key="StepDoneFill" Color="#142033"/>
+            <SolidColorBrush x:Key="StepActiveFill" Color="#17263B"/>
+            <SolidColorBrush x:Key="StepDoneBorder" Color="#39506E"/>
+            <SolidColorBrush x:Key="StepActiveBorder" Color="#5EA6FF"/>
+
+            <SolidColorBrush x:Key="ProAccentTint" Color="#162E1E"/>
+            <SolidColorBrush x:Key="ProAccentBorder" Color="#2D6B3F"/>
+            <SolidColorBrush x:Key="LearnTint" Color="#18263E"/>
+            <SolidColorBrush x:Key="LearnBorder" Color="#2B4A6E"/>
+
+            <Style x:Key="StepIndicatorStyle" TargetType="Border" BasedOn="{StaticResource SoftCardStyle}">
+                <Setter Property="Background" Value="{StaticResource StepIdleFill}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+                <Setter Property="Padding" Value="14,12"/>
+            </Style>
+
+            <Style x:Key="MetricCardStyle" TargetType="Border" BasedOn="{StaticResource SoftCardStyle}">
+                <Setter Property="Padding" Value="18"/>
+            </Style>
+
+            <Style x:Key="ProCalloutStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{StaticResource ProAccentTint}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource ProAccentBorder}"/>
+                <Setter Property="Padding" Value="18"/>
+            </Style>
+
+            <Style x:Key="LearnCalloutStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Background" Value="{StaticResource LearnTint}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource LearnBorder}"/>
+                <Setter Property="Padding" Value="18"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header + step indicators -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Welcome to Personalized AI"
+                       FontSize="24"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock x:Name="SubtitleText"
+                       Text="Your license is active. Here's what just changed."
+                       FontSize="13"
+                       Margin="0,8,0,0"
+                       Foreground="{StaticResource TextSecondary}"
+                       TextWrapping="Wrap"/>
+
+            <UniformGrid Columns="3" Margin="0,22,0,0">
+                <Border x:Name="StepIndicator1" Style="{StaticResource StepIndicatorStyle}" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="1" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="SemiBold"/>
+                        <TextBlock Text="What changed" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+                <Border x:Name="StepIndicator2" Style="{StaticResource StepIndicatorStyle}" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="2" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="SemiBold"/>
+                        <TextBlock Text="How it learns" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+                <Border x:Name="StepIndicator3" Style="{StaticResource StepIndicatorStyle}">
+                    <StackPanel>
+                        <TextBlock Text="3" Foreground="{StaticResource TextMuted}" FontSize="10" FontWeight="SemiBold"/>
+                        <TextBlock Text="You're set" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+        </StackPanel>
+
+        <!-- Step panels -->
+        <Grid Grid.Row="1" Margin="0,24,0,20">
+
+            <!-- Step 1: What changed -->
+            <Border x:Name="WhatChangedStep" Style="{StaticResource CardStyle}" Padding="24">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Three things are different now"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="Your license unlocked the full Keystroke experience. No settings to change, no toggles to flip — it's already running."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="14"
+                                   Margin="0,10,0,0"
+                                   TextWrapping="Wrap"/>
+
+                        <UniformGrid Columns="3" Margin="0,24,0,0">
+                            <Border Style="{StaticResource MetricCardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="COMPLETIONS" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Unlimited" Foreground="{StaticResource Accent}" FontSize="17" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                    <TextBlock Text="The daily cap is gone. Type as much as you want, whenever you want." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource MetricCardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="LEARNING" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Now active" Foreground="{StaticResource Accent}" FontSize="17" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                    <TextBlock Text="Keystroke records how you accept and dismiss suggestions to build your writing profile." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource MetricCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="STYLE MATCHING" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Building" Foreground="{StaticResource Accent}" FontSize="17" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                    <TextBlock Text="A writing-style summary and voice fingerprint will guide future predictions as data accumulates." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <TextBlock Text="Nothing requires your attention right now. The next two screens explain what's happening under the hood, if you're curious."
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="13"
+                                   Margin="0,20,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Step 2: How it learns -->
+            <Border x:Name="HowItLearnsStep" Style="{StaticResource CardStyle}" Padding="24" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="How your writing profile works"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="Keystroke watches how you respond to suggestions and builds context-aware intelligence over time. All of this stays local on your machine."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="14"
+                                   Margin="0,10,0,0"
+                                   TextWrapping="Wrap"/>
+
+                        <Border Style="{StaticResource LearnCalloutStyle}" Margin="0,20,0,0">
+                            <StackPanel>
+                                <TextBlock Text="What gets recorded" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                <TextBlock Foreground="{StaticResource TextSecondary}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                           Text="Accepted completions (Tab) become positive signals — Keystroke learns what works for you."/>
+                                <TextBlock Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Text="Dismissed completions (you keep typing) become negative signals — it learns what to avoid."/>
+                                <TextBlock Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Text="Context matters. How you write in Slack, email, and code are tracked separately so predictions fit the situation."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource ProCalloutStyle}" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Style profile and voice fingerprint" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
+                                <TextBlock Foreground="{StaticResource TextSecondary}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                           Text="Every ~30 accepted completions, Keystroke generates a writing-style summary (tone, formality, sentence structure) and a vocabulary fingerprint (your word choices and phrasing patterns)."/>
+                                <TextBlock Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Text="These are injected into the AI prompt so suggestions start sounding more like you. They refresh automatically as your data grows."/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Step 3: You're set -->
+            <Border x:Name="AllSetStep" Style="{StaticResource CardStyle}" Padding="24" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="You're all set"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimary}"/>
+                        <TextBlock Text="Everything is running. There's nothing else to configure — just keep typing."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="14"
+                                   Margin="0,10,0,0"
+                                   TextWrapping="Wrap"/>
+
+                        <UniformGrid Columns="2" Margin="0,20,0,0">
+                            <Border Style="{StaticResource MetricCardStyle}" Margin="0,0,12,0">
+                                <StackPanel>
+                                    <TextBlock Text="What's active now" Foreground="{StaticResource TextPrimary}" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Unlimited completions" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,10,0,0"/>
+                                    <TextBlock Text="Learning capture" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Writing-style profiling" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Voice fingerprinting" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource MetricCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="Fine-tune anytime" Foreground="{StaticResource TextPrimary}" FontSize="14" FontWeight="SemiBold"/>
+                                    <TextBlock Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap"
+                                               Text="Pin or disable learning for specific apps in Settings under Personalization."/>
+                                    <TextBlock Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"
+                                               Text="Block individual apps entirely under App Control."/>
+                                    <TextBlock Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"
+                                               Text="Inspect exactly what data is being sent in the prompt preview."/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <Border Style="{StaticResource ProCalloutStyle}" Margin="0,20,0,0">
+                            <TextBlock Text="The first style profile and voice fingerprint generate after about 30 accepted completions. Until then, Keystroke uses its default behavior while quietly building your profile in the background."
+                                       Foreground="{StaticResource TextSecondary}"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Navigation bar -->
+        <Border Grid.Row="2" Style="{StaticResource SoftCardStyle}" Padding="18,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="SkipButton" Grid.Column="0" Content="Skip — I'll explore on my own" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="SkipButton_Click"/>
+                <Button x:Name="BackButton" Grid.Column="1" Content="Back" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Click="BackButton_Click"/>
+                <Button x:Name="NextButton" Grid.Column="2" Content="Next" Style="{StaticResource PrimaryButton}" Click="NextButton_Click"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

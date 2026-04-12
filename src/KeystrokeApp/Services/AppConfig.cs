@@ -78,12 +78,14 @@ public class AppConfig
     [JsonIgnore] public string? AnthropicApiKey { get; set; }
     [JsonIgnore] public string? OpenAiApiKey { get; set; }
     [JsonIgnore] public string? OpenRouterApiKey { get; set; }
+    [JsonIgnore] public string? LicenseKey { get; set; }
 
     // Encrypted on-disk representations (used only for JSON serialization)
     public string? GeminiApiKeyEncrypted { get; set; }
     public string? AnthropicApiKeyEncrypted { get; set; }
     public string? OpenAiApiKeyEncrypted { get; set; }
     public string? OpenRouterApiKeyEncrypted { get; set; }
+    public string? LicenseKeyEncrypted { get; set; }
     public string PredictionEngine { get; set; } = "gemini";
     public string GeminiModel { get; set; } = DefaultGeminiModel;
     public string ClaudeModel { get; set; } = DefaultClaudeModel;
@@ -113,7 +115,10 @@ public class AppConfig
     // Learning: opt-in logging of accepted/dismissed completions for few-shot learning.
     // Off by default — user must explicitly enable in settings.
     public bool LearningEnabled { get; set; } = false;
-    public bool LimitEnabled { get; set; } = true;
+
+    // Internal flag set when migrating from the old LearningEnabled-as-proxy model.
+    // When true, the app shows a one-time notification explaining license keys.
+    [JsonIgnore] internal bool LegacyTierMigrated { get; set; }
     public bool LearningV2Enabled { get; set; } = true;
     public bool LearningContextV2Enabled { get; set; } = true;
     public bool LearningRerankerEnabled { get; set; } = true;
@@ -220,6 +225,7 @@ public class AppConfig
                 config.AnthropicApiKey = ApiKeyEncryption.Decrypt(config.AnthropicApiKeyEncrypted);
                 config.OpenAiApiKey = ApiKeyEncryption.Decrypt(config.OpenAiApiKeyEncrypted);
                 config.OpenRouterApiKey = ApiKeyEncryption.Decrypt(config.OpenRouterApiKeyEncrypted);
+                config.LicenseKey = ApiKeyEncryption.Decrypt(config.LicenseKeyEncrypted);
 
                 // Migrate legacy plaintext keys from old config format.
                 // Old configs stored keys as "GeminiApiKey" etc. directly in JSON.
@@ -227,6 +233,7 @@ public class AppConfig
                 // detect them by checking if the raw JSON contains the old field names
                 // while the encrypted fields are empty.
                 MigrateLegacyKeys(json, config);
+                MigrateLegacyTierFlags(json, config);
 
                 config.Validate();
                 return config;
@@ -348,6 +355,31 @@ public class AppConfig
         }
     }
 
+    /// <summary>
+    /// If the old config had LearningEnabled=true without a license key,
+    /// reset to free tier and flag for a one-time notification.
+    /// </summary>
+    private static void MigrateLegacyTierFlags(string json, AppConfig config)
+    {
+        if (!string.IsNullOrEmpty(config.LicenseKey))
+            return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("LearningEnabled", out var le) &&
+                le.ValueKind == JsonValueKind.True)
+            {
+                config.LearningEnabled = false;
+                config.LegacyTierMigrated = true;
+                config.Save();
+            }
+        }
+        catch { }
+    }
+
     public void Save()
     {
         // Encrypt API keys before writing to disk
@@ -355,6 +387,7 @@ public class AppConfig
         AnthropicApiKeyEncrypted = ApiKeyEncryption.Encrypt(AnthropicApiKey);
         OpenAiApiKeyEncrypted = ApiKeyEncryption.Encrypt(OpenAiApiKey);
         OpenRouterApiKeyEncrypted = ApiKeyEncryption.Encrypt(OpenRouterApiKey);
+        LicenseKeyEncrypted = ApiKeyEncryption.Encrypt(LicenseKey);
 
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
