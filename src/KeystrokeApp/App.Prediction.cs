@@ -97,14 +97,18 @@ public partial class App
             return;
         }
 
+        CancellationTokenSource cts;
         CancellationToken ct;
         var requestId = NextPredictionRequestId();
         lock (_predictionCtsLock)
         {
             _predictionCts?.Cancel();
-            _predictionCts?.Dispose();
+            // Don't dispose the old CTS here — the background task that owns it
+            // may still reference its token (e.g. CreateLinkedTokenSource registers
+            // on it). The background task disposes its own CTS in its finally block.
             _predictionCts = new CancellationTokenSource();
-            ct = _predictionCts.Token;
+            cts = _predictionCts;
+            ct = cts.Token;
             _activePredictionRequestId = requestId;
             _lastPredictionPrefix = buffer;
         }
@@ -231,14 +235,18 @@ public partial class App
             {
                 lock (_predictionCtsLock)
                 {
-                    if (_predictionCts != null && _predictionCts.Token == ct)
+                    // Only clear the shared field if it still points to our CTS.
+                    // A newer prediction may have already replaced it.
+                    if (ReferenceEquals(_predictionCts, cts))
                     {
-                        _predictionCts.Dispose();
                         _predictionCts = null;
                         if (IsPredictionRequestCurrent(requestId))
                             Interlocked.CompareExchange(ref _activePredictionRequestId, 0, requestId);
                     }
                 }
+
+                // Always dispose our own CTS — we are the sole owner.
+                cts.Dispose();
 
                 if (IsPredictionRequestCurrent(requestId))
                 {
@@ -323,7 +331,8 @@ public partial class App
         lock (_predictionCtsLock)
         {
             _predictionCts?.Cancel();
-            _predictionCts?.Dispose();
+            // Don't dispose here — the background task owns its CTS lifetime
+            // and will dispose it in its finally block.
             _predictionCts = null;
             Interlocked.Exchange(ref _activePredictionRequestId, 0);
         }

@@ -38,7 +38,7 @@
                 <Setter Property="Background" Value="#18263E"/>
                 <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
                 <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="CornerRadius" Value="999"/>
+                <Setter Property="CornerRadius" Value="3"/>
                 <Setter Property="Padding" Value="10,4"/>
                 <Setter Property="Margin" Value="0,0,8,8"/>
             </Style>
@@ -218,145 +218,37 @@
                           ClipToBounds="True"
                           Padding="0,0,6,0">
                 <StackPanel>
-            <Border Style="{StaticResource CardStyle}" Padding="24" Margin="0,0,0,18">
-                <Grid x:Name="HeroHeaderGrid">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="0"/>
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="460"/>
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel x:Name="HeroSummaryPanel" Grid.Row="0" Grid.Column="0" Grid.RowSpan="2" Margin="0,0,24,0">
-                        <TextBlock x:Name="HeroTitleText" Text="Keystroke is tuned for balanced suggestions" Foreground="{StaticResource TextPrimary}" FontSize="28" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                        <TextBlock x:Name="HeroSubtitleText" Text="Fast enough for flow, grounded enough to stay out of your way." Foreground="{StaticResource TextSecondary}" FontSize="14" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                        <WrapPanel Margin="0,18,0,18">
-                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroEngineStatusText" Text="Connected" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroLearningStatusText" Text="Learning off" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroContextStatusText" Text="Context on" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroAppControlStatusText" Text="App control: open" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroThemeStatusText" Text="Theme: Midnight" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                        </WrapPanel>
-                        <WrapPanel>
-                            <Button x:Name="PresetMinimalBtn" Content="Minimal" Style="{StaticResource PresetButton}" Margin="0,0,10,0" Click="PresetMinimal_Click"/>
-                            <Button x:Name="PresetBalancedBtn" Content="Balanced" Style="{StaticResource PresetButton}" Margin="0,0,10,0" Click="PresetBalanced_Click"/>
-                            <Button x:Name="PresetMaxBtn" Content="Maximum" Style="{StaticResource PresetButton}" Click="PresetMaximum_Click"/>
-                        </WrapPanel>
-                    </StackPanel>
-
-                    <Border x:Name="PreviewBorder" Grid.Row="0" Grid.Column="1" Grid.RowSpan="2" Background="{StaticResource BgPreview}" BorderBrush="{StaticResource BorderStrong}" BorderThickness="1" CornerRadius="4" Padding="18">
-                        <StackPanel x:Name="HeroPreviewWorkspace">
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <Ellipse x:Name="PreviewAccentDot" Width="10" Height="10" Fill="{StaticResource Accent}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Live Preview" Foreground="{StaticResource TextSecondary}" FontSize="12" FontWeight="SemiBold" Margin="8,0,0,0"/>
-                                </StackPanel>
-                                <TextBlock Text="See how Keystroke waits, then responds, without having to imagine the timing from raw numbers alone." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-
-                            <Border Background="#132238" CornerRadius="4" Padding="14" BorderBrush="#263B5B" BorderThickness="1" Margin="0,14,0,0">
-                                <StackPanel>
-                                    <TextBlock Text="Typed input" Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold"/>
-                                    <TextBlock x:Name="PreviewInputText" Text="Can you send the latest draft when you have a minute" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" FontSize="13" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Grid x:Name="PreviewCardsGrid" Margin="0,14,0,0">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="0"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <Border x:Name="PreviewTimingCard" Grid.Row="0" Grid.Column="0" Background="#101D31" CornerRadius="4" Padding="14" BorderBrush="#223754" BorderThickness="1" Margin="0,0,10,0">
-                                    <StackPanel>
-                                        <TextBlock Text="Response Timing" Foreground="{StaticResource TextPrimary}" FontSize="13" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="PreviewDebounceStatusText" Text="Suggestions appear after you pause. Drag a timing slider to see how quickly the bars reach the trigger point." Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                        <TextBlock x:Name="PreviewDebounceDetailText" Text="The mid-thought timer reacts faster, while the punctuation timer waits a bit longer for a fuller stop." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
-
-                                        <Grid Margin="0,14,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="130"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="After punctuation" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                            <ProgressBar x:Name="PreviewDebounceProgressBar" Grid.Column="1" Minimum="0" Maximum="100" Height="8" VerticalAlignment="Center" Value="0"/>
-                                            <TextBlock x:Name="PreviewDebounceProgressText" Grid.Column="2" Text="300ms" Foreground="{StaticResource Accent}" FontSize="11" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
-                                        </Grid>
-
-                                        <Grid Margin="0,12,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="130"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="While typing" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                            <ProgressBar x:Name="PreviewFastDebounceProgressBar" Grid.Column="1" Minimum="0" Maximum="100" Height="8" VerticalAlignment="Center" Value="0"/>
-                                            <TextBlock x:Name="PreviewFastDebounceProgressText" Grid.Column="2" Text="100ms" Foreground="{StaticResource Accent}" FontSize="11" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border x:Name="PreviewCompletionCard" Grid.Row="0" Grid.Column="1" Background="#101D31" CornerRadius="4" Padding="14" BorderBrush="#223754" BorderThickness="1" Margin="10,0,0,0">
-                                    <StackPanel>
-                                        <TextBlock Text="Expected Completion" Foreground="{StaticResource TextPrimary}" FontSize="13" FontWeight="SemiBold"/>
-                                        <TextBlock Text="This sample grows and shrinks with your current length setting so you can judge how much text Keystroke is likely to finish." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                        <Border x:Name="PreviewSuggestionBubble" Margin="0,14,0,0" Background="#1C3150" CornerRadius="4" Padding="14" BorderBrush="#3B6293" BorderThickness="1">
-                                            <StackPanel>
-                                                <TextBlock x:Name="PreviewSuggestionText" Text=", I can tighten it up before we send it." Foreground="{StaticResource TextPrimary}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                                <WrapPanel Margin="0,10,0,0">
-                                                    <Border Style="{StaticResource PillStyle}">
-                                                        <TextBlock x:Name="PreviewLengthBadgeText" Text="Extended range" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
-                                                    </Border>
-                                                    <Border Style="{StaticResource PillStyle}">
-                                                        <TextBlock x:Name="PreviewWordCountText" Text="12 words" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
-                                                    </Border>
-                                                    <Border Style="{StaticResource PillStyle}">
-                                                        <TextBlock x:Name="PreviewCharCountText" Text="64 chars" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
-                                                    </Border>
-                                                </WrapPanel>
-                                                <TextBlock x:Name="PreviewMetaText" Text="Extended | 3 suggestions | Balanced creativity" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0"/>
-                                                <TextBlock x:Name="PreviewLengthDetailText" Text="Expected completion size appears here." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-            </Border>
-
                 <Grid x:Name="MainTabControl" ClipToBounds="True">
                 <StackPanel x:Name="OverviewSection" Visibility="Visible">
                         <TextBlock Text="Overview" Style="{StaticResource SectionTitleStyle}"/>
                         <TextBlock Text="Start here for the simplest read on your current setup." Style="{StaticResource SectionIntroStyle}"/>
 
-                        <Grid Margin="0,20,0,0">
+                        <Border Style="{StaticResource CardStyle}" Margin="0,20,0,18">
+                            <StackPanel>
+                                <TextBlock x:Name="HeroTitleText" Text="Keystroke is tuned for balanced suggestions" Foreground="{StaticResource TextPrimary}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="HeroSubtitleText" Text="Paced for flow, with 1 option ready when you pause." Foreground="{StaticResource TextSecondary}" FontSize="13" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                <WrapPanel Margin="0,14,0,0">
+                                    <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroEngineStatusText" Text="Connected" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                    <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroLearningStatusText" Text="Learning off" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                    <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroContextStatusText" Text="Context on" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                    <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroAppControlStatusText" Text="App control: open" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                    <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="HeroThemeStatusText" Text="Theme: Midnight" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,14,0,0">
+                                    <Button x:Name="PresetMinimalBtn" Content="Minimal" Style="{StaticResource PresetButton}" Margin="0,0,10,0" Click="PresetMinimal_Click"/>
+                                    <Button x:Name="PresetBalancedBtn" Content="Balanced" Style="{StaticResource PresetButton}" Margin="0,0,10,0" Click="PresetBalanced_Click"/>
+                                    <Button x:Name="PresetMaxBtn" Content="Maximum" Style="{StaticResource PresetButton}" Click="PresetMaximum_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="330"/>
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Margin="0,0,18,0">
-                                <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
-                                    <StackPanel>
-                                        <TextBlock Text="How Keystroke feels" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="OverviewFeelText" Text="Balanced for fast, grounded suggestions." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                                        <WrapPanel Margin="0,16,0,0">
-                                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="OverviewLengthSummaryText" Text="Extended completions" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="OverviewSpeedSummaryText" Text="300ms after words" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                                            <Border Style="{StaticResource PillStyle}"><TextBlock x:Name="OverviewSuggestionSummaryText" Text="3 suggestions shown" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
-                                        </WrapPanel>
-                                    </StackPanel>
-                                </Border>
-
                                 <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
                                     <StackPanel>
                                         <TextBlock Text="Current status" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
@@ -382,7 +274,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="1">
-                                <Border Style="{StaticResource PrivacyCardStyle}" Margin="0,0,0,18">
+                                <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
                                     <StackPanel>
                                         <TextBlock Text="Privacy at a glance" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
                                         <TextBlock x:Name="OverviewPrivacyDetailText" Text="Screen reading is on. Learning is off." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
@@ -441,7 +333,58 @@
                         <TextBlock Text="Suggestions" Style="{StaticResource SectionTitleStyle}"/>
                         <TextBlock Text="Tune when suggestions appear, how long they are, and how adventurous they feel." Style="{StaticResource SectionIntroStyle}"/>
 
-                        <Border Style="{StaticResource CardStyle}" Margin="0,20,0,18">
+                        <Border x:Name="PreviewBorder" Background="{StaticResource BgPreview}" BorderBrush="{StaticResource BorderStrong}" BorderThickness="1" CornerRadius="4" Padding="18" Margin="0,20,0,18">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Margin="0,0,14,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <Ellipse x:Name="PreviewAccentDot" Width="10" Height="10" Fill="{StaticResource Accent}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Live Preview" Foreground="{StaticResource TextSecondary}" FontSize="12" FontWeight="SemiBold" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <Border x:Name="PreviewSuggestionBubble" Background="#101825" CornerRadius="{StaticResource RadiusCard}" Padding="16,12" BorderBrush="#4A5B7390" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="PreviewSuggestionText" Text=", and I'll send the cleaned-up draft over later this afternoon." FontFamily="Cascadia Code, Consolas" FontSize="14" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Tab accept &#x00b7; Ctrl+&#x2192; word &#x00b7; Esc dismiss" FontFamily="Segoe UI" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock x:Name="PreviewMetaText" Text="Standard (8-15 words) | 1 suggestion | Balanced creativity" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0"/>
+                                    <TextBlock x:Name="PreviewLengthDetailText" Text="Expected completion size appears here." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                                    <TextBlock Text="Response Timing" Foreground="{StaticResource TextPrimary}" FontSize="13" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="PreviewDebounceStatusText" Text="Suggestions appear after you pause." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
+
+                                    <Grid Margin="0,14,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="After punctuation" Foreground="{StaticResource TextSecondary}" FontSize="11" VerticalAlignment="Center"/>
+                                        <ProgressBar x:Name="PreviewDebounceProgressBar" Grid.Column="1" Minimum="0" Maximum="100" Height="8" VerticalAlignment="Center" Value="0"/>
+                                        <TextBlock x:Name="PreviewDebounceProgressText" Grid.Column="2" Text="300ms" Foreground="{StaticResource Accent}" FontSize="11" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="While typing" Foreground="{StaticResource TextSecondary}" FontSize="11" VerticalAlignment="Center"/>
+                                        <ProgressBar x:Name="PreviewFastDebounceProgressBar" Grid.Column="1" Minimum="0" Maximum="100" Height="8" VerticalAlignment="Center" Value="0"/>
+                                        <TextBlock x:Name="PreviewFastDebounceProgressText" Grid.Column="2" Text="100ms" Foreground="{StaticResource Accent}" FontSize="11" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
                             <StackPanel>
                                 <TextBlock Text="Suggestion length" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
                                 <TextBlock Text="Choose how much Keystroke should finish for you in one go." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"/>
@@ -1014,14 +957,16 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource SoftCardStyle}">
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
                             <StackPanel>
-                                <TextBlock Text="Preview notes" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
-                                <TextBlock Text="The preview card at the top updates live so you can see how the active theme, suggestion length, and pace feel together."
-                                           Foreground="{StaticResource TextMuted}"
-                                           FontSize="12"
-                                           Margin="0,8,0,0"
-                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="Theme preview" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="See how the selected theme looks on a suggestion bubble." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"/>
+                                <Border x:Name="AppearancePreviewBubble" Margin="0,14,0,0" Background="#101825" CornerRadius="{StaticResource RadiusCard}" Padding="16,12" BorderBrush="#4A5B7390" BorderThickness="2" HorizontalAlignment="Left" MaxWidth="460">
+                                    <StackPanel>
+                                        <TextBlock Text=", and I'll send the cleaned-up draft over later this afternoon." FontFamily="Cascadia Code, Consolas" FontSize="14" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock Text="Tab accept &#x00b7; Ctrl+&#x2192; word &#x00b7; Esc dismiss" FontFamily="Segoe UI" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
                 </StackPanel>

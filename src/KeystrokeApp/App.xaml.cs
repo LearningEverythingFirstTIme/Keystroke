@@ -32,8 +32,9 @@ public partial class App : Application
     // ── App state ─────────────────────────────────────────────────────────────
     // Thread-safety notes:
     //   UI-only:        _config, _typingBuffer, _debounceTimer, _fastDebounceTimer,
-    //                   _predictionCache, _suggestionPanel, _debugWindow, _settingsWindow,
+    //                   _suggestionPanel, _debugWindow, _settingsWindow,
     //                   _trayIcon, tray menu items
+    //   Self-locking:   _predictionCache (internal lock; safe from any thread)
     //   Interlocked:    _sessionAcceptCount, _suggestionShownAtTicks, _cycleDepth,
     //                   _activePredictionRequestId, _predictionRequestCounter
     //   volatile:       _isEnabled (written on UI/Input, read on Background/Timer)

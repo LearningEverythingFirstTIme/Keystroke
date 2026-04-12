@@ -97,8 +97,9 @@ public sealed class UsageCounters
                 DailyAcceptedDateLocal = _todayProvider()
             };
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[UsageCounters] Load failed: {ex.Message}");
             return new UsageCountersState
             {
                 DailyAcceptedDateLocal = _todayProvider()
@@ -114,6 +115,7 @@ public sealed class UsageCounters
 
         _state.DailyAcceptedDateLocal = today;
         _state.DailyAcceptedSuggestions = 0;
+        _countedSuggestionIds.Clear(); // Old IDs are irrelevant for the new day
         SaveStateCore();
     }
 
@@ -128,11 +130,19 @@ public sealed class UsageCounters
 
     private void SaveStateCore()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_dataPath)!);
-        var json = JsonSerializer.Serialize(_state, new JsonSerializerOptions { WriteIndented = true });
-        var tempPath = _dataPath + ".tmp";
-        File.WriteAllText(tempPath, json);
-        File.Move(tempPath, _dataPath, overwrite: true);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_dataPath)!);
+            var json = JsonSerializer.Serialize(_state, new JsonSerializerOptions { WriteIndented = true });
+            var tempPath = _dataPath + ".tmp";
+            File.WriteAllText(tempPath, json);
+            File.Move(tempPath, _dataPath, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            // Usage counter persistence must never crash the app.
+            System.Diagnostics.Debug.WriteLine($"[UsageCounters] Save failed: {ex.Message}");
+        }
     }
 }
 

@@ -57,16 +57,22 @@ public sealed class LearningEventService
     {
         try
         {
-            if (!File.Exists(_dataPath))
-                return;
+            // Hold WriteLock for the entire read-modify-write so that
+            // concurrent Append() calls can't insert lines between the
+            // read and the atomic rename (which would silently lose them).
+            lock (WriteLock)
+            {
+                if (!File.Exists(_dataPath))
+                    return;
 
-            var lines = File.ReadAllLines(_dataPath);
-            if (lines.Length <= maxLines)
-                return;
+                var lines = File.ReadAllLines(_dataPath);
+                if (lines.Length <= maxLines)
+                    return;
 
-            var tempPath = _dataPath + ".tmp";
-            File.WriteAllLines(tempPath, lines[^maxLines..]);
-            File.Move(tempPath, _dataPath, overwrite: true);
+                var tempPath = _dataPath + ".tmp";
+                File.WriteAllLines(tempPath, lines[^maxLines..]);
+                File.Move(tempPath, _dataPath, overwrite: true);
+            }
         }
         catch (Exception ex)
         {

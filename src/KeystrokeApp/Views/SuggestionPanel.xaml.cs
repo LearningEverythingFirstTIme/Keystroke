@@ -705,6 +705,23 @@ public partial class SuggestionPanel : Window
 
     #endregion
 
+    protected override void OnClosed(EventArgs e)
+    {
+        StopLoadingAnimation();
+
+        // Clear all running animations so their Completed handlers don't fire on a dead window
+        BeginAnimation(OpacityProperty, null);
+        ScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
+
+        if (_isDragging)
+            SuggestionBorder.ReleaseMouseCapture();
+
+        base.OnClosed(e);
+    }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);

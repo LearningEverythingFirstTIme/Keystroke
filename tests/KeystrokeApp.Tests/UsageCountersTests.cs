@@ -93,6 +93,30 @@ public class UsageCountersTests : IDisposable
         Assert.False(reloaded.LearningNudgeShown);
     }
 
+    [Fact]
+    public void DailyRollover_ClearsDeduplicationSet()
+    {
+        var today = new DateOnly(2026, 4, 12);
+        var currentDay = today;
+        var counters = CreateCounters(() => currentDay);
+
+        // Accept a suggestion on day 1
+        var first = counters.RecordAcceptedSuggestion("sugg-1");
+        Assert.True(first.Counted);
+
+        // Same ID is deduplicated within the same day
+        var dupe = counters.RecordAcceptedSuggestion("sugg-1");
+        Assert.False(dupe.Counted);
+
+        // Roll to next day — dedup set should clear
+        currentDay = today.AddDays(1);
+
+        // Same ID can now be counted on the new day
+        var nextDay = counters.RecordAcceptedSuggestion("sugg-1");
+        Assert.True(nextDay.Counted);
+        Assert.Equal(1, nextDay.Snapshot.DailyAcceptedSuggestions);
+    }
+
     private UsageCounters CreateCounters(DateOnly day)
         => CreateCounters(() => day);
 

@@ -59,9 +59,10 @@ public partial class App
             }
         }
 
-        if (_debugWindow != null)
+        var debugWin = _debugWindow;
+        if (debugWin != null)
         {
-            Dispatcher.BeginInvoke(() => _debugWindow?.Log($"Char: '{c}' -> Buffer: \"{currentBuffer}\""));
+            Dispatcher.BeginInvoke(() => debugWin.Log($"Char: '{c}' -> Buffer: \"{currentBuffer}\""));
         }
     }
 
@@ -86,6 +87,11 @@ public partial class App
             return;
         }
 
+        // Cache panel reference so the same instance is used for the check
+        // and all subsequent access within this callback. Prevents a race
+        // where the field is nulled between HasSuggestion and a follow-up call.
+        var panel = _suggestionPanel;
+
         switch (key)
         {
             case InputListenerService.SpecialKey.Backspace:
@@ -100,9 +106,9 @@ public partial class App
                     var oldBuffer = _typingBuffer.CurrentText;
                     var context = CreateContextSnapshot(oldBuffer, activeProcessName, activeWindowTitle);
 
-                    if (_suggestionPanel?.HasSuggestion == true)
+                    if (panel?.HasSuggestion == true)
                     {
-                        var fullSuggestion = _suggestionPanel.GetFullSuggestion();
+                        var fullSuggestion = panel.GetFullSuggestion();
                         var dismissed = SuggestionAcceptance.GetRemainingCompletion(oldBuffer, fullSuggestion);
                         if (!string.IsNullOrEmpty(dismissed))
                         {
@@ -133,7 +139,7 @@ public partial class App
                     }
 
                     _typingBuffer.Clear();
-                    _suggestionPanel?.HideSuggestion();
+                    panel?.HideSuggestion();
                     ClearActiveSuggestion();
                     CancelPendingPrediction();
                     LogToDebug($"{key} -> Buffer cleared (was: \"{oldBuffer}\")");
@@ -165,7 +171,7 @@ public partial class App
                     }
 
                     _typingBuffer.Clear();
-                    _suggestionPanel?.HideSuggestion();
+                    panel?.HideSuggestion();
                     ClearActiveSuggestion();
                     CancelPendingPrediction();
                     LogToDebug($"{key} -> Buffer cleared (cursor moved, was: \"{oldBuffer}\")");
@@ -173,20 +179,20 @@ public partial class App
                 break;
 
             case InputListenerService.SpecialKey.CtrlDownArrow:
-                if (_suggestionPanel?.HasSuggestion == true)
+                if (panel?.HasSuggestion == true)
                 {
                     _suggestionLifecycle.IncrementCycleDepth();
                     var downSnapshot = SnapshotActiveSuggestion();
                     Dispatcher.BeginInvoke(() =>
                     {
-                        _suggestionPanel?.NextSuggestion();
-                        if (_suggestionPanel?.HasSuggestion == true && downSnapshot.Context != null)
+                        panel.NextSuggestion();
+                        if (panel.HasSuggestion && downSnapshot.Context != null)
                         {
                             RegisterVisibleSuggestion(
                                 downSnapshot.RequestId,
                                 CreateContextSnapshot(_typingBuffer.CurrentText, downSnapshot.Context.ProcessName, downSnapshot.Context.WindowTitle),
                                 _typingBuffer.CurrentText,
-                                _suggestionPanel.CurrentCompletion);
+                                panel.CurrentCompletion);
                         }
                     });
                     args.ShouldSwallow = true;
@@ -195,20 +201,20 @@ public partial class App
                 break;
 
             case InputListenerService.SpecialKey.CtrlUpArrow:
-                if (_suggestionPanel?.HasSuggestion == true)
+                if (panel?.HasSuggestion == true)
                 {
                     _suggestionLifecycle.IncrementCycleDepth();
                     var upSnapshot = SnapshotActiveSuggestion();
                     Dispatcher.BeginInvoke(() =>
                     {
-                        _suggestionPanel?.PreviousSuggestion();
-                        if (_suggestionPanel?.HasSuggestion == true && upSnapshot.Context != null)
+                        panel.PreviousSuggestion();
+                        if (panel.HasSuggestion && upSnapshot.Context != null)
                         {
                             RegisterVisibleSuggestion(
                                 upSnapshot.RequestId,
                                 CreateContextSnapshot(_typingBuffer.CurrentText, upSnapshot.Context.ProcessName, upSnapshot.Context.WindowTitle),
                                 _typingBuffer.CurrentText,
-                                _suggestionPanel.CurrentCompletion);
+                                panel.CurrentCompletion);
                         }
                     });
                     args.ShouldSwallow = true;
@@ -217,7 +223,7 @@ public partial class App
                 break;
 
             case InputListenerService.SpecialKey.ShiftTab:
-                if (_suggestionPanel?.HasSuggestion == true)
+                if (panel?.HasSuggestion == true)
                 {
                     _ = AcceptSuggestionAsync(AcceptanceMode.NextWord, "Shift+Tab", "word_accept");
                     args.ShouldSwallow = true;
@@ -225,7 +231,7 @@ public partial class App
                 break;
 
             case InputListenerService.SpecialKey.CtrlRight:
-                if (_suggestionPanel?.HasSuggestion == true)
+                if (panel?.HasSuggestion == true)
                 {
                     _ = AcceptSuggestionAsync(AcceptanceMode.NextWord, "Ctrl+Right", "word_accept");
                     args.ShouldSwallow = true;
@@ -233,7 +239,7 @@ public partial class App
                 break;
 
             case InputListenerService.SpecialKey.Tab:
-                if (_suggestionPanel?.HasSuggestion == true)
+                if (panel?.HasSuggestion == true)
                 {
                     _ = AcceptSuggestionAsync(AcceptanceMode.Full, "Tab", "full_accept");
                     args.ShouldSwallow = true;

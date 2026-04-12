@@ -79,17 +79,23 @@ public class CompletionFeedbackService
     {
         try
         {
-            if (!File.Exists(_dataPath))
-                return;
+            // Hold WriteLock for the entire read-modify-write so that
+            // concurrent WriteEntry/Append calls can't insert lines
+            // between the read and the atomic rename.
+            lock (WriteLock)
+            {
+                if (!File.Exists(_dataPath))
+                    return;
 
-            var lines = File.ReadAllLines(_dataPath);
-            if (lines.Length <= maxLines)
-                return;
+                var lines = File.ReadAllLines(_dataPath);
+                if (lines.Length <= maxLines)
+                    return;
 
-            var trimmed  = lines[^maxLines..];
-            var tempPath = _dataPath + ".tmp";
-            File.WriteAllLines(tempPath, trimmed);
-            File.Move(tempPath, _dataPath, overwrite: true);
+                var trimmed  = lines[^maxLines..];
+                var tempPath = _dataPath + ".tmp";
+                File.WriteAllLines(tempPath, trimmed);
+                File.Move(tempPath, _dataPath, overwrite: true);
+            }
         }
         catch (Exception) { /* Pruning failure is non-fatal */ }
     }

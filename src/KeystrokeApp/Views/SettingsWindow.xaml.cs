@@ -23,8 +23,6 @@ public partial class SettingsWindow : Window
     private const double MinimumWindowHeight = 780;
     private const double MaxWorkAreaWidthRatio = 0.94;
     private const double MaxWorkAreaHeightRatio = 0.92;
-    private const double HeroWideModeMinWidth = 1180;
-    private const double PreviewCardsTwoColumnMinWidth = 900;
 
     private sealed class AppChoice
     {
@@ -123,7 +121,6 @@ public partial class SettingsWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyWindowSizing();
-        Dispatcher.BeginInvoke(UpdateResponsiveLayout, DispatcherPriority.Loaded);
         RestartPreviewTimingSimulation();
     }
 
@@ -140,7 +137,9 @@ public partial class SettingsWindow : Window
     }
 
     private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
-        => UpdateResponsiveLayout();
+    {
+        // Layout is now static — no responsive hero grid to adjust.
+    }
 
     private void ApplyWindowSizing()
     {
@@ -165,6 +164,12 @@ public partial class SettingsWindow : Window
         AppearanceSection.Visibility = section == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         AdvancedSection.Visibility = section == "Advanced" ? Visibility.Visible : Visibility.Collapsed;
 
+        // Live Preview lives inside the Suggestions section now — manage the timer
+        if (section == "Suggestions")
+            RestartPreviewTimingSimulation();
+        else
+            _previewTimingTimer?.Stop();
+
         if (section == "AppControl")
             RefreshAppPickerOptions();
 
@@ -172,81 +177,14 @@ public partial class SettingsWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             MainSectionScrollViewer?.ScrollToTop();
-            UpdateResponsiveLayout();
         }, DispatcherPriority.Loaded);
     }
 
     private void UpdateResponsiveLayout()
     {
-        if (HeroHeaderGrid == null || HeroSummaryPanel == null || PreviewBorder == null || PreviewCardsGrid == null)
-            return;
-
-        bool compactHero = HeroHeaderGrid.ActualWidth > 0 && HeroHeaderGrid.ActualWidth < HeroWideModeMinWidth;
-        bool stackPreviewCards = compactHero || (PreviewBorder.ActualWidth > 0 && PreviewBorder.ActualWidth < PreviewCardsTwoColumnMinWidth);
-
-        if (compactHero)
-        {
-            HeroHeaderGrid.ColumnDefinitions[1].Width = new GridLength(0);
-            HeroHeaderGrid.RowDefinitions[1].Height = GridLength.Auto;
-
-            Grid.SetColumn(HeroSummaryPanel, 0);
-            Grid.SetRow(HeroSummaryPanel, 0);
-            Grid.SetColumnSpan(HeroSummaryPanel, 2);
-            Grid.SetRowSpan(HeroSummaryPanel, 1);
-            HeroSummaryPanel.Margin = new Thickness(0, 0, 0, 18);
-
-            Grid.SetColumn(PreviewBorder, 0);
-            Grid.SetRow(PreviewBorder, 1);
-            Grid.SetColumnSpan(PreviewBorder, 2);
-            Grid.SetRowSpan(PreviewBorder, 1);
-        }
-        else
-        {
-            HeroHeaderGrid.ColumnDefinitions[1].Width = new GridLength(500);
-            HeroHeaderGrid.RowDefinitions[1].Height = new GridLength(0);
-
-            Grid.SetColumn(HeroSummaryPanel, 0);
-            Grid.SetRow(HeroSummaryPanel, 0);
-            Grid.SetColumnSpan(HeroSummaryPanel, 1);
-            Grid.SetRowSpan(HeroSummaryPanel, 2);
-            HeroSummaryPanel.Margin = new Thickness(0, 0, 24, 0);
-
-            Grid.SetColumn(PreviewBorder, 1);
-            Grid.SetRow(PreviewBorder, 0);
-            Grid.SetColumnSpan(PreviewBorder, 1);
-            Grid.SetRowSpan(PreviewBorder, 2);
-        }
-
-        if (stackPreviewCards)
-        {
-            PreviewCardsGrid.ColumnDefinitions[1].Width = new GridLength(0);
-            PreviewCardsGrid.RowDefinitions[1].Height = GridLength.Auto;
-
-            Grid.SetColumn(PreviewTimingCard, 0);
-            Grid.SetRow(PreviewTimingCard, 0);
-            Grid.SetColumnSpan(PreviewTimingCard, 2);
-            PreviewTimingCard.Margin = new Thickness(0, 0, 0, 12);
-
-            Grid.SetColumn(PreviewCompletionCard, 0);
-            Grid.SetRow(PreviewCompletionCard, 1);
-            Grid.SetColumnSpan(PreviewCompletionCard, 2);
-            PreviewCompletionCard.Margin = new Thickness(0);
-        }
-        else
-        {
-            PreviewCardsGrid.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
-            PreviewCardsGrid.RowDefinitions[1].Height = new GridLength(0);
-
-            Grid.SetColumn(PreviewTimingCard, 0);
-            Grid.SetRow(PreviewTimingCard, 0);
-            Grid.SetColumnSpan(PreviewTimingCard, 1);
-            PreviewTimingCard.Margin = new Thickness(0, 0, 10, 0);
-
-            Grid.SetColumn(PreviewCompletionCard, 1);
-            Grid.SetRow(PreviewCompletionCard, 0);
-            Grid.SetColumnSpan(PreviewCompletionCard, 1);
-            PreviewCompletionCard.Margin = new Thickness(10, 0, 0, 0);
-        }
+        // No longer needed — the hero header was removed and the preview
+        // is now a simple two-column grid inside the Suggestions section.
+        // Kept as a no-op in case callers still reference it.
     }
 
     private void UpdateExperienceSummary()
@@ -277,11 +215,6 @@ public partial class SettingsWindow : Window
         HeroEngineStatusText.Text = engineName;
         HeroContextStatusText.Text = contextOn ? "Context on" : "Context light";
         HeroThemeStatusText.Text = $"Theme: {ThemeDefinitions.Get(_config.ThemeId).DisplayName}";
-
-        OverviewFeelText.Text = $"Configured for {lengthLabel} that feel {speedLabel}.";
-        OverviewLengthSummaryText.Text = char.ToUpper(lengthLabel[0]) + lengthLabel[1..];
-        OverviewSpeedSummaryText.Text = $"{(int)DebounceSlider.Value}ms after words";
-        OverviewSuggestionSummaryText.Text = $"{(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} shown";
 
         OverviewEngineStatusText.Text = $"{engineName} is active.";
 
@@ -484,32 +417,31 @@ public partial class SettingsWindow : Window
         var debounceDelta = Math.Abs(debounceMs - fastDebounceMs);
 
         PreviewSuggestionText.Text = suggestionText;
-        PreviewLengthBadgeText.Text = targetRange.Label;
-        PreviewWordCountText.Text = $"{wordCount} word{(wordCount == 1 ? "" : "s")}";
-        PreviewCharCountText.Text = $"{charCount} char{(charCount == 1 ? "" : "s")}";
-        PreviewMetaText.Text = $"{(LengthCombo.SelectedItem as ComboBoxItem)?.Content} | {(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} | {creativityLabel}";
+        PreviewMetaText.Text = $"{targetRange.Label} ({targetRange.RangeText}) | {(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} | {creativityLabel}";
         PreviewLengthDetailText.Text = $"This preview is showing about {wordCount} words ({charCount} characters), which sits in the expected {targetRange.RangeText} range for this length setting.";
         PreviewDebounceStatusText.Text = fastDebounceMs < debounceMs
-            ? $"Mid-thought suggestions reach the trigger about {debounceDelta}ms sooner than sentence-end suggestions."
+            ? $"Mid-thought triggers {debounceDelta}ms sooner than punctuation."
             : fastDebounceMs > debounceMs
-                ? $"Sentence-end suggestions reach the trigger about {debounceDelta}ms sooner than mid-thought suggestions."
-                : "Both timing modes are currently set to trigger at the same speed.";
-        PreviewDebounceDetailText.Text = $"The preview bars loop continuously so you can feel the difference between a {debounceMs}ms punctuation pause and a {fastDebounceMs}ms in-line pause.";
+                ? $"Punctuation triggers {debounceDelta}ms sooner than mid-thought."
+                : "Both timers trigger at the same speed.";
 
         var theme = ThemeDefinitions.Get(_config.ThemeId);
         var accentBrush = new SolidColorBrush(theme.ShadowColor);
-        var bubbleBrush = new SolidColorBrush(Color.FromArgb(255,
-            (byte)Math.Min(255, theme.ShadowColor.R / 2 + 28),
-            (byte)Math.Min(255, theme.ShadowColor.G / 2 + 32),
-            (byte)Math.Min(255, theme.ShadowColor.B / 2 + 54)));
+        var borderBrush = new SolidColorBrush(theme.NormalBorder);
 
         PreviewAccentDot.Fill = accentBrush;
-        PreviewBorder.BorderBrush = new SolidColorBrush(theme.NormalBorder);
-        PreviewSuggestionBubble.BorderBrush = accentBrush;
-        PreviewSuggestionBubble.Background = bubbleBrush;
+        PreviewBorder.BorderBrush = borderBrush;
+        PreviewSuggestionBubble.BorderBrush = borderBrush;
         PreviewDebounceProgressBar.Foreground = accentBrush;
         PreviewFastDebounceProgressBar.Foreground = accentBrush;
-        UpdateResponsiveLayout();
+
+        // Update the Appearance section's standalone theme preview with a vivid border
+        if (AppearancePreviewBubble != null)
+        {
+            var vividBorder = Color.FromArgb(0xB0, theme.ShadowColor.R, theme.ShadowColor.G, theme.ShadowColor.B);
+            AppearancePreviewBubble.BorderBrush = new SolidColorBrush(vividBorder);
+        }
+
         RestartPreviewTimingSimulation();
     }
 
