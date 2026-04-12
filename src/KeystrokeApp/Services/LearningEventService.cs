@@ -17,7 +17,7 @@ public sealed class LearningEventService
         _dataPath = dataPath ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke",
-            "learning-events.v2.jsonl");
+            "tracking.jsonl");
         _preferences = preferences ?? new LearningContextPreferencesService();
     }
 

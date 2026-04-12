@@ -47,6 +47,7 @@ public partial class App : Application
     private readonly LearningContextPreferencesService _contextPreferencesService = new();
     private readonly LearningContextMaintenanceService _contextMaintenanceService;
     private CompletionFeedbackService        _acceptanceTracker;
+    private readonly UsageCounters _usageCounters = new();
     private RollingContextService    _rollingContext   = new(maxChars: 2000, timeoutMinutes: 5);
     private AcceptanceLearningService  _learningService;
     private readonly ContextFingerprintService _contextFingerprintService = new();
@@ -106,6 +107,8 @@ public partial class App : Application
     private string _lastAcceptanceStatus = "Ready";
     private bool _runtimeActivated;
     private bool _isSetupIncomplete;
+    private bool _sessionFreeLimitWarningShown;
+    private bool _sessionDailyLimitReachedShown;
     private string _setupIncompleteReason = "Finish onboarding to start completions.";
 
     private string _logPath = Path.Combine(
@@ -166,6 +169,7 @@ public partial class App : Application
         {
             // Load config
             _config = AppConfig.Load();
+            _usageCounters.GetSnapshot();
             Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
             _reliabilityTrace.Trace("startup", "config_loaded", "Loaded app configuration.", new Dictionary<string, string>
             {
@@ -460,7 +464,7 @@ public partial class App : Application
         if (_engineMenuItem != null)
             _engineMenuItem.Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
         if (_sessionMenuItem != null)
-            _sessionMenuItem.Header = $"Accepted: {_sessionAcceptCount} this session";
+            _sessionMenuItem.Header = BuildSessionMenuHeader();
         if (_profileMenuItem != null)
             _profileMenuItem.Header = BuildProfileMenuHeader();
 
@@ -587,6 +591,7 @@ public partial class App : Application
                 _styleProfileService,
                 _vocabularyProfileService,
                 _learningScoreService,
+                _usageCounters,
                 _contextPreferencesService,
                 _contextMaintenanceService,
                 GetLastExternalWindowOrCurrent,
@@ -732,8 +737,16 @@ public partial class App : Application
     }
 
     private void RegisterVisibleSuggestion(long requestId, ContextSnapshot context, string prefix, string completion)
+        => RegisterVisibleSuggestion(requestId, context, prefix, completion, null);
+
+    private void RegisterVisibleSuggestion(
+        long requestId,
+        ContextSnapshot context,
+        string prefix,
+        string completion,
+        string? retainedSuggestionId)
     {
-        var transition = _suggestionLifecycle.ShowSuggestion(requestId, context, prefix, completion);
+        var transition = _suggestionLifecycle.ShowSuggestion(requestId, context, prefix, completion, retainedSuggestionId);
         if (!string.IsNullOrWhiteSpace(transition.ClearedSuggestionId))
             _learningCaptureCoordinator.ClearSuggestion(transition.ClearedSuggestionId);
         _learningCaptureCoordinator.OnSuggestionShown(
@@ -782,6 +795,112 @@ public partial class App : Application
             _config.LearningEnabled && _config.StyleProfileEnabled ? _vocabularyProfileService : null,
             _ocrService?.CachedText,
             rollingContext);
+    }
+
+    private bool IsFreeTierLimitActive()
+        => _config.LimitEnabled && !_config.LearningEnabled;
+
+    private bool IsPredictionBlockedByDailyLimit(string buffer)
+    {
+        var usage = _usageCounters.GetSnapshot();
+        if (!IsFreeTierLimitActive() || !usage.IsDailyLimitReached)
+            return false;
+
+        ShowDailyLimitReachedBalloonOnce();
+        TracePredictionSuppressed("Daily free limit reached", buffer, new Dictionary<string, string>
+        {
+            ["dailyAccepted"] = usage.DailyAcceptedSuggestions.ToString()
+        });
+        return true;
+    }
+
+    private void RecordAcceptedSuggestionUsage(string suggestionId)
+    {
+        var result = _usageCounters.RecordAcceptedSuggestion(suggestionId);
+        if (!result.Counted)
+            return;
+
+        Interlocked.Increment(ref _sessionAcceptCount);
+        MaybeShowFreeTierWarning(result.Snapshot);
+        MaybeShowDailyLimitReachedBalloon(result.Snapshot);
+        MaybeShowLearningNudge(result.Snapshot);
+        UpdateTraySessionInfo();
+        NotifySettingsWindowUsageChanged();
+    }
+
+    private void MaybeShowFreeTierWarning(UsageCountersSnapshot snapshot)
+    {
+        if (_sessionFreeLimitWarningShown || !IsFreeTierLimitActive())
+            return;
+
+        if (snapshot.DailyAcceptedSuggestions < 40 || snapshot.IsDailyLimitReached)
+            return;
+
+        _sessionFreeLimitWarningShown = true;
+        var remaining = snapshot.RemainingFreeSuggestions;
+        _trayIcon?.ShowBalloonTip(
+            "Free completions running low",
+            $"Heads up — only {remaining} free completions left today",
+            Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+    }
+
+    private void MaybeShowDailyLimitReachedBalloon(UsageCountersSnapshot snapshot)
+    {
+        if (!IsFreeTierLimitActive() || !snapshot.IsDailyLimitReached)
+            return;
+
+        ShowDailyLimitReachedBalloonOnce();
+    }
+
+    private void ShowDailyLimitReachedBalloonOnce()
+    {
+        if (_sessionDailyLimitReachedShown)
+            return;
+
+        _sessionDailyLimitReachedShown = true;
+        _trayIcon?.ShowBalloonTip(
+            "Free limit reached",
+            "Daily limit reached — completions reset at midnight / $20 once, no subscription",
+            Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+    }
+
+    private void MaybeShowLearningNudge(UsageCountersSnapshot snapshot)
+    {
+        if (_config.LearningEnabled || snapshot.TotalAcceptedSuggestions < 15)
+            return;
+
+        if (!_usageCounters.MarkLearningNudgeShown())
+            return;
+
+        _trayIcon?.ShowBalloonTip(
+            "Your AI profile is building",
+            "15 completions tracked — activate Personalized AI anytime for $20 once, no subscription",
+            Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+        NotifySettingsWindowUsageChanged();
+    }
+
+    private string BuildSessionMenuHeader()
+    {
+        var usage = _usageCounters.GetSnapshot();
+        return IsFreeTierLimitActive() && usage.IsDailyLimitReached
+            ? "⚠ Daily limit reached — go Pro"
+            : $"Accepted: {_sessionAcceptCount} this session ({usage.DailyAcceptedSuggestions}/{UsageCounters.DailyFreeLimit} today)";
+    }
+
+    private string BuildUsageTooltipSummary()
+    {
+        var usage = _usageCounters.GetSnapshot();
+        return IsFreeTierLimitActive() && usage.IsDailyLimitReached
+            ? "⚠ Daily limit reached — go Pro"
+            : $"{_sessionAcceptCount} this session ({usage.DailyAcceptedSuggestions}/{UsageCounters.DailyFreeLimit} today)";
+    }
+
+    private void NotifySettingsWindowUsageChanged()
+    {
+        if (_settingsWindow == null || !_settingsWindow.IsLoaded)
+            return;
+
+        Dispatcher.BeginInvoke(() => _settingsWindow?.RefreshUsageState());
     }
 
     private int GetSuggestionLatencyMs()

@@ -26,7 +26,7 @@ public sealed class LearningContextMaintenanceService
             "Keystroke");
 
         _legacyPath = legacyPath ?? Path.Combine(root, "completions.jsonl");
-        _eventPath = eventPath ?? Path.Combine(root, "learning-events.v2.jsonl");
+        _eventPath = eventPath ?? Path.Combine(root, "tracking.jsonl");
         _derivedArtifacts =
         [
             Path.Combine(root, "style-profile.json"),

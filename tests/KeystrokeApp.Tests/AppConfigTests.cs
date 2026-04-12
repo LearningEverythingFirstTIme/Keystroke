@@ -5,6 +5,14 @@ namespace KeystrokeApp.Tests;
 public class AppConfigTests
 {
     [Fact]
+    public void LimitEnabled_DefaultsTrue()
+    {
+        var config = new AppConfig();
+
+        Assert.True(config.LimitEnabled);
+    }
+
+    [Fact]
     public void NormalizeModelSelections_MigratesLegacyModelIds()
     {
         var config = new AppConfig

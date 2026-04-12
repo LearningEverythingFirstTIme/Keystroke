@@ -65,5 +65,7 @@ public class PromptPreviewBuilderTests
         Assert.Contains("<recently_written>", snapshot.UserPromptPreview);
         Assert.Contains("<complete_this>", snapshot.UserPromptPreview);
         Assert.Contains("Please send", snapshot.UserPromptPreview);
+        Assert.DoesNotContain("<user_style_hints>", snapshot.UserPromptPreview);
+        Assert.Equal("(learning is off)", snapshot.LearningHintsPreview);
     }
 }

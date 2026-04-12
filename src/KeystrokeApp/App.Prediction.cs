@@ -56,6 +56,9 @@ public partial class App
             return;
         }
 
+        if (IsPredictionBlockedByDailyLimit(buffer))
+            return;
+
         if (!TryGetEligibleActiveWindow(out var processName, out var windowTitle))
             return;
 

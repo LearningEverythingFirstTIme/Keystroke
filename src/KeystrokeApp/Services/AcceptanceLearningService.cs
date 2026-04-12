@@ -43,7 +43,7 @@ public class AcceptanceLearningService
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");
         _logPath = Path.Combine(appData, "learning.log");
-        _dataFilePath = Path.Combine(appData, "completions.jsonl");
+        _dataFilePath = Path.Combine(appData, "tracking.jsonl");
     }
 
     public List<FewShotExample> GetExamples(ContextSnapshot context, int count = 3)

@@ -88,7 +88,7 @@ public partial class App
 
         _sessionMenuItem = new MenuItem
         {
-            Header    = $"Accepted: {_sessionAcceptCount} this session",
+            Header    = BuildSessionMenuHeader(),
             IsEnabled = false
         };
 
@@ -185,9 +185,8 @@ public partial class App
         var status   = _isEnabled ? "Active" : "Paused";
         var engine   = _config.PredictionEngine;
         var model    = GetCurrentModelName();
-        var accepted = _sessionAcceptCount;
         var currentApp = GetCurrentAppStatus();
-        return $"Keystroke - {status}\n{engine} ({model})\n{accepted} accepted this session\nAI profile: {BuildProfileTooltipSummary()}\n{currentApp.Label}: {currentApp.Reason}\nLast accept: {_lastAcceptanceStatus}";
+        return $"Keystroke - {status}\n{engine} ({model})\n{BuildUsageTooltipSummary()}\nAI profile: {BuildProfileTooltipSummary()}\n{currentApp.Label}: {currentApp.Reason}\nLast accept: {_lastAcceptanceStatus}";
     }
 
     private string GetCurrentModelName() => _config.PredictionEngine.ToLower() switch
@@ -241,7 +240,12 @@ public partial class App
         {
             if (item is MenuItem mi && mi.Header is string s && s.StartsWith("Accepted:"))
             {
-                mi.Header = $"Accepted: {_sessionAcceptCount} this session";
+                mi.Header = BuildSessionMenuHeader();
+                break;
+            }
+            if (item is MenuItem cappedMi && cappedMi.Header is string capped && capped.StartsWith("⚠ Daily limit reached"))
+            {
+                cappedMi.Header = BuildSessionMenuHeader();
                 break;
             }
         }
@@ -287,6 +291,9 @@ public partial class App
 
         if (_trayIcon != null)
             _trayIcon.ToolTipText = BuildToolTip();
+
+        if (_sessionMenuItem != null)
+            _sessionMenuItem.Header = BuildSessionMenuHeader();
     }
 
     private CurrentAppStatus GetCurrentAppStatus()

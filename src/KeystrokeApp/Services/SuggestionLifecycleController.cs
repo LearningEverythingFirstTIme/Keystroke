@@ -93,14 +93,17 @@ public sealed class SuggestionLifecycleController
         long requestId,
         ContextSnapshot context,
         string prefix,
-        string completion)
+        string completion,
+        string? retainedSuggestionId = null)
     {
         lock (_sync)
         {
             var clearedSuggestionId = string.IsNullOrWhiteSpace(_state.SuggestionId)
                 ? null
                 : _state.SuggestionId;
-            var suggestionId = $"sugg-{Interlocked.Increment(ref _suggestionCounter)}";
+            var suggestionId = string.IsNullOrWhiteSpace(retainedSuggestionId)
+                ? $"sugg-{Interlocked.Increment(ref _suggestionCounter)}"
+                : retainedSuggestionId;
 
             _state = _state with
             {

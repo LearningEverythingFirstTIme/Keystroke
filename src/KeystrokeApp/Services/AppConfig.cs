@@ -113,6 +113,7 @@ public class AppConfig
     // Learning: opt-in logging of accepted/dismissed completions for few-shot learning.
     // Off by default — user must explicitly enable in settings.
     public bool LearningEnabled { get; set; } = false;
+    public bool LimitEnabled { get; set; } = true;
     public bool LearningV2Enabled { get; set; } = true;
     public bool LearningContextV2Enabled { get; set; } = true;
     public bool LearningRerankerEnabled { get; set; } = true;

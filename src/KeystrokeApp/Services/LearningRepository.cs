@@ -8,29 +8,37 @@ public sealed class LearningRepository
 {
     private readonly string _legacyPath;
     private readonly string _eventPath;
+    private readonly string _legacyEventPath;
     private readonly ContextFingerprintService _fingerprints;
     private readonly LearningContextPreferencesService _preferences;
     private readonly object _lock = new();
     private LearningCorpusSnapshot _snapshot = new();
     private long _legacySize;
     private long _eventSize;
+    private long _legacyEventSize;
     private long _preferencesSize;
     private DateTime _legacyWriteUtc;
     private DateTime _eventWriteUtc;
+    private DateTime _legacyEventWriteUtc;
     private DateTime _preferencesWriteUtc;
 
     public LearningRepository(
         ContextFingerprintService? fingerprints = null,
         LearningContextPreferencesService? preferences = null,
         string? legacyPath = null,
-        string? eventPath = null)
+        string? eventPath = null,
+        string? legacyEventPath = null)
     {
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");
 
         _legacyPath = legacyPath ?? Path.Combine(appData, "completions.jsonl");
-        _eventPath = eventPath ?? Path.Combine(appData, "learning-events.v2.jsonl");
+        _eventPath = eventPath ?? Path.Combine(appData, "tracking.jsonl");
+        var eventDirectory = Path.GetDirectoryName(_eventPath);
+        _legacyEventPath = legacyEventPath ?? Path.Combine(
+            string.IsNullOrWhiteSpace(eventDirectory) ? appData : eventDirectory,
+            "learning-events.v2.jsonl");
         _fingerprints = fingerprints ?? new ContextFingerprintService();
         _preferences = preferences ?? new LearningContextPreferencesService();
     }
@@ -178,12 +186,13 @@ public sealed class LearningRepository
     {
         var legacyChanged = HasFileChanged(_legacyPath, ref _legacySize, ref _legacyWriteUtc);
         var eventChanged = HasFileChanged(_eventPath, ref _eventSize, ref _eventWriteUtc);
+        var legacyEventChanged = HasFileChanged(_legacyEventPath, ref _legacyEventSize, ref _legacyEventWriteUtc);
         var preferencesPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke",
             "learning-context-preferences.json");
         var preferenceChanged = HasFileChanged(preferencesPath, ref _preferencesSize, ref _preferencesWriteUtc);
-        return legacyChanged || eventChanged || preferenceChanged;
+        return legacyChanged || eventChanged || legacyEventChanged || preferenceChanged;
     }
 
     private static bool HasFileChanged(string path, ref long previousSize, ref DateTime previousWriteUtc)
@@ -278,12 +287,24 @@ public sealed class LearningRepository
         List<LearningEvidence> negatives,
         Dictionary<string, List<DateTime>> dualWriteIndex)
     {
-        if (!File.Exists(_eventPath))
+        LoadEventEvidenceFromPath(_eventPath, positives, negatives, dualWriteIndex);
+
+        if (!string.Equals(_legacyEventPath, _eventPath, StringComparison.OrdinalIgnoreCase))
+            LoadEventEvidenceFromPath(_legacyEventPath, positives, negatives, dualWriteIndex);
+    }
+
+    private void LoadEventEvidenceFromPath(
+        string path,
+        List<LearningEvidence> positives,
+        List<LearningEvidence> negatives,
+        Dictionary<string, List<DateTime>> dualWriteIndex)
+    {
+        if (!File.Exists(path))
             return;
 
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var records = new List<LearningEventRecord>();
-        foreach (var line in File.ReadLines(_eventPath))
+        foreach (var line in File.ReadLines(path))
         {
             if (string.IsNullOrWhiteSpace(line))
                 continue;
@@ -297,7 +318,7 @@ public sealed class LearningRepository
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LearningRepo] Skipping malformed event line: {ex.Message}");
+                Debug.WriteLine($"[LearningRepo] Skipping malformed event line from {path}: {ex.Message}");
             }
         }
 

@@ -23,6 +23,8 @@ public partial class SettingsWindow : Window
     private const double MinimumWindowHeight = 780;
     private const double MaxWorkAreaWidthRatio = 0.94;
     private const double MaxWorkAreaHeightRatio = 0.92;
+    private const double HeroWideModeMinWidth = 1180;
+    private const double PreviewCardsTwoColumnMinWidth = 900;
 
     private sealed class AppChoice
     {
@@ -62,6 +64,7 @@ public partial class SettingsWindow : Window
     private StyleProfileService?        _styleProfileService;
     private VocabularyProfileService?   _vocabularyProfileService;
     private LearningScoreService?       _learningScoreService;
+    private readonly UsageCounters _usageCounters;
     private readonly LearningContextPreferencesService _contextPreferencesService;
     private readonly LearningContextMaintenanceService _contextMaintenanceService;
     private readonly Func<(string ProcessName, string WindowTitle)> _appPicker;
@@ -69,6 +72,8 @@ public partial class SettingsWindow : Window
     private AppChoice? _lastExternalApp;
     private bool _loading = true;
     private DispatcherTimer? _saveDebounceTimer;
+    private DispatcherTimer? _previewTimingTimer;
+    private DateTime _previewTimingCycleStartedUtc = DateTime.UtcNow;
     private CancellationTokenSource? _modelFetchCts;
 
     // Shared HttpClient for Ollama status checks — avoids socket exhaustion from
@@ -87,6 +92,7 @@ public partial class SettingsWindow : Window
         StyleProfileService?      styleProfileService      = null,
         VocabularyProfileService? vocabularyProfileService = null,
         LearningScoreService?     learningScoreService     = null,
+        UsageCounters? usageCounters = null,
         LearningContextPreferencesService? contextPreferencesService = null,
         LearningContextMaintenanceService? contextMaintenanceService = null,
         Func<(string ProcessName, string WindowTitle)>? appPicker = null,
@@ -98,6 +104,7 @@ public partial class SettingsWindow : Window
         _vocabularyProfileService = vocabularyProfileService;
         _learningScoreService     = learningScoreService;
         _learningService          = learningService;
+        _usageCounters = usageCounters ?? new UsageCounters();
         _contextPreferencesService = contextPreferencesService ?? new LearningContextPreferencesService();
         _contextMaintenanceService = contextMaintenanceService ?? new LearningContextMaintenanceService();
         _appPicker = appPicker ?? AppContextService.GetActiveWindow;
@@ -110,22 +117,30 @@ public partial class SettingsWindow : Window
         _loading = false;
         Loaded += OnLoaded;
         Closed += OnWindowClosed;
+        SizeChanged += OnWindowSizeChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyWindowSizing();
+        Dispatcher.BeginInvoke(UpdateResponsiveLayout, DispatcherPriority.Loaded);
+        RestartPreviewTimingSimulation();
     }
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         _saveDebounceTimer?.Stop();
         _saveDebounceTimer = null;
+        _previewTimingTimer?.Stop();
+        _previewTimingTimer = null;
         _modelFetchCts?.Cancel();
         _modelFetchCts?.Dispose();
         _modelFetchCts = null;
         _learningService = null;
     }
+
+    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+        => UpdateResponsiveLayout();
 
     private void ApplyWindowSizing()
     {
@@ -154,6 +169,84 @@ public partial class SettingsWindow : Window
             RefreshAppPickerOptions();
 
         UpdatePrivacyInspector();
+        Dispatcher.BeginInvoke(() =>
+        {
+            MainSectionScrollViewer?.ScrollToTop();
+            UpdateResponsiveLayout();
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void UpdateResponsiveLayout()
+    {
+        if (HeroHeaderGrid == null || HeroSummaryPanel == null || PreviewBorder == null || PreviewCardsGrid == null)
+            return;
+
+        bool compactHero = HeroHeaderGrid.ActualWidth > 0 && HeroHeaderGrid.ActualWidth < HeroWideModeMinWidth;
+        bool stackPreviewCards = compactHero || (PreviewBorder.ActualWidth > 0 && PreviewBorder.ActualWidth < PreviewCardsTwoColumnMinWidth);
+
+        if (compactHero)
+        {
+            HeroHeaderGrid.ColumnDefinitions[1].Width = new GridLength(0);
+            HeroHeaderGrid.RowDefinitions[1].Height = GridLength.Auto;
+
+            Grid.SetColumn(HeroSummaryPanel, 0);
+            Grid.SetRow(HeroSummaryPanel, 0);
+            Grid.SetColumnSpan(HeroSummaryPanel, 2);
+            Grid.SetRowSpan(HeroSummaryPanel, 1);
+            HeroSummaryPanel.Margin = new Thickness(0, 0, 0, 18);
+
+            Grid.SetColumn(PreviewBorder, 0);
+            Grid.SetRow(PreviewBorder, 1);
+            Grid.SetColumnSpan(PreviewBorder, 2);
+            Grid.SetRowSpan(PreviewBorder, 1);
+        }
+        else
+        {
+            HeroHeaderGrid.ColumnDefinitions[1].Width = new GridLength(500);
+            HeroHeaderGrid.RowDefinitions[1].Height = new GridLength(0);
+
+            Grid.SetColumn(HeroSummaryPanel, 0);
+            Grid.SetRow(HeroSummaryPanel, 0);
+            Grid.SetColumnSpan(HeroSummaryPanel, 1);
+            Grid.SetRowSpan(HeroSummaryPanel, 2);
+            HeroSummaryPanel.Margin = new Thickness(0, 0, 24, 0);
+
+            Grid.SetColumn(PreviewBorder, 1);
+            Grid.SetRow(PreviewBorder, 0);
+            Grid.SetColumnSpan(PreviewBorder, 1);
+            Grid.SetRowSpan(PreviewBorder, 2);
+        }
+
+        if (stackPreviewCards)
+        {
+            PreviewCardsGrid.ColumnDefinitions[1].Width = new GridLength(0);
+            PreviewCardsGrid.RowDefinitions[1].Height = GridLength.Auto;
+
+            Grid.SetColumn(PreviewTimingCard, 0);
+            Grid.SetRow(PreviewTimingCard, 0);
+            Grid.SetColumnSpan(PreviewTimingCard, 2);
+            PreviewTimingCard.Margin = new Thickness(0, 0, 0, 12);
+
+            Grid.SetColumn(PreviewCompletionCard, 0);
+            Grid.SetRow(PreviewCompletionCard, 1);
+            Grid.SetColumnSpan(PreviewCompletionCard, 2);
+            PreviewCompletionCard.Margin = new Thickness(0);
+        }
+        else
+        {
+            PreviewCardsGrid.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
+            PreviewCardsGrid.RowDefinitions[1].Height = new GridLength(0);
+
+            Grid.SetColumn(PreviewTimingCard, 0);
+            Grid.SetRow(PreviewTimingCard, 0);
+            Grid.SetColumnSpan(PreviewTimingCard, 1);
+            PreviewTimingCard.Margin = new Thickness(0, 0, 10, 0);
+
+            Grid.SetColumn(PreviewCompletionCard, 1);
+            Grid.SetRow(PreviewCompletionCard, 0);
+            Grid.SetColumnSpan(PreviewCompletionCard, 1);
+            PreviewCompletionCard.Margin = new Thickness(10, 0, 0, 0);
+        }
     }
 
     private void UpdateExperienceSummary()
@@ -217,6 +310,8 @@ public partial class SettingsWindow : Window
         UpdateProfileMessaging();
     }
 
+    private UsageCountersSnapshot GetUsageSnapshot() => _usageCounters.GetSnapshot();
+
     private ProfileSummary GetProfileSummary()
     {
         var stats = _learningService?.GetStats();
@@ -235,14 +330,16 @@ public partial class SettingsWindow : Window
     private void UpdateProfileMessaging()
     {
         var summary = GetProfileSummary();
+        var usage = GetUsageSnapshot();
         var acceptedText = $"{summary.AcceptedSignals} accepted signal{(summary.AcceptedSignals == 1 ? "" : "s")}";
+        var trackedText = $"{usage.TotalAcceptedSuggestions} completion{(usage.TotalAcceptedSuggestions == 1 ? "" : "s")} tracked";
         var contextText = summary.ContextCount > 0
             ? $"{summary.ContextCount} context{(summary.ContextCount == 1 ? "" : "s")}"
             : "no repeated contexts yet";
 
         HeroLearningStatusText.Text = summary.PersonalizedAiEnabled
             ? "AI profile active"
-            : summary.HasSignals
+            : usage.TotalAcceptedSuggestions > 0
                 ? "AI profile building"
                 : "AI profile off";
 
@@ -250,8 +347,8 @@ public partial class SettingsWindow : Window
             ? summary.HasSignals
                 ? $"{acceptedText} are actively shaping future completions."
                 : "Personalized AI is on, but it needs a few accepted suggestions before it can adapt."
-            : summary.HasSignals
-                ? $"Your AI profile is quietly building from {acceptedText}, but none of it is used in completions yet."
+            : usage.TotalAcceptedSuggestions > 0
+                ? $"Your AI profile is quietly building from {trackedText}, but none of it is used in completions yet."
                 : "Personalized AI is off. Accept a few suggestions and Keystroke will start building a profile you can activate later.";
 
         OverviewPrivacyDetailText.Text = $"Screen reading is {(OcrEnabledCheck.IsChecked == true ? "on" : "off")}. AI profile is {(summary.PersonalizedAiEnabled ? "active" : summary.HasSignals ? "building quietly" : "idle")}.";
@@ -260,15 +357,15 @@ public partial class SettingsWindow : Window
             ? summary.HasSignals
                 ? $"{acceptedText} are live, with {contextText} helping Keystroke match your tone."
                 : "Personalized AI is on and waiting for your first accepted suggestion."
-            : summary.HasSignals
-                ? $"{acceptedText} are already saved locally. Turn on Personalized AI when you want Keystroke to use them."
+            : usage.TotalAcceptedSuggestions > 0
+                ? $"{trackedText} — your AI profile is already building."
                 : "Keystroke has not started building your profile yet.";
 
         OverviewProfileDetailText.Text = summary.PersonalizedAiEnabled
             ? summary.HasStyleProfile || summary.HasVoiceProfile
                 ? "Writing style and voice hints are ready in at least some contexts."
                 : "Keystroke is collecting enough signal to generate richer writing-style hints."
-            : summary.HasSignals
+            : usage.TotalAcceptedSuggestions > 0
                 ? "Profile signals stay local until you turn Personalized AI on."
                 : "Open Your AI Profile to see what Keystroke collects before any personalization turns on.";
 
@@ -276,7 +373,7 @@ public partial class SettingsWindow : Window
             ? summary.HasSignals
                 ? "Personalized AI is active."
                 : "Personalized AI is on and waiting for signal."
-            : summary.HasSignals
+            : usage.TotalAcceptedSuggestions > 0
                 ? "Your AI profile is already building."
                 : "Your AI profile has not started yet.";
 
@@ -284,11 +381,11 @@ public partial class SettingsWindow : Window
             ? summary.HasSignals
                 ? $"{acceptedText} across {contextText} can now influence completions, while screen and recent-text context keep suggestions grounded."
                 : "Keystroke will start adapting after your first few accepted suggestions."
-            : summary.HasSignals
-                ? $"{acceptedText} are already stored locally across {contextText}. Keystroke will not send those hints upstream until you turn Personalized AI on."
+            : usage.TotalAcceptedSuggestions > 0
+                ? $"{trackedText} are already stored locally across {contextText}. Keystroke will not send those hints upstream until you turn Personalized AI on."
                 : "Accept a few suggestions and Keystroke will start building a profile you can keep passive or turn on for active personalization.";
 
-        ProfileSignalsBadgeText.Text = acceptedText;
+        ProfileSignalsBadgeText.Text = summary.PersonalizedAiEnabled ? acceptedText : trackedText;
         ProfileContextsBadgeText.Text = summary.ContextCount > 0
             ? $"{summary.ContextCount} context{(summary.ContextCount == 1 ? "" : "s")}"
             : "No contexts yet";
@@ -299,13 +396,37 @@ public partial class SettingsWindow : Window
             ? summary.HasSignals
                 ? $"{acceptedText} are helping Keystroke better match your phrasing."
                 : "Personalized AI is ready. Accept a few suggestions and Keystroke will start adapting."
-            : summary.HasSignals
-                ? $"Keystroke is still collecting {acceptedText}, but they stay local until you turn Personalized AI on."
+            : usage.TotalAcceptedSuggestions > 0
+                ? $"Keystroke is still collecting {trackedText}, but they stay local until you turn Personalized AI on."
                 : "Keystroke can start by quietly collecting accepted suggestions, then use them later if you turn Personalized AI on.";
 
         StyleProfileFeatureText.Text = summary.PersonalizedAiEnabled
             ? "Builds a writing-style summary so phrasing and tone feel more like you over time."
             : "Keystroke only generates a writing-style summary when Personalized AI is on.";
+
+        UpdateMonetizationPanels(usage, summary.PersonalizedAiEnabled);
+    }
+
+    private void UpdateMonetizationPanels(UsageCountersSnapshot usage, bool personalizedAiEnabled)
+    {
+        var freeUser = !personalizedAiEnabled;
+        var trackedText = $"{usage.TotalAcceptedSuggestions} completion{(usage.TotalAcceptedSuggestions == 1 ? "" : "s")} tracked";
+
+        if (PersonalizationTeaserCard != null)
+            PersonalizationTeaserCard.Visibility = freeUser ? Visibility.Visible : Visibility.Collapsed;
+        if (LearningUpgradeBanner != null)
+            LearningUpgradeBanner.Visibility = freeUser ? Visibility.Visible : Visibility.Collapsed;
+        if (ProfileIntelligencePanel != null)
+            ProfileIntelligencePanel.Visibility = freeUser ? Visibility.Collapsed : Visibility.Visible;
+        if (CategoryBreakdownLocked != null)
+            CategoryBreakdownLocked.Visibility = freeUser ? Visibility.Visible : Visibility.Collapsed;
+
+        if (CategoryBreakdownLockedBodyText != null)
+        {
+            CategoryBreakdownLockedBodyText.Text = usage.TotalAcceptedSuggestions > 0
+                ? $"{trackedText} — activate Personalized AI to unlock category intelligence, writing style, and voice guidance."
+                : "No completions tracked yet — accept a few suggestions and Keystroke will start building your AI profile.";
+        }
     }
 
     private void UpdateAppFilteringUi()
@@ -352,15 +473,28 @@ public partial class SettingsWindow : Window
 
     private void UpdatePreview()
     {
-        PreviewSuggestionText.Text = LengthCombo.SelectedItem is ComboBoxItem item && item.Tag?.ToString() == "brief"
-            ? ", will send shortly."
-            : LengthCombo.SelectedItem is ComboBoxItem item2 && item2.Tag?.ToString() == "standard"
-                ? ", I can send the cleaned-up draft this afternoon."
-                : LengthCombo.SelectedItem is ComboBoxItem item3 && item3.Tag?.ToString() == "unlimited"
-                    ? ", I can tighten it up, sanity check the tone, and send you a polished version before the meeting."
-                    : ", I can tighten it up before we send it.";
+        var preset = (LengthCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "extended";
+        var suggestionText = GetPreviewSuggestionText(preset);
+        var wordCount = CountWords(suggestionText);
+        var charCount = suggestionText.Trim().Length;
+        var creativityLabel = GetCreativityLabel(TempSlider.Value);
+        var targetRange = GetPreviewLengthRange(preset);
+        var debounceMs = (int)Math.Round(DebounceSlider.Value);
+        var fastDebounceMs = (int)Math.Round(FastDebounceSlider.Value);
+        var debounceDelta = Math.Abs(debounceMs - fastDebounceMs);
 
-        PreviewMetaText.Text = $"{(LengthCombo.SelectedItem as ComboBoxItem)?.Content} | {(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} | temp {TempSlider.Value:0.0}";
+        PreviewSuggestionText.Text = suggestionText;
+        PreviewLengthBadgeText.Text = targetRange.Label;
+        PreviewWordCountText.Text = $"{wordCount} word{(wordCount == 1 ? "" : "s")}";
+        PreviewCharCountText.Text = $"{charCount} char{(charCount == 1 ? "" : "s")}";
+        PreviewMetaText.Text = $"{(LengthCombo.SelectedItem as ComboBoxItem)?.Content} | {(int)SuggestionsSlider.Value} suggestion{(SuggestionsSlider.Value == 1 ? "" : "s")} | {creativityLabel}";
+        PreviewLengthDetailText.Text = $"This preview is showing about {wordCount} words ({charCount} characters), which sits in the expected {targetRange.RangeText} range for this length setting.";
+        PreviewDebounceStatusText.Text = fastDebounceMs < debounceMs
+            ? $"Mid-thought suggestions reach the trigger about {debounceDelta}ms sooner than sentence-end suggestions."
+            : fastDebounceMs > debounceMs
+                ? $"Sentence-end suggestions reach the trigger about {debounceDelta}ms sooner than mid-thought suggestions."
+                : "Both timing modes are currently set to trigger at the same speed.";
+        PreviewDebounceDetailText.Text = $"The preview bars loop continuously so you can feel the difference between a {debounceMs}ms punctuation pause and a {fastDebounceMs}ms in-line pause.";
 
         var theme = ThemeDefinitions.Get(_config.ThemeId);
         var accentBrush = new SolidColorBrush(theme.ShadowColor);
@@ -373,6 +507,122 @@ public partial class SettingsWindow : Window
         PreviewBorder.BorderBrush = new SolidColorBrush(theme.NormalBorder);
         PreviewSuggestionBubble.BorderBrush = accentBrush;
         PreviewSuggestionBubble.Background = bubbleBrush;
+        PreviewDebounceProgressBar.Foreground = accentBrush;
+        PreviewFastDebounceProgressBar.Foreground = accentBrush;
+        UpdateResponsiveLayout();
+        RestartPreviewTimingSimulation();
+    }
+
+    private void RestartPreviewTimingSimulation()
+    {
+        if (PreviewDebounceProgressBar == null || PreviewFastDebounceProgressBar == null)
+            return;
+
+        if (_previewTimingTimer == null)
+        {
+            _previewTimingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+            _previewTimingTimer.Tick += (_, _) => AdvancePreviewTimingSimulation();
+        }
+
+        _previewTimingCycleStartedUtc = DateTime.UtcNow;
+        AdvancePreviewTimingSimulation();
+        _previewTimingTimer.Start();
+    }
+
+    private void AdvancePreviewTimingSimulation()
+    {
+        if (PreviewDebounceProgressBar == null ||
+            PreviewFastDebounceProgressBar == null ||
+            PreviewDebounceProgressText == null ||
+            PreviewFastDebounceProgressText == null ||
+            PreviewSuggestionBubble == null)
+        {
+            return;
+        }
+
+        var debounceMs = Math.Max(1, (int)Math.Round(DebounceSlider.Value));
+        var fastDebounceMs = Math.Max(1, (int)Math.Round(FastDebounceSlider.Value));
+        var elapsedMs = (DateTime.UtcNow - _previewTimingCycleStartedUtc).TotalMilliseconds;
+        var cycleLengthMs = Math.Max(debounceMs, fastDebounceMs) + 900;
+
+        if (elapsedMs >= cycleLengthMs)
+        {
+            _previewTimingCycleStartedUtc = DateTime.UtcNow;
+            elapsedMs = 0;
+        }
+
+        UpdatePreviewTimingLane(PreviewDebounceProgressBar, PreviewDebounceProgressText, elapsedMs, debounceMs);
+        UpdatePreviewTimingLane(PreviewFastDebounceProgressBar, PreviewFastDebounceProgressText, elapsedMs, fastDebounceMs);
+
+        var earliestTriggerMs = Math.Min(debounceMs, fastDebounceMs);
+        PreviewSuggestionBubble.Opacity = elapsedMs >= earliestTriggerMs ? 1.0 : 0.45;
+    }
+
+    private static void UpdatePreviewTimingLane(
+        ProgressBar progressBar,
+        TextBlock statusText,
+        double elapsedMs,
+        int targetMs)
+    {
+        var progress = Math.Clamp(elapsedMs / targetMs, 0.0, 1.0);
+        progressBar.Value = progress * 100;
+
+        if (elapsedMs >= targetMs)
+        {
+            statusText.Text = "Appears now";
+            return;
+        }
+
+        var remainingMs = Math.Max(0, targetMs - (int)Math.Round(elapsedMs));
+        statusText.Text = $"{remainingMs}ms left";
+    }
+
+    private static (string Label, string RangeText) GetPreviewLengthRange(string preset) => preset switch
+    {
+        "brief" => ("Brief range", "3-5 words"),
+        "standard" => ("Standard range", "8-15 words"),
+        "unlimited" => ("Unlimited range", "30-50 words"),
+        _ => ("Extended range", "15-30 words")
+    };
+
+    private static string GetPreviewSuggestionText(string preset) => preset switch
+    {
+        "brief" => ", will send it shortly.",
+        "standard" => ", and I'll send the cleaned-up draft over later this afternoon.",
+        "unlimited" => ", and I'll tighten the draft, smooth the tone, double-check the wording, add a cleaner opening, clarify the ask, and send a polished version before the meeting so everyone has a copy that's easy to review and ready to forward.",
+        _ => ", and I'll tighten the draft, smooth the tone, and send a polished version this afternoon so it reads cleanly."
+    };
+
+    private static string GetCreativityLabel(double temperature)
+    {
+        if (temperature < 0.2)
+            return "Very focused";
+        if (temperature < 0.45)
+            return "Balanced creativity";
+        if (temperature < 0.75)
+            return "More expressive";
+
+        return "Most exploratory";
+    }
+
+    private static int CountWords(string text)
+    {
+        var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        int count = 0;
+
+        foreach (var part in parts)
+        {
+            foreach (var ch in part)
+            {
+                if (char.IsLetterOrDigit(ch))
+                {
+                    count++;
+                    break;
+                }
+            }
+        }
+
+        return count;
     }
 
     private void LoadValues()
@@ -435,6 +685,7 @@ public partial class SettingsWindow : Window
         OcrEnabledCheck.IsChecked = _config.OcrEnabled;
         RollingContextCheck.IsChecked = _config.RollingContextEnabled;
         LearningEnabledCheck.IsChecked = _config.LearningEnabled;
+        LimitEnabledCheck.IsChecked = _config.LimitEnabled;
 
         StyleProfileCheck.IsChecked = _config.StyleProfileEnabled;
         StyleProfileIntervalSlider.Value = _config.StyleProfileInterval;
@@ -1567,6 +1818,7 @@ public partial class SettingsWindow : Window
         _config.OcrEnabled = OcrEnabledCheck.IsChecked == true;
         _config.RollingContextEnabled = RollingContextCheck.IsChecked == true;
         _config.LearningEnabled = LearningEnabledCheck.IsChecked == true;
+        _config.LimitEnabled = LimitEnabledCheck.IsChecked == true;
         _config.StyleProfileEnabled = StyleProfileCheck.IsChecked == true;
         _config.StyleProfileInterval = (int)StyleProfileIntervalSlider.Value;
         _config.MaxSuggestions = (int)SuggestionsSlider.Value;
@@ -1673,8 +1925,10 @@ public partial class SettingsWindow : Window
                 var resetTargets = new[]
                 {
                     Path.Combine(appDataPath, "completions.jsonl"),
+                    Path.Combine(appDataPath, "tracking.jsonl"),
                     Path.Combine(appDataPath, "learning-events.v2.jsonl"),
                     Path.Combine(appDataPath, "learning-context-preferences.json"),
+                    Path.Combine(appDataPath, "usage.json"),
                     Path.Combine(appDataPath, "style-profile.json"),
                     Path.Combine(appDataPath, "vocabulary-profile.json"),
                     Path.Combine(appDataPath, "learning-scores.json")
@@ -1691,6 +1945,7 @@ public partial class SettingsWindow : Window
                         File.Delete(path);
                 }
 
+                _usageCounters.Reset();
                 LoadLearningStats();
                 LoadStyleProfileStatus();
                 LoadStyleProfileProgress();
@@ -1738,13 +1993,15 @@ public partial class SettingsWindow : Window
             ShowSection(section);
     }
 
-    private void OpenAiProfile_Click(object sender, RoutedEventArgs e)
+    private void PersonalizationTeaser_Click(object sender, RoutedEventArgs e)
     {
         NavPersonalizationButton.IsChecked = true;
         ShowSection("Personalization");
     }
 
-    private void ActivatePersonalizedAi_Click(object sender, RoutedEventArgs e)
+    private void OpenAiProfile_Click(object sender, RoutedEventArgs e) => PersonalizationTeaser_Click(sender, e);
+
+    private void ActivateLearning_Click(object sender, RoutedEventArgs e)
     {
         if (LearningEnabledCheck.IsChecked == true)
             return;
@@ -1760,10 +2017,22 @@ public partial class SettingsWindow : Window
         }
 
         SaveSettings();
+        RefreshUsageState();
+    }
+
+    private void ActivatePersonalizedAi_Click(object sender, RoutedEventArgs e) => ActivateLearning_Click(sender, e);
+
+    public void RefreshUsageState()
+    {
+        _learningService?.Refresh();
+        LoadLearningStats();
         LoadStyleProfileStatus();
         LoadStyleProfileProgress();
         LoadVocabularyProfileStatus();
         UpdateProfileMessaging();
+        UpdateExperienceSummary();
+        UpdatePreview();
+        UpdatePrivacyInspector();
     }
 
     private void OpenAppControl_Click(object sender, RoutedEventArgs e)

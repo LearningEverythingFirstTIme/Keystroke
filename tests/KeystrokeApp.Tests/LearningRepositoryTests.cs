@@ -169,6 +169,43 @@ public class LearningRepositoryTests : IDisposable
         Assert.Equal(1, snapshot.Contexts["ctx-disabled"].NativeCount);
     }
 
+    [Fact]
+    public void GetSnapshot_ReadsLegacyEventLog_WhenTrackingFileIsMissing()
+    {
+        var trackingPath = Path.Combine(_tempDir, "tracking.jsonl");
+        var legacyEventPath = Path.Combine(_tempDir, "learning-events.v2.jsonl");
+        var repo = new LearningRepository(
+            legacyPath: Path.Combine(_tempDir, "completions.jsonl"),
+            eventPath: trackingPath,
+            legacyEventPath: legacyEventPath);
+
+        File.WriteAllText(Path.Combine(_tempDir, "completions.jsonl"), string.Empty);
+        File.WriteAllLines(legacyEventPath,
+        [
+            JsonSerializer.Serialize(new LearningEventRecord
+            {
+                TimestampUtc = DateTime.UtcNow,
+                EventType = "manual_continuation_committed",
+                ProcessName = "slack",
+                Category = "Chat",
+                UserWrittenText = "sounds good",
+                ContextKeys = new LearningEventContextKeys
+                {
+                    SubcontextKey = "ctx-chat",
+                    SubcontextLabel = "Alex thread"
+                },
+                SourceWeight = 1.0f,
+                QualityScore = 1.0f
+            })
+        ]);
+
+        var snapshot = repo.GetSnapshot(forceRefresh: true);
+
+        Assert.Single(snapshot.PositiveEvidence);
+        Assert.Equal("ctx-chat", snapshot.PositiveEvidence[0].SubcontextKey);
+        Assert.Equal(LearningSourceType.NativeWriting, snapshot.PositiveEvidence[0].SourceType);
+    }
+
     public void Dispose()
     {
         try

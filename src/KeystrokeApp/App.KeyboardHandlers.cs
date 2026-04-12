@@ -321,6 +321,8 @@ public partial class App
             if (!result.DeliveredToTarget)
                 return;
 
+            RecordAcceptedSuggestionUsage(preparation.SuggestionId);
+
             if (mode == AcceptanceMode.Full)
                 ApplyFullAcceptance(preparation);
             else
@@ -384,9 +386,6 @@ public partial class App
     private void ApplyFullAcceptance(AcceptancePreparation preparation)
     {
         _suggestionPanel?.AcceptSuggestion();
-
-        Interlocked.Increment(ref _sessionAcceptCount);
-        UpdateTraySessionInfo();
 
         int latencyMs = GetSuggestionLatencyMs();
         int cycleDepth = _suggestionLifecycle.Snapshot().CycleDepth;
@@ -496,6 +495,7 @@ public partial class App
             preparation.RequestId,
             CreateContextSnapshot(newBuffer, preparation.ProcessName, preparation.WindowTitle),
             newBuffer,
-            remaining);
+            remaining,
+            preparation.SuggestionId);
     }
 }
