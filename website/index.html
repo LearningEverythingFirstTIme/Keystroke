@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KEYSTROKE — System-Wide AI Autocomplete for Windows</title>
+  <meta name="description" content="Privacy-first AI autocomplete that works in every app. 16 PII detectors. Zero telemetry. Full offline mode. Your words stay yours.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ========== NAV ========== -->
+  <nav class="nav" id="nav">
+    <div class="container nav__inner">
+      <a href="#" class="nav__logo">KEYSTROKE<span class="cursor">_</span></a>
+      <div class="nav__links">
+        <a href="#privacy" class="nav__link">Privacy</a>
+        <a href="#how-it-works" class="nav__link">How It Works</a>
+        <a href="#features" class="nav__link">Features</a>
+        <a href="#engines" class="nav__link">Engines</a>
+        <a href="#pricing" class="nav__link">Pricing</a>
+        <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke" target="_blank" rel="noopener" class="nav__link">Source Code</a>
+        <a href="#download" class="nav__cta">Download</a>
+      </div>
+      <button class="nav__hamburger" aria-label="Toggle menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+    <div class="nav__mobile">
+      <a href="#privacy">Privacy</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#features">Features</a>
+      <a href="#engines">Engines</a>
+      <a href="#pricing">Pricing</a>
+      <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke" target="_blank" rel="noopener">Source Code</a>
+      <a href="#download">Download</a>
+    </div>
+  </nav>
+
+  <!-- ========== HERO ========== -->
+  <section class="hero" id="hero">
+    <div class="container hero__inner">
+      <div class="hero__content">
+        <div class="hero__badge">
+          <span class="badge">System-Wide AI Autocomplete for Windows</span>
+        </div>
+        <h1 class="hero__title">
+          YOUR WORDS<br>STAY YOURS<span class="accent">.</span>
+        </h1>
+        <p class="hero__subtitle">
+          Keystroke predicts what you'll type next in any application. Five AI engines.
+          Streaming completions. Full offline mode. Sixteen PII detectors scrub your text
+          before it ever leaves your machine.
+        </p>
+        <div class="hero__buttons">
+          <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/releases" target="_blank" rel="noopener" class="btn btn-primary">Download Free</a>
+          <a href="#how-it-works" class="btn btn-outline">See How It Works</a>
+        </div>
+        <div class="hero__stats">
+          <div class="hero-stat">
+            <div class="hero-stat__value">&lt;300ms</div>
+            <div class="hero-stat__label">Response Time</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat__value">16</div>
+            <div class="hero-stat__label">PII Detectors</div>
+          </div>
+          <div class="hero-stat">
+            <div class="hero-stat__value">5</div>
+            <div class="hero-stat__label">AI Engines</div>
+          </div>
+        </div>
+      </div>
+      <div class="hero__demo">
+        <img src="screenshot-suggest.png" alt="Keystroke autocomplete suggestion appearing in real-time as you type" class="hero__screenshot">
+        <div class="hero__demo-caption">
+          <span class="highlight">Real screenshot</span> &mdash; suggestions appear inline as you type in any app
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== MARQUEE ========== -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee__inner">
+      <span class="marquee__text">Zero Telemetry<span class="sep">///</span>Your Data Stays Local<span class="sep">///</span>16 PII Detectors<span class="sep">///</span>Offline Mode<span class="sep">///</span>No Accounts<span class="sep">///</span>DPAPI Encryption<span class="sep">///</span>$20 Once<span class="sep">///</span>Zero Telemetry<span class="sep">///</span>Your Data Stays Local<span class="sep">///</span>16 PII Detectors<span class="sep">///</span>Offline Mode<span class="sep">///</span>No Accounts<span class="sep">///</span>DPAPI Encryption<span class="sep">///</span>$20 Once<span class="sep">///</span></span>
+    </div>
+  </div>
+
+  <!-- ========== PRIVACY ========== -->
+  <section class="privacy" id="privacy">
+    <div class="container">
+      <div class="privacy__header animate-on-scroll">
+        <span class="section-label">Privacy</span>
+        <h2 class="section-title" data-text="Nothing Leaves Without Your Permission">Nothing Leaves Without<br>Your Permission</h2>
+        <p class="section-subtitle">Every byte of data has a documented path. No fine print. No surprises. Here's the full picture.</p>
+      </div>
+
+      <div class="privacy__grid stagger-children">
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[0]</div>
+          <div class="privacy-card__body">
+            <h3>Zero Telemetry</h3>
+            <p>No phone-home. No crash reporting. No analytics beacon. No update checker. The app never contacts any server except the AI provider you chose.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[~]</div>
+          <div class="privacy-card__body">
+            <h3>100% Local Storage</h3>
+            <p>Learning database, analytics, configuration, logs &mdash; everything lives in %AppData%/Keystroke on your machine. Nothing is synced anywhere.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[*]</div>
+          <div class="privacy-card__body">
+            <h3>DPAPI Encryption</h3>
+            <p>API keys encrypted at rest using Windows Data Protection API, scoped to your user account. Never stored in plaintext. Legacy keys auto-migrated on upgrade.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char--filled icon-char">[!]</div>
+          <div class="privacy-card__body">
+            <h3>16 PII Detectors</h3>
+            <p>Credit cards (Luhn-validated), SSNs, emails, phone numbers, IPv4/IPv6, JWTs, bearer tokens, API keys (sk-, AIzaSy, ghp_, AKIA, xox), AWS secrets, private keys, OAuth tokens, IBANs, passwords, street addresses. All scrubbed or blocked before any cloud request.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[#]</div>
+          <div class="privacy-card__body">
+            <h3>Offline License</h3>
+            <p>ECDSA P-256 cryptographic signature verification. Your license key is validated entirely on your machine. No registration. No account. No server call. Ever.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[&gt;]</div>
+          <div class="privacy-card__body">
+            <h3>Full Offline Mode</h3>
+            <p>Run Ollama locally and Keystroke makes zero cloud calls. Every prediction generated on your hardware. Total air-gap capability.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[_]</div>
+          <div class="privacy-card__body">
+            <h3>No Window Title Leakage</h3>
+            <p>Raw window titles stay local. Outbound prompts receive only safe category labels like "chrome (Browser)". Your browser tabs are your business.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[+]</div>
+          <div class="privacy-card__body">
+            <h3>Custom Privacy Rules</h3>
+            <p>Define your own regex-based redaction and blocking rules in privacy-rules.json. Keystroke ships the defaults; you own the policy.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[/]</div>
+          <div class="privacy-card__body">
+            <h3>Per-App Filtering</h3>
+            <p>Block specific apps entirely, or run from a strict allow-list. You decide which applications can trigger predictions. Total control.</p>
+          </div>
+        </div>
+
+        <div class="card-flat privacy-card animate-on-scroll">
+          <div class="icon-char">[?]</div>
+          <div class="privacy-card__body">
+            <h3>Live Privacy Inspector</h3>
+            <p>Open Settings and see the exact prompt shape that would be sent to the AI. No guessing. No hidden data flows. Full transparency, always.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="data-flow animate-on-scroll">KEYSTROKE  ──▶  PII FILTER  ──▶  PRIVACY LAYER  ──▶  [ SAFE PROMPT ]  ──▶  AI PROVIDER
+   │                │                  │
+   ▼                ▼                  ▼
+LOCAL DB       [ BLOCKED ]        [ REDACTED ]
+learning.db    SSNs, API keys,    emails → [EMAIL]
+analytics      credit cards,      phones → [PHONE]
+config         private keys       IPs → [IP_ADDRESS]</div>
+
+      <div class="redacted-block animate-on-scroll">
+        <span class="label">From:</span> <span class="safe">[EMAIL]</span><br>
+        <span class="label">Subject:</span> Invoice #4829 — Q3 Payment<br>
+        <span class="label">Amount:</span> <span class="redacted">████████</span><br>
+        <span class="label">Card:</span> <span class="redacted">████-████-████-████</span><br>
+        <span class="label">Send to:</span> <span class="safe">[EMAIL]</span><br>
+        <span class="label">Auth:</span> <span class="redacted">Bearer eyJhbGciOiJIUzI1NiIs...</span><br>
+        <span class="label">Status:</span> <span class="safe">3 blocked &middot; 2 redacted &middot; prompt safe</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== HOW IT WORKS ========== -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <div class="how-it-works__header animate-on-scroll">
+        <span class="section-label section-label--dark">How It Works</span>
+        <h2 class="section-title" style="color: var(--white);" data-text="Four Steps. Sub-Second Speed.">Four Steps.<br>Sub-Second Speed.</h2>
+        <p class="section-subtitle section-subtitle--light">From keystroke to suggestion in under 300 milliseconds. Here's the pipeline.</p>
+      </div>
+
+      <div class="how-it-works__flow stagger-children">
+
+        <div class="step-card animate-on-scroll">
+          <span class="step-card__number">01</span>
+          <h3>Type</h3>
+          <p>Type in any app. Keystroke listens system-wide via a low-level keyboard hook. Smart debounce triggers instantly at word boundaries, 100ms mid-word.</p>
+        </div>
+
+        <div class="step-card animate-on-scroll">
+          <span class="step-card__number">02</span>
+          <h3>Filter</h3>
+          <p>Sensitive data is scrubbed automatically. High-risk patterns block prediction entirely. Custom rules let you extend the defaults.</p>
+        </div>
+
+        <div class="step-card animate-on-scroll">
+          <span class="step-card__number">03</span>
+          <h3>Predict</h3>
+          <p>Your chosen AI engine completes the thought. Suggestions stream in progressively &mdash; no waiting for the full response. Cached predictions return instantly.</p>
+        </div>
+
+        <div class="step-card animate-on-scroll">
+          <span class="step-card__number">04</span>
+          <h3>Accept</h3>
+          <p>Tab to accept the full suggestion. Shift+Tab for one word at a time. Ctrl+Up/Down to cycle alternatives. Esc to dismiss. Keep typing to ignore.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FEATURES ========== -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="features__header animate-on-scroll">
+        <span class="section-label">Features</span>
+        <h2 class="section-title" data-text="Everything You Get">Everything You Get</h2>
+        <p class="section-subtitle">All core features included free. No paywalls on the essentials.</p>
+      </div>
+
+      <!-- Core -->
+      <div class="features__group animate-on-scroll">
+        <div class="features__group-title">// Core</div>
+        <div class="features__grid">
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>System-Wide Autocomplete</h4>
+              <p>Works in every application &mdash; Outlook, Slack, VS Code, Chrome, Word, PowerShell, and anything else with a text cursor.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Streaming Completions</h4>
+              <p>Suggestions appear progressively as the AI generates them. No waiting for the full response.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Multi-Suggestion Cycling</h4>
+              <p>Up to 5 alternative completions fetched in parallel. Ctrl+Up/Down to browse options.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Word-by-Word Acceptance</h4>
+              <p>Accept one word at a time with Shift+Tab or Ctrl+Right. Granular control over what you take.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Smart Debounce</h4>
+              <p>Instant trigger at word boundaries (space, period). Configurable delay mid-word. Feels immediate without wasting API calls.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Rolling Context</h4>
+              <p>Remembers the last 500 characters you typed for richer, more contextual suggestions.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Prediction Cache</h4>
+              <p>LRU cache (50 entries) returns instant results when you backspace or retype similar prefixes.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Intelligence -->
+      <div class="features__group animate-on-scroll">
+        <div class="features__group-title">// Intelligence</div>
+        <div class="features__grid">
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>OCR Screen Reading</h4>
+              <p>GPU-accelerated Windows OCR reads nearby screen text for visual context. Understands what you're looking at.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Adaptive Temperature</h4>
+              <p>Creativity auto-adjusts by app category. More precise in code editors, more creative in chat.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>App-Aware Tone</h4>
+              <p>Suggestions match the context &mdash; formal in email, casual in chat, technical in code editors.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Correction Detection</h4>
+              <p>Detects when you immediately backspace after accepting. Learns from your dissatisfaction.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customization -->
+      <div class="features__group animate-on-scroll">
+        <div class="features__group-title">// Customization</div>
+        <div class="features__grid">
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>5 Color Themes</h4>
+              <p>Midnight, Ember, Forest, Rose, and Slate. The suggestion panel matches your aesthetic.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Custom System Prompts</h4>
+              <p>Override the default instructions. Tell the AI to write like you, avoid certain words, or focus on a domain.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Completion Length</h4>
+              <p>Brief (3-5 words), Standard (8-15), Extended (15-30), or Unlimited (30-50). Your call.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Per-App Filtering</h4>
+              <p>Block specific apps or run in allow-list-only mode. Fine-grained control over where predictions appear.</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="dot-green"></span>
+            <div>
+              <h4>Draggable Panel</h4>
+              <p>Reposition the suggestion panel wherever you want. It remembers your preference.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========== AI ENGINES ========== -->
+  <section class="engines" id="engines">
+    <div class="container">
+      <div class="engines__header animate-on-scroll">
+        <span class="section-label section-label--dark">AI Engines</span>
+        <h2 class="section-title" style="color: var(--white);" data-text="Five Engines. Your Choice.">Five Engines.<br>Your Choice.</h2>
+        <p class="section-subtitle section-subtitle--light">Switch providers anytime from the system tray. No restart needed. Bring your own API key.</p>
+      </div>
+
+      <div class="engines__grid stagger-children">
+
+        <div class="engine-card animate-on-scroll">
+          <div class="engine-card__name">Gemini</div>
+          <div class="engine-card__model">gemini-3.1-flash-lite-preview</div>
+          <p class="engine-card__desc">Google's fastest model. Free tier available. Three variants: Flash Lite, Flash, and Pro.</p>
+          <span class="badge">Recommended</span>
+        </div>
+
+        <div class="engine-card animate-on-scroll">
+          <div class="engine-card__name">Claude</div>
+          <div class="engine-card__model">claude-haiku-4-5</div>
+          <p class="engine-card__desc">Anthropic's models. Nuanced, great for long-form writing. Haiku for speed, Sonnet for depth.</p>
+          <span class="badge--outline badge">Nuanced</span>
+        </div>
+
+        <div class="engine-card animate-on-scroll">
+          <div class="engine-card__name">GPT</div>
+          <div class="engine-card__model">gpt-5.4-nano</div>
+          <p class="engine-card__desc">OpenAI's latest. Three tiers: Nano (fastest), Mini (balanced), full 5.4 (smartest).</p>
+          <span class="badge--outline badge">Three Tiers</span>
+        </div>
+
+        <div class="engine-card animate-on-scroll">
+          <div class="engine-card__name">Open Router</div>
+          <div class="engine-card__model">100+ models</div>
+          <p class="engine-card__desc">Hundreds of models through one API key. One unified endpoint, massive flexibility.</p>
+          <span class="badge--outline badge">Flexible</span>
+        </div>
+
+        <div class="engine-card animate-on-scroll" style="border-color: var(--terminal);">
+          <div class="engine-card__name">Ollama</div>
+          <div class="engine-card__model">qwen3:30b-a3b</div>
+          <p class="engine-card__desc">100% local. Zero cloud calls. Free forever. Runs on your hardware. Full air-gap privacy.</p>
+          <span class="badge--dark badge">Offline</span>
+        </div>
+
+      </div>
+
+      <div class="engines__callout animate-on-scroll">
+        <span class="badge--yellow badge" style="flex-shrink: 0;">Tip</span>
+        <p><strong>Switch engines anytime</strong> from the system tray. No restart, no reconfiguration. Try Gemini Flash Lite for speed, swap to Claude Sonnet for nuance, or go fully local with Ollama.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== LEARNING SYSTEM ========== -->
+  <section class="learning" id="learning">
+    <div class="container">
+      <div class="learning__header animate-on-scroll">
+        <span class="section-label section-label--yellow">Pro &mdash; $20 Once</span>
+        <h2 class="section-title" data-text="It Learns How You Write">It Learns How<br>You Write</h2>
+        <p class="section-subtitle">Generic autocomplete gives everyone the same suggestions. Pro learns <em>your</em> voice &mdash; per-app, over time, with guardrails &mdash; so predictions sound like you wrote them.</p>
+      </div>
+
+      <!-- Value proposition callout -->
+      <div class="learning__value animate-on-scroll">
+        <div class="learning__value-stat">
+          <div class="hero-stat__value" style="font-size: 3rem; color: var(--yellow);">40&ndash;60%</div>
+          <div class="hero-stat__label" style="font-size: 0.8rem; margin-top: 8px;">of what you type<br>is predictable</div>
+        </div>
+        <div class="learning__value-text">
+          <p>Most people type the same phrases, sentence patterns, and sign-offs dozens of times a day. Pro turns that repetition into an advantage. The more you write, the less you need to type. After a few hundred acceptances, the model isn't guessing anymore &mdash; it's completing sentences in <em>your</em> style, with <em>your</em> vocabulary, in the right context.</p>
+        </div>
+      </div>
+
+      <!-- Real screenshot: Learning System in action -->
+      <div class="learning__screenshot animate-on-scroll">
+        <img src="screenshot-learning.png" alt="Keystroke Learning System analyzing writing patterns to offer personalized suggestions">
+        <div class="screenshot-caption">The Learning System analyzes your patterns across apps &mdash; suggestions get smarter over time</div>
+      </div>
+
+      <div class="learning__grid stagger-children">
+
+        <div class="learning-card animate-on-scroll">
+          <h3><span class="icon-char" style="width: 36px; height: 36px; font-size: 1rem;">[A]</span> Acceptance Learning</h3>
+          <p>Every time you press Tab, that's a signal. Every dismiss is one too. Keystroke builds a per-context library of few-shot examples from your real decisions &mdash; what you accepted in Slack is different from what you accepted in VS Code. Only high-confidence signals enter the prompt. Low-quality or ambiguous accepts are filtered out.</p>
+          <div class="learning-card__detail">
+            <strong>How it scores quality:</strong> 50% response latency (accepted in &lt;300ms = excellent), 30% cycle depth (first suggestion taken = strong), 20% post-edit behavior (no backspace within 1.5s = confirmed).
+          </div>
+        </div>
+
+        <div class="learning-card animate-on-scroll">
+          <h3><span class="icon-char" style="width: 36px; height: 36px; font-size: 1rem;">[S]</span> Style Profiling</h3>
+          <p>Every ~30 high-confidence accepts in a category, an LLM analyzes your writing patterns and generates a natural-language style description. This isn't keyword matching &mdash; it understands that you prefer short declarative sentences in email but longer descriptive ones in documents.</p>
+          <div class="learning-card__detail">
+            <strong>Per-app categories:</strong> Email, Chat, Code, Writing, Search, Terminal &mdash; each gets its own evolving style profile injected into the system prompt.
+          </div>
+        </div>
+
+        <div class="learning-card animate-on-scroll">
+          <h3><span class="icon-char" style="width: 36px; height: 36px; font-size: 1rem;">[V]</span> Vocabulary Fingerprint</h3>
+          <p>A deterministic layer (no LLM needed) that analyzes your word choices, preferred phrases, and formality level. If you say "sounds good" more than 15% of the time in chat, Keystroke knows that. If you never use exclamation marks in email, it won't either.</p>
+          <div class="learning-card__detail">
+            <strong>Zero cloud cost:</strong> Runs locally as pure pattern matching on your learning database. Updated in real-time as you write.
+          </div>
+        </div>
+
+      </div>
+
+      <!-- How it works step-by-step -->
+      <div class="learning__flow animate-on-scroll">
+        <h3 class="learning__flow-title">The Learning Loop</h3>
+        <div class="learning__flow-steps">
+          <div class="learning__flow-step">
+            <span class="learning__flow-num">1</span>
+            <span>You type, Keystroke suggests</span>
+          </div>
+          <div class="learning__flow-arrow">&rarr;</div>
+          <div class="learning__flow-step">
+            <span class="learning__flow-num">2</span>
+            <span>You accept, dismiss, or correct</span>
+          </div>
+          <div class="learning__flow-arrow">&rarr;</div>
+          <div class="learning__flow-step">
+            <span class="learning__flow-num">3</span>
+            <span>Quality scoring filters signal from noise</span>
+          </div>
+          <div class="learning__flow-arrow">&rarr;</div>
+          <div class="learning__flow-step">
+            <span class="learning__flow-num">4</span>
+            <span>Future prompts include your best examples</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="learning__safety animate-on-scroll">
+        <span class="icon-char--filled icon-char" style="width: 36px; height: 36px; font-size: 1rem;">[!]</span>
+        <p><strong>6 hardened guardrails</strong> prevent feedback loops: quality-gated session buffer, staleness suppression (profiles &gt;7 days old are suppressed), contamination filtering, short-prefix suppression, context-continuity filtering, and anti-loop detection. The system learns carefully, not recklessly.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== PRICING ========== -->
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <div class="pricing__header animate-on-scroll" style="text-align: center;">
+        <span class="section-label section-label--dark">Pricing</span>
+        <h2 class="section-title" style="color: var(--white);" data-text="Simple. Honest. No Subscriptions.">Simple. Honest.<br>No Subscriptions.</h2>
+      </div>
+
+      <!-- Real screenshot: the emotional payoff -->
+      <div class="pricing__screenshot animate-on-scroll">
+        <img src="screenshot-personal.png" alt="Keystroke completing sentences that feel like a natural extension of your own thought process">
+        <div class="screenshot-caption screenshot-caption--light">&ldquo;feels like a natural extension of my own thought process&rdquo;</div>
+      </div>
+
+      <div class="pricing__grid">
+
+        <div class="price-card price-card--free animate-on-scroll">
+          <div class="price-card__tier">Free</div>
+          <div class="price-card__subtitle">Forever &middot; No Account Needed</div>
+          <ul class="price-card__features">
+            <li>All 5 AI engines</li>
+            <li>30 accepted completions per day</li>
+            <li>All privacy &amp; security features</li>
+            <li>OCR screen reading</li>
+            <li>Rolling context</li>
+            <li>Multi-suggestion cycling</li>
+            <li>Per-app filtering</li>
+            <li>5 color themes</li>
+            <li>Custom system prompts</li>
+          </ul>
+          <a href="#download" class="btn">Download Now</a>
+        </div>
+
+        <div class="price-card price-card--pro animate-on-scroll">
+          <div class="price-card__stamp">$20 Once</div>
+          <div class="price-card__tier" style="color: var(--yellow);">Pro</div>
+          <div class="price-card__subtitle">One-Time Payment</div>
+          <ul class="price-card__features">
+            <li>Everything in Free</li>
+            <li>Unlimited completions</li>
+            <li>Acceptance-based learning</li>
+            <li>LLM-powered style profiling</li>
+            <li>Vocabulary fingerprinting</li>
+            <li>Correction pattern detection</li>
+            <li>Context-adaptive tuning</li>
+            <li>Intelligence scoring per app</li>
+          </ul>
+          <p class="price-card__note">No subscription. No account. Offline license key validated cryptographically on your machine.</p>
+          <a href="#download" class="btn btn-primary" style="margin-top: 16px;">Get Pro</a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== GETTING STARTED ========== -->
+  <section class="getting-started" id="download">
+    <div class="container">
+      <div class="getting-started__header animate-on-scroll">
+        <span class="section-label">Get Started</span>
+        <div class="stripe-accent"></div>
+        <h2 class="section-title" data-text="Up and Running in 60 Seconds">Up and Running<br>in 60 Seconds</h2>
+      </div>
+
+      <div class="getting-started__steps stagger-children">
+        <div class="start-step animate-on-scroll">
+          <div class="start-step__number">01</div>
+          <h3>Download</h3>
+          <p>Grab KeystrokeApp.exe from the <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/releases" target="_blank" rel="noopener" style="color: var(--terminal); border-bottom: 2px solid var(--terminal);">Releases page on GitLab</a>. Single file, no installer required. Or use the MSI installer if you prefer. Self-contained &mdash; no .NET runtime needed.</p>
+        </div>
+        <div class="start-step animate-on-scroll">
+          <div class="start-step__number">02</div>
+          <h3>Add an API Key</h3>
+          <p>The onboarding wizard walks you through it. A free Google Gemini key works great. Or install Ollama for fully local predictions &mdash; no key needed at all.</p>
+        </div>
+        <div class="start-step animate-on-scroll">
+          <div class="start-step__number">03</div>
+          <h3>Start Typing</h3>
+          <p>Keystroke runs in the system tray. Suggestions appear near your cursor as you type. Tab to accept, keep typing to ignore. That's it.</p>
+        </div>
+      </div>
+
+      <div class="shortcuts-block animate-on-scroll">
+        <h3>Keyboard Shortcuts</h3>
+        <table class="shortcuts-table">
+          <tr>
+            <td>Tab</td>
+            <td>Accept full suggestion</td>
+          </tr>
+          <tr>
+            <td>Shift+Tab</td>
+            <td>Accept next word</td>
+          </tr>
+          <tr>
+            <td>Ctrl+Right</td>
+            <td>Accept next word (alt)</td>
+          </tr>
+          <tr>
+            <td>Ctrl+Down</td>
+            <td>Next alternative</td>
+          </tr>
+          <tr>
+            <td>Ctrl+Up</td>
+            <td>Previous alternative</td>
+          </tr>
+          <tr>
+            <td>Esc</td>
+            <td>Dismiss suggestion</td>
+          </tr>
+          <tr>
+            <td>Ctrl+Shift+K</td>
+            <td>Toggle Keystroke on/off globally</td>
+          </tr>
+        </table>
+      </div>
+
+      <p class="requirements animate-on-scroll">
+        <strong>Requirements:</strong> Windows 10 (build 19041+) or Windows 11. An API key for one cloud engine, or Ollama for local. Built with .NET 8 &amp; WPF &mdash; native Windows performance, no Electron.
+      </p>
+
+      <div class="download-cta animate-on-scroll">
+        <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/releases" target="_blank" rel="noopener" class="btn btn-primary btn-large">Download Keystroke</a>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer__inner">
+        <div class="footer__logo">KEYSTROKE</div>
+        <div class="footer__links">
+          <a href="#privacy">Privacy</a>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke" target="_blank" rel="noopener">Source Code</a>
+          <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/releases" target="_blank" rel="noopener">Releases</a>
+          <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer__right">
+          Built by Nick Kessler &middot; MIT License
+        </div>
+      </div>
+      <div class="footer__tagline">
+        // zero telemetry. zero tracking. zero accounts. your words stay yours.
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
