@@ -1,45 +1,21 @@
 using System.Diagnostics;
-using System.IO;
-using System.Text.Json;
 
 namespace KeystrokeApp.Services;
 
 public sealed class LearningRepository
 {
-    private readonly string _legacyPath;
-    private readonly string _eventPath;
-    private readonly string _legacyEventPath;
-    private readonly ContextFingerprintService _fingerprints;
+    private readonly LearningDatabase? _database;
     private readonly LearningContextPreferencesService _preferences;
     private readonly object _lock = new();
     private LearningCorpusSnapshot _snapshot = new();
-    private long _legacySize;
-    private long _eventSize;
-    private long _legacyEventSize;
-    private long _preferencesSize;
-    private DateTime _legacyWriteUtc;
-    private DateTime _eventWriteUtc;
-    private DateTime _legacyEventWriteUtc;
-    private DateTime _preferencesWriteUtc;
+    private long _lastWriteVersion = -1;
 
     public LearningRepository(
+        LearningDatabase? database = null,
         ContextFingerprintService? fingerprints = null,
-        LearningContextPreferencesService? preferences = null,
-        string? legacyPath = null,
-        string? eventPath = null,
-        string? legacyEventPath = null)
+        LearningContextPreferencesService? preferences = null)
     {
-        var appData = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Keystroke");
-
-        _legacyPath = legacyPath ?? Path.Combine(appData, "completions.jsonl");
-        _eventPath = eventPath ?? Path.Combine(appData, "tracking.jsonl");
-        var eventDirectory = Path.GetDirectoryName(_eventPath);
-        _legacyEventPath = legacyEventPath ?? Path.Combine(
-            string.IsNullOrWhiteSpace(eventDirectory) ? appData : eventDirectory,
-            "learning-events.v2.jsonl");
-        _fingerprints = fingerprints ?? new ContextFingerprintService();
+        _database = database;
         _preferences = preferences ?? new LearningContextPreferencesService();
     }
 
@@ -58,11 +34,8 @@ public sealed class LearningRepository
     {
         var allPositives = new List<LearningEvidence>();
         var allNegatives = new List<LearningEvidence>();
-        var eventDualWriteIndex = new Dictionary<string, List<DateTime>>(StringComparer.OrdinalIgnoreCase);
-        int dedupedLegacyCount = 0;
 
-        LoadEventEvidence(allPositives, allNegatives, eventDualWriteIndex);
-        LoadLegacyEvidence(allPositives, allNegatives, eventDualWriteIndex, ref dedupedLegacyCount);
+        LoadEvidence(allPositives, allNegatives);
 
         var preferences = _preferences.GetSnapshot(forceRefresh: true);
         var contexts = BuildContextSummaries(allPositives, allNegatives, preferences);
@@ -87,17 +60,99 @@ public sealed class LearningRepository
                 .FirstOrDefault(),
             PinnedContextKeys = preferences.PinnedContextKeys,
             DisabledContextKeys = preferences.DisabledContextKeys,
-            LegacyEvidenceCount = allPositives.Count(e => e.SourceType == LearningSourceType.LegacyAccepted) +
-                allNegatives.Count(e => e.SourceType == LearningSourceType.LegacyDismissed),
-            EventEvidenceCount = allPositives.Count(e => e.SourceType != LearningSourceType.LegacyAccepted) +
-                allNegatives.Count(e => e.SourceType != LearningSourceType.LegacyDismissed),
-            DedupedLegacyCount = dedupedLegacyCount
+            EventEvidenceCount = allPositives.Count + allNegatives.Count
         };
 
         lock (_lock)
         {
             _snapshot = snapshot;
         }
+    }
+
+    private void LoadEvidence(List<LearningEvidence> positives, List<LearningEvidence> negatives)
+    {
+        if (_database == null) return;
+
+        var records = _database.GetAllEvents();
+
+        // Build set of untouched keys for dedup (same logic as before)
+        var untouchedKeys = records
+            .Where(r => r.EventType == "accepted_text_untouched")
+            .Select(BuildEventIdentityKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in records)
+        {
+            // Skip full_accept if an untouched confirmation exists for the same suggestion
+            if (entry.EventType == "suggestion_full_accept" &&
+                untouchedKeys.Contains(BuildEventIdentityKey(entry)))
+            {
+                continue;
+            }
+
+            var completion = entry.EventType switch
+            {
+                "manual_continuation_committed" => entry.UserWrittenText,
+                "accepted_text_untouched" => entry.AcceptedText,
+                "suggestion_full_accept" => entry.AcceptedText,
+                "suggestion_partial_accept" => entry.AcceptedText,
+                "suggestion_dismiss" => entry.ShownCompletion,
+                "suggestion_typed_past" => entry.ShownCompletion,
+                _ => ""
+            };
+
+            if (string.IsNullOrWhiteSpace(completion))
+                continue;
+
+            var evidence = new LearningEvidence
+            {
+                TimestampUtc = entry.TimestampUtc,
+                Prefix = entry.TypedPrefix ?? "",
+                Completion = completion,
+                ProcessName = entry.ProcessName ?? "",
+                Category = entry.Category,
+                SafeContextLabel = entry.SafeContextLabel,
+                ProcessKey = entry.ContextKeys.ProcessKey,
+                WindowKey = entry.ContextKeys.WindowKey,
+                SubcontextKey = entry.ContextKeys.SubcontextKey,
+                ProcessLabel = entry.ContextKeys.ProcessLabel,
+                WindowLabel = entry.ContextKeys.WindowLabel,
+                SubcontextLabel = entry.ContextKeys.SubcontextLabel,
+                QualityScore = entry.QualityScore,
+                SourceWeight = entry.SourceWeight,
+                IsNegative = entry.EventType is "suggestion_dismiss" or "suggestion_typed_past",
+                WasUntouched = entry.EventType == "accepted_text_untouched" || entry.UntouchedForMs > 0,
+                SourceType = entry.EventType switch
+                {
+                    "manual_continuation_committed" => LearningSourceType.NativeWriting,
+                    "accepted_text_untouched" => LearningSourceType.AssistAcceptedUntouched,
+                    "suggestion_partial_accept" => LearningSourceType.AssistPartial,
+                    "suggestion_typed_past" => LearningSourceType.TypedPast,
+                    "suggestion_dismiss" => LearningSourceType.Dismissed,
+                    _ => LearningSourceType.AssistAccepted
+                },
+                ContextConfidence = entry.Confidence
+            };
+
+            if (evidence.IsNegative)
+                negatives.Add(evidence);
+            else if (evidence.Completion.Length >= 3)
+                positives.Add(evidence);
+        }
+    }
+
+    private bool HasChanged()
+    {
+        if (_database == null) return false;
+
+        var currentVersion = _database.WriteVersion;
+        if (currentVersion != _lastWriteVersion)
+        {
+            _lastWriteVersion = currentVersion;
+            return true;
+        }
+
+        return false;
     }
 
     private Dictionary<string, LearningContextSummary> BuildContextSummaries(
@@ -182,262 +237,6 @@ public sealed class LearningRepository
             .ToDictionary(c => c.ContextKey, c => c);
     }
 
-    private bool HasChanged()
-    {
-        var legacyChanged = HasFileChanged(_legacyPath, ref _legacySize, ref _legacyWriteUtc);
-        var eventChanged = HasFileChanged(_eventPath, ref _eventSize, ref _eventWriteUtc);
-        var legacyEventChanged = HasFileChanged(_legacyEventPath, ref _legacyEventSize, ref _legacyEventWriteUtc);
-        var preferencesPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Keystroke",
-            "learning-context-preferences.json");
-        var preferenceChanged = HasFileChanged(preferencesPath, ref _preferencesSize, ref _preferencesWriteUtc);
-        return legacyChanged || eventChanged || legacyEventChanged || preferenceChanged;
-    }
-
-    private static bool HasFileChanged(string path, ref long previousSize, ref DateTime previousWriteUtc)
-    {
-        if (!File.Exists(path))
-        {
-            var changed = previousSize != 0 || previousWriteUtc != DateTime.MinValue;
-            previousSize = 0;
-            previousWriteUtc = DateTime.MinValue;
-            return changed;
-        }
-
-        var info = new FileInfo(path);
-        if (info.Length != previousSize || info.LastWriteTimeUtc != previousWriteUtc)
-        {
-            previousSize = info.Length;
-            previousWriteUtc = info.LastWriteTimeUtc;
-            return true;
-        }
-
-        return false;
-    }
-
-    private void LoadLegacyEvidence(
-        List<LearningEvidence> positives,
-        List<LearningEvidence> negatives,
-        Dictionary<string, List<DateTime>> dualWriteIndex,
-        ref int dedupedLegacyCount)
-    {
-        if (!File.Exists(_legacyPath))
-            return;
-
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        foreach (var line in File.ReadLines(_legacyPath))
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            try
-            {
-                var entry = JsonSerializer.Deserialize<LegacyCompletionRecord>(line, options);
-                if (entry == null || string.IsNullOrWhiteSpace(entry.Completion))
-                    continue;
-
-                var fp = _fingerprints.Create(entry.App, entry.Window);
-                var evidence = new LearningEvidence
-                {
-                    TimestampUtc = entry.Timestamp,
-                    Prefix = entry.Prefix ?? "",
-                    Completion = entry.Completion ?? "",
-                    ProcessName = entry.App ?? "",
-                    Category = string.IsNullOrWhiteSpace(entry.Category) ? fp.Category : entry.Category,
-                    SafeContextLabel = fp.SafeContextLabel,
-                    ProcessKey = fp.ProcessKey,
-                    WindowKey = fp.WindowKey,
-                    SubcontextKey = fp.SubcontextKey,
-                    ProcessLabel = fp.ProcessLabel,
-                    WindowLabel = fp.WindowLabel,
-                    SubcontextLabel = fp.SubcontextLabel,
-                    QualityScore = entry.QualityScore <= 0 ? 0.5f : entry.QualityScore,
-                    SourceWeight = entry.Action == "accepted"
-                        ? (entry.EditedAfter ? 0.35f : 0.5f)
-                        : 1.0f,
-                    IsNegative = entry.Action == "dismissed",
-                    SourceType = entry.Action == "dismissed"
-                        ? LearningSourceType.LegacyDismissed
-                        : LearningSourceType.LegacyAccepted,
-                    WasUntouched = entry.Action == "accepted" && !entry.EditedAfter,
-                    ContextConfidence = fp.Confidence
-                };
-
-                if (IsCoveredByEvent(evidence, dualWriteIndex))
-                {
-                    dedupedLegacyCount++;
-                    continue;
-                }
-
-                if (evidence.IsNegative)
-                    negatives.Add(evidence);
-                else if (evidence.Completion.Length >= 3)
-                    positives.Add(evidence);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[LearningRepo] Skipping malformed legacy line: {ex.Message}");
-            }
-        }
-    }
-
-    private void LoadEventEvidence(
-        List<LearningEvidence> positives,
-        List<LearningEvidence> negatives,
-        Dictionary<string, List<DateTime>> dualWriteIndex)
-    {
-        LoadEventEvidenceFromPath(_eventPath, positives, negatives, dualWriteIndex);
-
-        if (!string.Equals(_legacyEventPath, _eventPath, StringComparison.OrdinalIgnoreCase))
-            LoadEventEvidenceFromPath(_legacyEventPath, positives, negatives, dualWriteIndex);
-    }
-
-    private void LoadEventEvidenceFromPath(
-        string path,
-        List<LearningEvidence> positives,
-        List<LearningEvidence> negatives,
-        Dictionary<string, List<DateTime>> dualWriteIndex)
-    {
-        if (!File.Exists(path))
-            return;
-
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var records = new List<LearningEventRecord>();
-        foreach (var line in File.ReadLines(path))
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            try
-            {
-                var entry = JsonSerializer.Deserialize<LearningEventRecord>(line, options);
-                if (entry == null)
-                    continue;
-                records.Add(entry);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[LearningRepo] Skipping malformed event line from {path}: {ex.Message}");
-            }
-        }
-
-        var untouchedKeys = records
-            .Where(r => r.EventType == "accepted_text_untouched")
-            .Select(BuildEventIdentityKey)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in records)
-        {
-            if (entry.EventType == "suggestion_full_accept" &&
-                untouchedKeys.Contains(BuildEventIdentityKey(entry)))
-            {
-                continue;
-            }
-
-            var completion = entry.EventType switch
-            {
-                "manual_continuation_committed" => entry.UserWrittenText,
-                "accepted_text_untouched" => entry.AcceptedText,
-                "suggestion_full_accept" => entry.AcceptedText,
-                "suggestion_partial_accept" => entry.AcceptedText,
-                "suggestion_dismiss" => entry.ShownCompletion,
-                "suggestion_typed_past" => entry.ShownCompletion,
-                _ => ""
-            };
-
-            if (string.IsNullOrWhiteSpace(completion))
-                continue;
-
-            var evidence = new LearningEvidence
-            {
-                TimestampUtc = entry.TimestampUtc,
-                Prefix = entry.TypedPrefix ?? "",
-                Completion = completion,
-                ProcessName = entry.ProcessName ?? "",
-                Category = entry.Category,
-                SafeContextLabel = entry.SafeContextLabel,
-                ProcessKey = entry.ContextKeys.ProcessKey,
-                WindowKey = entry.ContextKeys.WindowKey,
-                SubcontextKey = entry.ContextKeys.SubcontextKey,
-                ProcessLabel = entry.ContextKeys.ProcessLabel,
-                WindowLabel = entry.ContextKeys.WindowLabel,
-                SubcontextLabel = entry.ContextKeys.SubcontextLabel,
-                QualityScore = entry.QualityScore,
-                SourceWeight = entry.SourceWeight,
-                IsNegative = entry.EventType is "suggestion_dismiss" or "suggestion_typed_past",
-                WasUntouched = entry.EventType == "accepted_text_untouched" || entry.UntouchedForMs > 0,
-                SourceType = entry.EventType switch
-                {
-                    "manual_continuation_committed" => LearningSourceType.NativeWriting,
-                    "accepted_text_untouched" => LearningSourceType.AssistAcceptedUntouched,
-                    "suggestion_partial_accept" => LearningSourceType.AssistPartial,
-                    "suggestion_typed_past" => LearningSourceType.TypedPast,
-                    "suggestion_dismiss" => LearningSourceType.Dismissed,
-                    _ => LearningSourceType.AssistAccepted
-                },
-                ContextConfidence = entry.Confidence
-            };
-
-            if (IsDualWriteCandidate(evidence))
-                AddDualWriteSignature(dualWriteIndex, evidence);
-
-            if (evidence.IsNegative)
-                negatives.Add(evidence);
-            else if (evidence.Completion.Length >= 3)
-                positives.Add(evidence);
-        }
-    }
-
-    private static bool IsCoveredByEvent(LearningEvidence evidence, Dictionary<string, List<DateTime>> dualWriteIndex)
-    {
-        if (!IsDualWriteCandidate(evidence))
-            return false;
-
-        var key = BuildDualWriteKey(evidence);
-        if (!dualWriteIndex.TryGetValue(key, out var timestamps))
-            return false;
-
-        return timestamps.Any(ts => Math.Abs((ts - evidence.TimestampUtc).TotalSeconds) <= 5);
-    }
-
-    private static bool IsDualWriteCandidate(LearningEvidence evidence)
-    {
-        return evidence.SourceType is
-            LearningSourceType.LegacyAccepted or
-            LearningSourceType.LegacyDismissed or
-            LearningSourceType.AssistAccepted or
-            LearningSourceType.AssistAcceptedUntouched or
-            LearningSourceType.Dismissed;
-    }
-
-    private static void AddDualWriteSignature(
-        Dictionary<string, List<DateTime>> dualWriteIndex,
-        LearningEvidence evidence)
-    {
-        var key = BuildDualWriteKey(evidence);
-        if (!dualWriteIndex.TryGetValue(key, out var times))
-        {
-            times = [];
-            dualWriteIndex[key] = times;
-        }
-
-        times.Add(evidence.TimestampUtc);
-    }
-
-    private static string BuildDualWriteKey(LearningEvidence evidence)
-    {
-        static string Normalize(string value) =>
-            value.Trim().Replace("\r", "").Replace("\n", " ").ToLowerInvariant();
-
-        return string.Join("|",
-            evidence.IsNegative ? "neg" : "pos",
-            Normalize(evidence.ProcessName),
-            Normalize(evidence.Category),
-            Normalize(evidence.Prefix),
-            Normalize(evidence.Completion));
-    }
-
     private static string BuildEventIdentityKey(LearningEventRecord record)
     {
         return string.Join("|",
@@ -446,21 +245,6 @@ public sealed class LearningRepository
             record.ContextKeys.SubcontextKey,
             record.TypedPrefix?.Trim() ?? "",
             record.AcceptedText?.Trim() ?? "");
-    }
-
-    private sealed class LegacyCompletionRecord
-    {
-        public DateTime Timestamp { get; set; }
-        public string Action { get; set; } = "";
-        public string Prefix { get; set; } = "";
-        public string Completion { get; set; } = "";
-        public string App { get; set; } = "";
-        public string Window { get; set; } = "";
-        public string Category { get; set; } = "";
-        public int LatencyMs { get; set; } = -1;
-        public int CycleDepth { get; set; }
-        public bool EditedAfter { get; set; }
-        public float QualityScore { get; set; } = 0.5f;
     }
 }
 
@@ -472,9 +256,7 @@ public sealed class LearningCorpusSnapshot
     public HashSet<string> PinnedContextKeys { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> DisabledContextKeys { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public DateTime? LastActivity { get; init; }
-    public int LegacyEvidenceCount { get; init; }
     public int EventEvidenceCount { get; init; }
-    public int DedupedLegacyCount { get; init; }
 }
 
 public sealed class LearningEvidence

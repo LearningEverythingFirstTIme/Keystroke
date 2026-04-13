@@ -736,20 +736,6 @@ public partial class SettingsWindow : Window
 
                 if (_config.LearningUiV2Enabled && stats.ContextSummaries.Count > 0)
                 {
-                    if (stats.LegacyEvidenceCount > 0)
-                    {
-                        ContextBreakdownPanel.Children.Add(new TextBlock
-                        {
-                            Text = stats.DedupedLegacyCount > 0
-                                ? $"Imported {stats.LegacyEvidenceCount} legacy learning records at lower confidence. Filtered {stats.DedupedLegacyCount} dual-written duplicates from the V2 rollout."
-                                : $"Imported {stats.LegacyEvidenceCount} legacy learning records at lower confidence while the V2 event log builds up.",
-                            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
-                            FontSize = 11,
-                            TextWrapping = TextWrapping.Wrap,
-                            Margin = new Thickness(0, 0, 0, 8)
-                        });
-                    }
-
                     foreach (var summary in stats.ContextSummaries)
                         ContextBreakdownPanel.Children.Add(CreateContextCard(summary));
                 }

@@ -43,7 +43,7 @@ public class AcceptanceLearningService
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");
         _logPath = Path.Combine(appData, "learning.log");
-        _dataFilePath = Path.Combine(appData, "tracking.jsonl");
+        _dataFilePath = Path.Combine(appData, "learning.db");
     }
 
     public List<FewShotExample> GetExamples(ContextSnapshot context, int count = 3)
@@ -190,9 +190,7 @@ public class AcceptanceLearningService
                 .ThenByDescending(c => c.LastActivity)
                 .Take(8)
                 .ToList(),
-            LegacyEvidenceCount = snapshot.LegacyEvidenceCount,
-            EventEvidenceCount = snapshot.EventEvidenceCount,
-            DedupedLegacyCount = snapshot.DedupedLegacyCount
+            EventEvidenceCount = snapshot.EventEvidenceCount
         };
     }
 
@@ -356,9 +354,7 @@ public class AcceptanceLearningService
         public string DataFilePath { get; set; } = "";
         public bool DataFileExists { get; set; }
         public long DataFileSize { get; set; }
-        public int LegacyEvidenceCount { get; set; }
         public int EventEvidenceCount { get; set; }
-        public int DedupedLegacyCount { get; set; }
         public List<LearningContextSummary> ContextSummaries { get; set; } = new();
     }
 

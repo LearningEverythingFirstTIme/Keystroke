@@ -16,8 +16,7 @@ namespace KeystrokeApp.Services;
 public class AnalyticsAggregationService
 {
     private readonly string _storePath;
-    private readonly string _trackingPath;
-    private readonly string _legacyPath;
+    private readonly LearningDatabase? _database;
     private readonly object _lock = new();
     private AnalyticsStore _store = new();
 
@@ -26,17 +25,15 @@ public class AnalyticsAggregationService
     private const int MaxScoreSnapshots = 90;
 
     public AnalyticsAggregationService(
-        string? storePath = null,
-        string? trackingPath = null,
-        string? legacyPath = null)
+        LearningDatabase? database = null,
+        string? storePath = null)
     {
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");
 
         _storePath = storePath ?? Path.Combine(appData, "analytics-daily.json");
-        _trackingPath = trackingPath ?? Path.Combine(appData, "tracking.jsonl");
-        _legacyPath = legacyPath ?? Path.Combine(appData, "completions.jsonl");
+        _database = database;
 
         LoadFromDisk();
     }
@@ -83,16 +80,24 @@ public class AnalyticsAggregationService
     {
         try
         {
-            var watermark = _store.LastAggregatedEventTimestamp;
-            var newEvents = ParseEventsAfter(_trackingPath, watermark, isLegacy: false);
+            if (_database == null) return;
 
-            // On first run with no watermark, also pull legacy data
-            if (watermark == DateTime.MinValue)
+            var watermark = _store.LastAggregatedEventTimestamp;
+            var records = _database.GetEventsAfter(watermark);
+            var newEvents = records.Select(entry => new RawEvent
             {
-                var legacyEvents = ParseEventsAfter(_legacyPath, DateTime.MinValue, isLegacy: true);
-                // Merge, dedup by rough timestamp proximity
-                newEvents = DeduplicateLegacy(newEvents, legacyEvents);
-            }
+                TimestampUtc = entry.TimestampUtc,
+                TimestampLocal = entry.TimestampUtc.ToLocalTime(),
+                EventType = entry.EventType,
+                Category = entry.Category,
+                ContextKey = entry.ContextKeys.SubcontextKey,
+                ContextLabel = entry.ContextKeys.SubcontextLabel,
+                AcceptedText = entry.AcceptedText,
+                UserWrittenText = entry.UserWrittenText,
+                QualityScore = entry.QualityScore,
+                LatencyMs = entry.LatencyMs,
+                CorrectionType = entry.CorrectionType
+            }).ToList();
 
             if (newEvents.Count == 0)
                 return;
@@ -135,88 +140,8 @@ public class AnalyticsAggregationService
         public string CorrectionType { get; init; } = "";
     }
 
-    private static List<RawEvent> ParseEventsAfter(string path, DateTime watermark, bool isLegacy)
-    {
-        var events = new List<RawEvent>();
-        if (!File.Exists(path))
-            return events;
-
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        foreach (var line in File.ReadLines(path))
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            try
-            {
-                if (isLegacy)
-                {
-                    var entry = JsonSerializer.Deserialize<LegacyEventLine>(line, options);
-                    if (entry == null || entry.Timestamp <= watermark)
-                        continue;
-
-                    events.Add(new RawEvent
-                    {
-                        TimestampUtc = entry.Timestamp,
-                        TimestampLocal = entry.Timestamp.ToLocalTime(),
-                        EventType = entry.Action == "accepted" ? "suggestion_full_accept"
-                                  : entry.Action == "dismissed" ? "suggestion_dismiss"
-                                  : "",
-                        Category = entry.Category ?? "",
-                        AcceptedText = entry.Completion ?? "",
-                        QualityScore = entry.QualityScore > 0 ? entry.QualityScore : 0.5f,
-                        LatencyMs = entry.LatencyMs
-                    });
-                }
-                else
-                {
-                    var entry = JsonSerializer.Deserialize<LearningEventRecord>(line, options);
-                    if (entry == null || entry.TimestampUtc <= watermark)
-                        continue;
-
-                    events.Add(new RawEvent
-                    {
-                        TimestampUtc = entry.TimestampUtc,
-                        TimestampLocal = entry.TimestampUtc.ToLocalTime(),
-                        EventType = entry.EventType,
-                        Category = entry.Category,
-                        ContextKey = entry.ContextKeys.SubcontextKey,
-                        ContextLabel = entry.ContextKeys.SubcontextLabel,
-                        AcceptedText = entry.AcceptedText,
-                        UserWrittenText = entry.UserWrittenText,
-                        QualityScore = entry.QualityScore,
-                        LatencyMs = entry.LatencyMs,
-                        CorrectionType = entry.CorrectionType
-                    });
-                }
-            }
-            catch { /* skip malformed lines */ }
-        }
-
-        return events;
-    }
-
-    private static List<RawEvent> DeduplicateLegacy(List<RawEvent> v2Events, List<RawEvent> legacyEvents)
-    {
-        // Build a set of V2 timestamps for quick dedup
-        var v2Timestamps = new HashSet<long>(v2Events.Select(e => e.TimestampUtc.Ticks / TimeSpan.TicksPerSecond));
-        var dedupedLegacy = legacyEvents
-            .Where(e => !v2Timestamps.Contains(e.TimestampUtc.Ticks / TimeSpan.TicksPerSecond))
-            .ToList();
-
-        return v2Events.Concat(dedupedLegacy).OrderBy(e => e.TimestampUtc).ToList();
-    }
-
-    // Minimal model for reading legacy completions.jsonl lines
-    private sealed class LegacyEventLine
-    {
-        public DateTime Timestamp { get; set; }
-        public string Action { get; set; } = "";
-        public string Completion { get; set; } = "";
-        public string Category { get; set; } = "";
-        public float QualityScore { get; set; }
-        public int LatencyMs { get; set; }
-    }
+    // ParseEventsAfter, DeduplicateLegacy, and LegacyEventLine removed —
+    // events are now read from SQLite via LearningDatabase.GetEventsAfter().
 
     // ── Core aggregation ──────────────────────────────────────────────────
 

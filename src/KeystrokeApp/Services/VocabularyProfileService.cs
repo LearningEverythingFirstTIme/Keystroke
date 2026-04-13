@@ -50,13 +50,13 @@ public class VocabularyProfileService
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public VocabularyProfileService()
+    public VocabularyProfileService(LearningDatabase? database = null)
     {
         var appData     = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Keystroke");
         _profilePath    = Path.Combine(appData, "vocabulary-profile.json");
         _dataPath   = Path.Combine(appData, "completions.jsonl");
         _logPath        = Path.Combine(appData, "vocabulary-profile.log");
-        _repository     = new LearningRepository();
+        _repository     = new LearningRepository(database);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────

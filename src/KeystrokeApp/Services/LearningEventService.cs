@@ -6,22 +6,16 @@ namespace KeystrokeApp.Services;
 
 public sealed class LearningEventService
 {
-    private readonly string _dataPath;
+    private readonly LearningDatabase? _database;
     private readonly LearningContextPreferencesService _preferences;
-    internal readonly object WriteLock = new();
 
     public LearningEventService(
-        string? dataPath = null,
+        LearningDatabase? database = null,
         LearningContextPreferencesService? preferences = null)
     {
-        _dataPath = dataPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Keystroke",
-            "tracking.jsonl");
+        _database = database;
         _preferences = preferences ?? new LearningContextPreferencesService();
     }
-
-    public string DataPath => _dataPath;
 
     public void Append(LearningEventRecord record)
     {
@@ -29,8 +23,6 @@ public sealed class LearningEventService
         {
             if (_preferences.IsDisabled(record.ContextKeys.SubcontextKey))
                 return;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(_dataPath)!);
 
             var sanitized = record with
             {
@@ -40,43 +32,12 @@ public sealed class LearningEventService
                 UserWrittenText = PiiFilter.Scrub(record.UserWrittenText) ?? ""
             };
 
-            var json = JsonSerializer.Serialize(sanitized);
-            lock (WriteLock)
-            {
-                File.AppendAllText(_dataPath, json + Environment.NewLine);
-            }
+            _database?.InsertEvent(sanitized);
         }
         catch (Exception ex)
         {
             // Learning events must never interrupt typing or prediction.
             Debug.WriteLine($"[LearningEvent] Append failed: {ex.Message}");
-        }
-    }
-
-    public void PruneIfNeeded(int maxLines = 4000)
-    {
-        try
-        {
-            // Hold WriteLock for the entire read-modify-write so that
-            // concurrent Append() calls can't insert lines between the
-            // read and the atomic rename (which would silently lose them).
-            lock (WriteLock)
-            {
-                if (!File.Exists(_dataPath))
-                    return;
-
-                var lines = File.ReadAllLines(_dataPath);
-                if (lines.Length <= maxLines)
-                    return;
-
-                var tempPath = _dataPath + ".tmp";
-                File.WriteAllLines(tempPath, lines[^maxLines..]);
-                File.Move(tempPath, _dataPath, overwrite: true);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[LearningEvent] Prune failed: {ex.Message}");
         }
     }
 }

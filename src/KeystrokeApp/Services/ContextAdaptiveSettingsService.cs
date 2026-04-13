@@ -27,8 +27,8 @@ public class ContextAdaptiveSettingsService
 
     // ── File paths ────────────────────────────────────────────────────────────
     private readonly string _settingsPath;
-    private readonly string _dataPath;
     private readonly string _logPath;
+    private readonly LearningDatabase? _database;
 
     // ── State ─────────────────────────────────────────────────────────────────
     private AdaptiveSettingsData? _settings;
@@ -40,14 +40,14 @@ public class ContextAdaptiveSettingsService
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public ContextAdaptiveSettingsService()
+    public ContextAdaptiveSettingsService(LearningDatabase? database = null)
     {
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");
         _settingsPath = Path.Combine(appData, "context-adaptive-settings.json");
-        _dataPath = Path.Combine(appData, "tracking.jsonl");
         _logPath = Path.Combine(appData, "context-adaptive.log");
+        _database = database;
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -276,55 +276,41 @@ public class ContextAdaptiveSettingsService
 
     private List<AdaptiveEvent> LoadEvents()
     {
+        if (_database == null) return [];
+
+        var records = _database.GetAcceptDismissEvents();
         var events = new List<AdaptiveEvent>();
-        if (!File.Exists(_dataPath)) return events;
 
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        try
+        foreach (var record in records)
         {
-            foreach (var line in File.ReadLines(_dataPath))
+            bool isAccepted = record.EventType is
+                "suggestion_full_accept" or
+                "accepted_text_untouched" or
+                "suggestion_partial_accept";
+            bool isDismissed = record.EventType is
+                "suggestion_dismiss" or
+                "suggestion_typed_past";
+
+            // Skip the bonus "accepted_text_untouched" events that duplicate
+            // "suggestion_full_accept" — count each acceptance only once.
+            if (record.EventType == "accepted_text_untouched")
+                continue;
+
+            events.Add(new AdaptiveEvent
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                try
-                {
-                    var record = JsonSerializer.Deserialize<LearningEventRecord>(line, options);
-                    if (record == null) continue;
-
-                    // Only care about events with accept/dismiss outcome.
-                    bool isAccepted = record.EventType is
-                        "suggestion_full_accept" or
-                        "accepted_text_untouched" or
-                        "suggestion_partial_accept";
-                    bool isDismissed = record.EventType is
-                        "suggestion_dismiss" or
-                        "suggestion_typed_past";
-
-                    if (!isAccepted && !isDismissed) continue;
-
-                    // Skip the bonus "accepted_text_untouched" events that duplicate
-                    // "suggestion_full_accept" — count each acceptance only once.
-                    if (record.EventType == "accepted_text_untouched")
-                        continue;
-
-                    events.Add(new AdaptiveEvent
-                    {
-                        Timestamp = record.TimestampUtc,
-                        Category = record.Category,
-                        SubcontextKey = record.ContextKeys.SubcontextKey,
-                        ContextLabel = record.ContextKeys.SubcontextLabel,
-                        Completion = isAccepted
-                            ? (record.AcceptedText ?? record.ShownCompletion ?? "")
-                            : (record.ShownCompletion ?? ""),
-                        IsAccepted = isAccepted,
-                        IsDismissed = isDismissed,
-                        LatencyMs = record.LatencyMs,
-                        QualityScore = record.QualityScore
-                    });
-                }
-                catch (JsonException) { /* skip malformed */ }
-            }
+                Timestamp = record.TimestampUtc,
+                Category = record.Category,
+                SubcontextKey = record.ContextKeys.SubcontextKey,
+                ContextLabel = record.ContextKeys.SubcontextLabel,
+                Completion = isAccepted
+                    ? (record.AcceptedText ?? record.ShownCompletion ?? "")
+                    : (record.ShownCompletion ?? ""),
+                IsAccepted = isAccepted,
+                IsDismissed = isDismissed,
+                LatencyMs = record.LatencyMs,
+                QualityScore = record.QualityScore
+            });
         }
-        catch (IOException ex) { Log($"Read error: {ex.Message}"); }
 
         return events;
     }

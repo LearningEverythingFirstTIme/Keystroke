@@ -48,7 +48,7 @@ public class StyleProfileService
         catch (IOException) { }
     }
 
-    public StyleProfileService()
+    public StyleProfileService(LearningDatabase? database = null)
     {
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -56,7 +56,7 @@ public class StyleProfileService
         _profilePath  = Path.Combine(appData, "style-profile.json");
         _dataPath = Path.Combine(appData, "completions.jsonl");
         _logPath      = Path.Combine(appData, "style-profile.log");
-        _repository = new LearningRepository();
+        _repository = new LearningRepository(database);
     }
 
     public void Start(int interval)

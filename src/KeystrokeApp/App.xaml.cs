@@ -50,15 +50,16 @@ public partial class App : Application
     private RollingContextService    _rollingContext   = new(maxChars: 2000, timeoutMinutes: 5);
     private AcceptanceLearningService  _learningService;
     private readonly ContextFingerprintService _contextFingerprintService = new();
+    private readonly LearningDatabase _learningDatabase;
     private readonly LearningEventService _learningEventService;
     private readonly LearningCaptureCoordinator _learningCaptureCoordinator;
     private readonly OutboundPrivacyService _outboundPrivacy = new();
-    private StyleProfileService        _styleProfileService       = new();
-    private VocabularyProfileService   _vocabularyProfileService  = new();
-    private CorrectionPatternService   _correctionPatternService  = new();
-    private ContextAdaptiveSettingsService _contextAdaptiveSettingsService = new();
+    private StyleProfileService        _styleProfileService;
+    private VocabularyProfileService   _vocabularyProfileService;
+    private CorrectionPatternService   _correctionPatternService;
+    private ContextAdaptiveSettingsService _contextAdaptiveSettingsService;
     private LearningScoreService       _learningScoreService      = new();
-    private AnalyticsAggregationService _analyticsService          = new();
+    private AnalyticsAggregationService _analyticsService;
     private volatile bool            _isEnabled        = true;
     private int                      _sessionAcceptCount;  // Access via Interlocked only
 
@@ -122,19 +123,26 @@ public partial class App : Application
 
     public App()
     {
+        _learningDatabase = new LearningDatabase();
         _acceptanceTracker = new CompletionFeedbackService(
+            database: _learningDatabase,
             preferences: _contextPreferencesService,
             fingerprints: _contextFingerprintService);
         _learningEventService = new LearningEventService(
+            database: _learningDatabase,
             preferences: _contextPreferencesService);
         _contextMaintenanceService = new LearningContextMaintenanceService(
-            fingerprints: _contextFingerprintService,
-            eventWriteLock: _learningEventService.WriteLock,
-            legacyWriteLock: _acceptanceTracker.WriteLock);
+            database: _learningDatabase,
+            fingerprints: _contextFingerprintService);
         _learningService = new AcceptanceLearningService(
-            new LearningRepository(_contextFingerprintService, _contextPreferencesService),
+            new LearningRepository(_learningDatabase, _contextFingerprintService, _contextPreferencesService),
             new LearningRetrievalService(new LearningReranker()),
             _contextPreferencesService);
+        _styleProfileService = new StyleProfileService(database: _learningDatabase);
+        _vocabularyProfileService = new VocabularyProfileService(database: _learningDatabase);
+        _correctionPatternService = new CorrectionPatternService(database: _learningDatabase);
+        _contextAdaptiveSettingsService = new ContextAdaptiveSettingsService(database: _learningDatabase);
+        _analyticsService = new AnalyticsAggregationService(database: _learningDatabase);
         _textInjector = new ClipboardTextInjector(new InputSimulator(), _reliabilityTrace);
         _learningCaptureCoordinator = new LearningCaptureCoordinator(_learningEventService);
         _reliabilityTrace.EventRecorded += evt => LogToDebug(
@@ -182,9 +190,15 @@ public partial class App : Application
                 ["licenseTier"] = _isProTier ? "Pro" : "Free"
             });
 
-            // Prune completions file if it's grown too large
-            _acceptanceTracker.PruneIfNeeded(maxLines: 2000);
-            _learningEventService.PruneIfNeeded(maxLines: 4000);
+            // Initialize SQLite learning database + migrate JSONL if first run
+            _learningDatabase.EnsureCreated();
+            if (_learningDatabase.NeedsMigration())
+            {
+                Log("Migrating learning data from JSONL to SQLite...");
+                _learningDatabase.ImportFromJsonl(fingerprints: _contextFingerprintService);
+                Log($"Migration complete: {_learningDatabase.GetEventCount()} events imported");
+            }
+            _ = Task.Run(() => _learningDatabase.Prune(maxRows: 5000));
 
             // Sub-Phase D: wire LearningScoreService to the learning stack.
             // It holds references to all three services so Recompute() can pull
@@ -292,6 +306,7 @@ public partial class App : Application
         Log("App exiting...");
         DeactivateRuntime();
         _postEditDetector.Dispose();
+        _learningDatabase.Dispose();
         _trayIcon?.Dispose();
         _suspendTimer?.Dispose();
         _geminiApiKeyValidationService.Dispose();

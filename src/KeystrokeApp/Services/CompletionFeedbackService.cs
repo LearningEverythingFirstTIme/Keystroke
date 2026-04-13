@@ -1,32 +1,28 @@
 using System;
 using System.IO;
-using System.Text.Json;
 
 namespace KeystrokeApp.Services;
 
 /// <summary>
 /// Tracks prediction acceptance/dismissal for the learning system.
-/// Writes structured JSONL to %AppData%/Keystroke/completions.jsonl.
+/// Writes structured events to the SQLite learning database.
 ///
-/// Sub-Phase A enrichment: accepted entries now carry latencyMs, cycleDepth,
+/// Sub-Phase A enrichment: accepted entries carry latencyMs, cycleDepth,
 /// editedAfter, and a derived qualityScore so the learning service can weight
 /// past evidence by how well it actually matched the user's intent.
 /// </summary>
 public class CompletionFeedbackService
 {
-    private readonly string _dataPath;
+    private readonly LearningDatabase? _database;
     private readonly LearningContextPreferencesService _preferences;
     private readonly ContextFingerprintService _fingerprints;
-    internal readonly object WriteLock = new();
 
     public CompletionFeedbackService(
-        string? dataPath = null,
+        LearningDatabase? database = null,
         LearningContextPreferencesService? preferences = null,
         ContextFingerprintService? fingerprints = null)
     {
-        _dataPath = dataPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Keystroke", "completions.jsonl");
+        _database = database;
         _preferences = preferences ?? new LearningContextPreferencesService();
         _fingerprints = fingerprints ?? new ContextFingerprintService();
     }
@@ -67,37 +63,7 @@ public class CompletionFeedbackService
 
     public void LogIgnored(string prefix, string completion, string processName, string windowTitle)
     {
-        WriteEntry("ignored", prefix, completion, processName, windowTitle,
-                   latencyMs: -1, cycleDepth: 0, editedAfter: false, qualityScore: 0f);
-    }
-
-    /// <summary>
-    /// If the completions file exceeds maxLines, rewrites it keeping only the most recent entries.
-    /// Call once at startup — keeps the file from growing unbounded over months of use.
-    /// </summary>
-    public void PruneIfNeeded(int maxLines = 2000)
-    {
-        try
-        {
-            // Hold WriteLock for the entire read-modify-write so that
-            // concurrent WriteEntry/Append calls can't insert lines
-            // between the read and the atomic rename.
-            lock (WriteLock)
-            {
-                if (!File.Exists(_dataPath))
-                    return;
-
-                var lines = File.ReadAllLines(_dataPath);
-                if (lines.Length <= maxLines)
-                    return;
-
-                var trimmed  = lines[^maxLines..];
-                var tempPath = _dataPath + ".tmp";
-                File.WriteAllLines(tempPath, trimmed);
-                File.Move(tempPath, _dataPath, overwrite: true);
-            }
-        }
-        catch (Exception) { /* Pruning failure is non-fatal */ }
+        // Ignored entries have no learning value — skip them.
     }
 
     // ── Quality score ─────────────────────────────────────────────────────────
@@ -147,30 +113,43 @@ public class CompletionFeedbackService
             if (_preferences.IsDisabled(fingerprint.SubcontextKey))
                 return;
 
-            Directory.CreateDirectory(Path.GetDirectoryName(_dataPath)!);
-
-            var entry = new
+            var eventType = action switch
             {
-                timestamp    = DateTime.UtcNow.ToString("o"),
-                action,
-                prefix       = PiiFilter.Scrub(prefix),
-                completion   = PiiFilter.Scrub(completion),
-                app          = processName,
-                window       = StripWindowDetail(windowTitle),
-                category     = fingerprint.Category,
-                // Sub-Phase A signal fields (always written; -1/0/false/0.5 for non-accepted entries)
-                latencyMs,
-                cycleDepth,
-                editedAfter,
-                qualityScore = MathF.Round(qualityScore, 3)
+                "accepted" => "suggestion_full_accept",
+                "dismissed" => "suggestion_dismiss",
+                _ => ""
+            };
+            if (string.IsNullOrEmpty(eventType)) return;
+
+            var record = new LearningEventRecord
+            {
+                TimestampUtc = DateTime.UtcNow,
+                EventType = eventType,
+                ProcessName = processName,
+                Category = fingerprint.Category,
+                SafeContextLabel = fingerprint.SafeContextLabel,
+                ContextKeys = new LearningEventContextKeys
+                {
+                    ProcessKey = fingerprint.ProcessKey,
+                    WindowKey = fingerprint.WindowKey,
+                    SubcontextKey = fingerprint.SubcontextKey,
+                    ProcessLabel = fingerprint.ProcessLabel,
+                    WindowLabel = fingerprint.WindowLabel,
+                    SubcontextLabel = fingerprint.SubcontextLabel
+                },
+                TypedPrefix = PiiFilter.Scrub(prefix) ?? "",
+                ShownCompletion = PiiFilter.Scrub(completion) ?? "",
+                AcceptedText = action == "accepted" ? (PiiFilter.Scrub(completion) ?? "") : "",
+                LatencyMs = latencyMs,
+                CycleDepth = cycleDepth,
+                EditedAfterAccept = editedAfter,
+                QualityScore = MathF.Round(qualityScore, 3),
+                SourceWeight = action == "accepted"
+                    ? (editedAfter ? 0.35f : 0.5f)
+                    : 1.0f
             };
 
-            var json = JsonSerializer.Serialize(entry);
-
-            lock (WriteLock)
-            {
-                File.AppendAllText(_dataPath, json + "\n");
-            }
+            _database?.InsertEvent(record);
         }
         catch (Exception) { /* Write failure is non-fatal */ }
     }

@@ -32,8 +32,8 @@ public class CorrectionPatternService
 
     // ── File paths ────────────────────────────────────────────────────────────
     private readonly string _patternPath;
-    private readonly string _dataPath;
     private readonly string _logPath;
+    private readonly LearningDatabase? _database;
 
     // ── State ─────────────────────────────────────────────────────────────────
     private CorrectionPatterns? _patterns;
@@ -45,14 +45,14 @@ public class CorrectionPatternService
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public CorrectionPatternService()
+    public CorrectionPatternService(LearningDatabase? database = null)
     {
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");
         _patternPath = Path.Combine(appData, "correction-patterns.json");
-        _dataPath = Path.Combine(appData, "tracking.jsonl");
         _logPath = Path.Combine(appData, "correction-patterns.log");
+        _database = database;
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -344,52 +344,31 @@ public class CorrectionPatternService
 
     private List<CorrectionEntry> LoadCorrectionEntries()
     {
+        if (_database == null) return [];
+
+        var records = _database.GetCorrectionEvents(MaxCorrectionEntries);
         var entries = new List<CorrectionEntry>();
-        if (!File.Exists(_dataPath)) return entries;
 
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        try
+        foreach (var record in records)
         {
-            foreach (var line in File.ReadLines(_dataPath))
+            if (ContaminationFilter.IsContaminated(record.DeletedSuffix) ||
+                ContaminationFilter.IsContaminated(record.CorrectedText))
+                continue;
+
+            entries.Add(new CorrectionEntry
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                try
-                {
-                    var record = JsonSerializer.Deserialize<LearningEventRecord>(line, options);
-                    if (record == null) continue;
-
-                    // Only process events with actual correction data.
-                    if (record.CorrectionBackspaces <= 0) continue;
-                    if (string.IsNullOrWhiteSpace(record.CorrectionType) ||
-                        record.CorrectionType == "none" ||
-                        record.CorrectionType == "minor") continue;
-
-                    if (ContaminationFilter.IsContaminated(record.DeletedSuffix) ||
-                        ContaminationFilter.IsContaminated(record.CorrectedText))
-                        continue;
-
-                    entries.Add(new CorrectionEntry
-                    {
-                        Timestamp = record.TimestampUtc,
-                        Category = record.Category,
-                        SubcontextKey = record.ContextKeys.SubcontextKey,
-                        ContextLabel = record.ContextKeys.SubcontextLabel,
-                        DeletedSuffix = record.DeletedSuffix,
-                        ReplacementText = record.CorrectedText,
-                        BackspaceCount = record.CorrectionBackspaces,
-                        CorrectionType = record.CorrectionType
-                    });
-                }
-                catch (JsonException) { /* skip malformed lines */ }
-            }
+                Timestamp = record.TimestampUtc,
+                Category = record.Category,
+                SubcontextKey = record.ContextKeys.SubcontextKey,
+                ContextLabel = record.ContextKeys.SubcontextLabel,
+                DeletedSuffix = record.DeletedSuffix,
+                ReplacementText = record.CorrectedText,
+                BackspaceCount = record.CorrectionBackspaces,
+                CorrectionType = record.CorrectionType
+            });
         }
-        catch (IOException ex) { Log($"Read error: {ex.Message}"); }
 
-        // Keep only the most recent corrections to avoid unbounded growth.
-        return entries
-            .OrderByDescending(e => e.Timestamp)
-            .Take(MaxCorrectionEntries)
-            .ToList();
+        return entries;
     }
 
     // ── Persistence ───────────────────────────────────────────────────────────
