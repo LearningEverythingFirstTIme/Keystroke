@@ -88,6 +88,7 @@ public partial class SettingsWindow : Window
 
     /// <summary>Fired immediately when the user picks a theme swatch.</summary>
     public event Action<string>? ThemeChanged;
+    public event Action? LicenseActivated;
 
     public SettingsWindow(
         AppConfig config,
@@ -2292,6 +2293,7 @@ public partial class SettingsWindow : Window
         LicenseValidationText.Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0xD0, 0x80));
         UpdateLicenseUi();
         RefreshUsageState();
+        LicenseActivated?.Invoke();
 
         // Show the Pro welcome walkthrough
         var welcome = new ProWelcomeWindow { Owner = this };

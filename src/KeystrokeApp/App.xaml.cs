@@ -221,7 +221,7 @@ public partial class App : Application
                 _analyticsService.RecordScoreSnapshot(category, score);
             };
 
-            if (_isProTier && _config.StyleProfileEnabled)
+            if (IsProfileLearningActive())
             {
                 _styleProfileService.Start(_config.StyleProfileInterval);
                 _vocabularyProfileService.Start(_config.StyleProfileInterval);
@@ -372,6 +372,7 @@ public partial class App : Application
         }
 
         DeactivateRuntime();
+        RefreshLicenseStatus();
 
         _predictionEngine = CreatePredictionEngine();
         _styleProfileService.Engine = _predictionEngine;
@@ -419,8 +420,7 @@ public partial class App : Application
         _contextAdaptiveSettingsService.CancelGeneration();
         _contextAdaptiveSettingsService.UpdateInterval(Math.Max(5, _config.StyleProfileInterval / 3));
 
-        RefreshLicenseStatus();
-        if (_isProTier && _config.StyleProfileEnabled)
+        if (IsProfileLearningActive())
         {
             _styleProfileService.Start(_config.StyleProfileInterval);
             _vocabularyProfileService.Start(_config.StyleProfileInterval);
@@ -529,11 +529,11 @@ public partial class App : Application
             baseEngine.LengthInstruction = _config.CompletionLengthInstruction;
             baseEngine.Temperature       = _config.Temperature;
             baseEngine.MaxOutputTokens   = _config.PresetMaxOutputTokens;
-            baseEngine.LearningService          = _isProTier ? _learningService : null;
-            baseEngine.StyleProfileService      = _isProTier && _config.StyleProfileEnabled ? _styleProfileService : null;
-            baseEngine.VocabularyProfileService = _isProTier && _config.StyleProfileEnabled ? _vocabularyProfileService : null;
-            baseEngine.CorrectionPatternService = _isProTier && _config.StyleProfileEnabled ? _correctionPatternService : null;
-            baseEngine.ContextAdaptiveSettingsService = _isProTier && _config.StyleProfileEnabled ? _contextAdaptiveSettingsService : null;
+            baseEngine.LearningService          = IsPersonalizedLearningActive() ? _learningService : null;
+            baseEngine.StyleProfileService      = IsProfileLearningActive() ? _styleProfileService : null;
+            baseEngine.VocabularyProfileService = IsProfileLearningActive() ? _vocabularyProfileService : null;
+            baseEngine.CorrectionPatternService = IsProfileLearningActive() ? _correctionPatternService : null;
+            baseEngine.ContextAdaptiveSettingsService = IsProfileLearningActive() ? _contextAdaptiveSettingsService : null;
         }
 
         // Ollama uses a fixed low temperature for local models
@@ -565,6 +565,7 @@ public partial class App : Application
                 _analyticsService);
             _settingsWindow.ThemeChanged += themeId =>
                 _suggestionPanel?.ApplyTheme(ThemeDefinitions.Get(themeId));
+            _settingsWindow.LicenseActivated += OnLicenseActivated;
             _settingsWindow.Closed += (s, e) =>
             {
                 _settingsWindow = null;
@@ -757,10 +758,10 @@ public partial class App : Application
             windowTitle,
             IsProcessEnabled(processName),
             _outboundPrivacy,
-            _isProTier ? _learningService : null,
-            _isProTier && _config.StyleProfileEnabled ? _styleProfileService : null,
-            _isProTier && _config.StyleProfileEnabled ? _vocabularyProfileService : null,
-            _isProTier && _config.StyleProfileEnabled ? _correctionPatternService : null,
+            IsPersonalizedLearningActive() ? _learningService : null,
+            IsProfileLearningActive() ? _styleProfileService : null,
+            IsProfileLearningActive() ? _vocabularyProfileService : null,
+            IsProfileLearningActive() ? _correctionPatternService : null,
             _ocrService?.CachedText,
             rollingContext);
     }
@@ -769,6 +770,19 @@ public partial class App : Application
 
     private void RefreshLicenseStatus()
         => _isProTier = LicenseService.IsPro(_config.LicenseKeyEncrypted);
+
+    private bool IsPersonalizedLearningActive()
+        => LearningRuntimeGate.IsPersonalizedLearningActive(_config, _isProTier);
+
+    private bool IsProfileLearningActive()
+        => LearningRuntimeGate.IsProfileLearningActive(_config, _isProTier);
+
+    private void OnLicenseActivated()
+    {
+        Log("License activated while Settings remained open. Refreshing runtime state.");
+        EnsureRuntimeStateFromConfig();
+        RefreshShellStatus();
+    }
 
     private bool IsPredictionBlockedByDailyLimit(string buffer)
     {

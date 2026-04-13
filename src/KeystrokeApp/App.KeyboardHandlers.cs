@@ -43,7 +43,7 @@ public partial class App
         _typingBuffer.AddChar(c);
         var currentBuffer = _typingBuffer.CurrentText;
 
-        if (_config.LearningV2Enabled)
+        if (IsPersonalizedLearningActive())
         {
             var context = CreateContextSnapshot(currentBuffer, processName, windowTitle);
             _learningCaptureCoordinator.OnBufferChanged(currentBuffer, context);
@@ -51,8 +51,7 @@ public partial class App
             if (_commitBoundaryChars.Contains(c))
             {
                 if (_learningCaptureCoordinator.OnManualCommit(currentBuffer, context, "punctuation") &&
-                    _isProTier &&
-                    _config.StyleProfileEnabled)
+                    IsProfileLearningActive())
                 {
                     _styleProfileService.OnAccepted();
                     _vocabularyProfileService.OnAccepted();
@@ -108,9 +107,10 @@ public partial class App
                         var dismissed = SuggestionAcceptance.GetRemainingCompletion(oldBuffer, fullSuggestion);
                         if (!string.IsNullOrEmpty(dismissed))
                         {
-                            _acceptanceTracker.LogDismissed(oldBuffer, dismissed, activeProcessName, activeWindowTitle);
+                            if (IsPersonalizedLearningActive())
+                                _acceptanceTracker.LogDismissed(oldBuffer, dismissed, activeProcessName, activeWindowTitle);
                             var dismissSnapshot = SnapshotActiveSuggestion();
-                            if (_config.LearningV2Enabled && dismissSnapshot.Context != null)
+                            if (IsPersonalizedLearningActive() && dismissSnapshot.Context != null)
                             {
                                 _learningCaptureCoordinator.OnDismiss(
                                     key == InputListenerService.SpecialKey.Enter ? "enter" : "escape",
@@ -123,12 +123,11 @@ public partial class App
                         }
                     }
 
-                    if (_config.LearningV2Enabled &&
+                    if (IsPersonalizedLearningActive() &&
                         key == InputListenerService.SpecialKey.Enter &&
                         !string.IsNullOrWhiteSpace(oldBuffer) &&
                         _learningCaptureCoordinator.OnManualCommit(oldBuffer, context, "enter") &&
-                        _isProTier &&
-                        _config.StyleProfileEnabled)
+                        IsProfileLearningActive())
                     {
                         _styleProfileService.OnAccepted();
                         _vocabularyProfileService.OnAccepted();
@@ -156,11 +155,10 @@ public partial class App
                     var oldBuffer = _typingBuffer.CurrentText;
                     var context = CreateContextSnapshot(oldBuffer, activeProcessName, activeWindowTitle);
 
-                    if (_config.LearningV2Enabled &&
+                    if (IsPersonalizedLearningActive() &&
                         !string.IsNullOrWhiteSpace(oldBuffer) &&
                         _learningCaptureCoordinator.OnManualCommit(oldBuffer, context, "navigation") &&
-                        _isProTier &&
-                        _config.StyleProfileEnabled)
+                        IsProfileLearningActive())
                     {
                         _styleProfileService.OnAccepted();
                         _vocabularyProfileService.OnAccepted();
@@ -392,7 +390,7 @@ public partial class App
         int latencyMs = GetSuggestionLatencyMs();
         int cycleDepth = _suggestionLifecycle.Snapshot().CycleDepth;
 
-        if (_isProTier && _config.StyleProfileEnabled)
+        if (IsProfileLearningActive())
         {
             _styleProfileService.OnAccepted();
             _vocabularyProfileService.OnAccepted();
@@ -408,16 +406,19 @@ public partial class App
         {
             bool editedAfter = correction.EditDetected;
 
-            _acceptanceTracker.LogAccepted(
-                preparation.Buffer,
-                preparation.Completion,
-                preparation.ProcessName,
-                preparation.WindowTitle,
-                latencyMs,
-                cycleDepth,
-                editedAfter);
+            if (IsPersonalizedLearningActive())
+            {
+                _acceptanceTracker.LogAccepted(
+                    preparation.Buffer,
+                    preparation.Completion,
+                    preparation.ProcessName,
+                    preparation.WindowTitle,
+                    latencyMs,
+                    cycleDepth,
+                    editedAfter);
+            }
 
-            if (_config.LearningV2Enabled)
+            if (IsPersonalizedLearningActive())
             {
                 _learningCaptureCoordinator.OnFullAccept(
                     preparation.SuggestionId,
@@ -430,7 +431,7 @@ public partial class App
                     editedAfter,
                     correction);
 
-                if (correction.HasCorrection && _isProTier)
+                if (correction.HasCorrection && IsProfileLearningActive())
                     _correctionPatternService.OnCorrectionDetected();
             }
 
@@ -439,7 +440,7 @@ public partial class App
                        $" quality={CompletionFeedbackService.ComputeQualityScore(latencyMs, cycleDepth, editedAfter):F2}");
         });
 
-        if (_isProTier)
+        if (IsPersonalizedLearningActive())
         {
             _learningService.AddToSession(
                 preparation.Buffer,
@@ -465,7 +466,7 @@ public partial class App
     {
         LogToDebug($"{triggerLabel} -> Accepting next word: \"{preparation.AcceptedText}\"");
 
-        if (_config.LearningV2Enabled)
+        if (IsPersonalizedLearningActive())
         {
             _learningCaptureCoordinator.OnPartialAccept(
                 preparation.SuggestionId,
@@ -475,7 +476,7 @@ public partial class App
                 preparation.Completion,
                 preparation.AcceptedText);
 
-            if (_isProTier && _config.StyleProfileEnabled)
+            if (IsProfileLearningActive())
             {
                 _styleProfileService.OnAccepted();
                 _vocabularyProfileService.OnAccepted();

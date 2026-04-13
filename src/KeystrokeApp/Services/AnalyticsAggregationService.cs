@@ -360,7 +360,7 @@ public class AnalyticsAggregationService
     // Quality/latency use running averages across the day
     private static void AccumulateQuality(AnalyticsDailyRollup rollup, float quality)
     {
-        int count = rollup.TotalAccepted + rollup.TotalPartialAccepts;
+        int count = rollup.TotalAccepted;
         if (count <= 1)
             rollup.AvgQualityScore = quality;
         else

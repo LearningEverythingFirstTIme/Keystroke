@@ -31,7 +31,8 @@ public class AnalyticsAggregationServiceTests : IDisposable
 
     private void WriteTrackingEvent(string eventType, string category = "Email",
         DateTime? timestamp = null, string acceptedText = "hello world",
-        string correctionType = "", string contextKey = "", string contextLabel = "")
+        string correctionType = "", string contextKey = "", string contextLabel = "",
+        float qualityScore = 0.7f)
     {
         var record = new LearningEventRecord
         {
@@ -40,7 +41,7 @@ public class AnalyticsAggregationServiceTests : IDisposable
             TimestampUtc = timestamp ?? DateTime.UtcNow,
             AcceptedText = acceptedText,
             UserWrittenText = eventType == "manual_continuation_committed" ? acceptedText : "",
-            QualityScore = 0.7f,
+            QualityScore = qualityScore,
             LatencyMs = 400,
             CorrectionType = correctionType,
             ContextKeys = new LearningEventContextKeys
@@ -150,6 +151,46 @@ public class AnalyticsAggregationServiceTests : IDisposable
         var store = svc.GetStore();
 
         Assert.Equal(2, store.Rollups[0].TotalCorrections);
+    }
+
+    [Fact]
+    public void Partial_accept_quality_is_not_double_counted()
+    {
+        WriteTrackingEvent(
+            "suggestion_partial_accept",
+            qualityScore: 0.7f,
+            acceptedText: "partial accept");
+
+        var svc = CreateService();
+        svc.Refresh();
+
+        Assert.Single(svc.GetStore().Rollups);
+        Assert.Equal(0.7f, svc.GetStore().Rollups[0].AvgQualityScore, 3);
+    }
+
+    [Fact]
+    public void Mixed_accepts_produce_correct_daily_and_weekly_quality()
+    {
+        var now = DateTime.UtcNow;
+        WriteTrackingEvent(
+            "suggestion_full_accept",
+            timestamp: now,
+            qualityScore: 0.9f,
+            acceptedText: "full accept");
+        WriteTrackingEvent(
+            "suggestion_partial_accept",
+            timestamp: now.AddMinutes(1),
+            qualityScore: 0.6f,
+            acceptedText: "partial accept");
+
+        var svc = CreateService();
+        svc.Refresh();
+        var store = svc.GetStore();
+
+        Assert.Single(store.Rollups);
+        Assert.Equal(0.75f, store.Rollups[0].AvgQualityScore, 3);
+        Assert.NotEmpty(store.WeeklySummaries);
+        Assert.Equal(0.75f, store.WeeklySummaries[0].AvgQuality, 3);
     }
 
     // ── Incremental refresh ───────────────────────────────────────────────
