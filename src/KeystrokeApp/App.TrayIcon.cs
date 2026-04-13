@@ -112,9 +112,6 @@ public partial class App
         _currentAppAllowMenuItem = new MenuItem { Header = "Allow only this app" };
         _currentAppAllowMenuItem.Click += (s, e) => AllowCurrentAppFromTray();
 
-        var showDebugItem = new MenuItem { Header = "Show Debug Window" };
-        showDebugItem.Click += (s, e) => ShowDebugWindow();
-
         var settingsItem = new MenuItem { Header = "Settings" };
         settingsItem.Click += (s, e) => ShowSettingsWindow();
 
@@ -148,7 +145,6 @@ public partial class App
         menu.Items.Add(_currentAppAllowMenuItem);
         menu.Items.Add(new Separator());
         menu.Items.Add(settingsItem);
-        menu.Items.Add(showDebugItem);
         menu.Items.Add(openConfigItem);
         menu.Items.Add(new Separator());
         menu.Items.Add(exitItem);

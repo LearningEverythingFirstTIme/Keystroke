@@ -9,6 +9,7 @@ public sealed class LearningHintBundle
     public string? SessionHint { get; init; }
     public string? PreferredClosings { get; init; }
     public string? AvoidPatterns { get; init; }
+    public string? CorrectionHint { get; init; }
 }
 
 public static class LearningHintBundleBuilder
@@ -17,7 +18,8 @@ public static class LearningHintBundleBuilder
         AcceptanceLearningService? learningService,
         StyleProfileService? styleProfileService,
         VocabularyProfileService? vocabularyProfileService,
-        ContextSnapshot context)
+        ContextSnapshot context,
+        CorrectionPatternService? correctionPatternService = null)
     {
         if (learningService == null)
             return new LearningHintBundle();
@@ -38,11 +40,13 @@ public static class LearningHintBundleBuilder
         string? styleHint = null;
         string? vocabHint = null;
         string? preferredClosings = null;
+        string? correctionHint = null;
 
         if (signal.Confidence >= 0.45)
         {
             styleHint = styleProfileService?.GetStyleHint(context.Category, context.SubcontextKey);
             vocabHint = vocabularyProfileService?.GetVocabularyHint(context.Category, context.SubcontextKey);
+            correctionHint = correctionPatternService?.GetCorrectionHint(context.Category, context.SubcontextKey);
         }
 
         if (signal.Confidence >= 0.75 && examples.Count > 0)
@@ -71,7 +75,8 @@ public static class LearningHintBundleBuilder
             VocabularyHint = vocabHint,
             SessionHint = learningService.GetSessionModeHint(context.SubcontextKey, context.Category),
             PreferredClosings = preferredClosings,
-            AvoidPatterns = avoidPatterns
+            AvoidPatterns = avoidPatterns,
+            CorrectionHint = correctionHint
         };
     }
 

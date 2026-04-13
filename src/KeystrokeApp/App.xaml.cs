@@ -21,7 +21,6 @@ public partial class App : Application
     // ── Service instances ─────────────────────────────────────────────────────
     private InputListenerService?     _inputListener;
     private TaskbarIcon?              _trayIcon;
-    private DebugWindow?              _debugWindow;
     private SuggestionPanel?         _suggestionPanel;
     private SettingsWindow?          _settingsWindow;
     private OnboardingWindow?        _onboardingWindow;
@@ -32,8 +31,7 @@ public partial class App : Application
     // ── App state ─────────────────────────────────────────────────────────────
     // Thread-safety notes:
     //   UI-only:        _config, _typingBuffer, _debounceTimer, _fastDebounceTimer,
-    //                   _suggestionPanel, _debugWindow, _settingsWindow,
-    //                   _trayIcon, tray menu items
+    //                   _suggestionPanel, _settingsWindow, _trayIcon, tray menu items
     //   Self-locking:   _predictionCache (internal lock; safe from any thread)
     //   Interlocked:    _sessionAcceptCount, _suggestionShownAtTicks, _cycleDepth,
     //                   _activePredictionRequestId, _predictionRequestCounter
@@ -57,7 +55,10 @@ public partial class App : Application
     private readonly OutboundPrivacyService _outboundPrivacy = new();
     private StyleProfileService        _styleProfileService       = new();
     private VocabularyProfileService   _vocabularyProfileService  = new();
+    private CorrectionPatternService   _correctionPatternService  = new();
+    private ContextAdaptiveSettingsService _contextAdaptiveSettingsService = new();
     private LearningScoreService       _learningScoreService      = new();
+    private AnalyticsAggregationService _analyticsService          = new();
     private volatile bool            _isEnabled        = true;
     private int                      _sessionAcceptCount;  // Access via Interlocked only
 
@@ -214,10 +215,18 @@ public partial class App : Application
                 });
             };
 
+            // Feed score snapshots into the analytics store for extended history.
+            _learningScoreService.ScoreComputed += (category, score) =>
+            {
+                _analyticsService.RecordScoreSnapshot(category, score);
+            };
+
             if (_isProTier && _config.StyleProfileEnabled)
             {
                 _styleProfileService.Start(_config.StyleProfileInterval);
                 _vocabularyProfileService.Start(_config.StyleProfileInterval);
+                _correctionPatternService.Start(Math.Max(3, _config.StyleProfileInterval / 6));
+                _contextAdaptiveSettingsService.Start(Math.Max(5, _config.StyleProfileInterval / 3));
             }
 
             // Prune log files to prevent unbounded growth (keep last ~5000 lines each).
@@ -405,12 +414,18 @@ public partial class App : Application
         _styleProfileService.UpdateInterval(_config.StyleProfileInterval);
         _vocabularyProfileService.CancelGeneration();
         _vocabularyProfileService.UpdateInterval(_config.StyleProfileInterval);
+        _correctionPatternService.CancelGeneration();
+        _correctionPatternService.UpdateInterval(Math.Max(3, _config.StyleProfileInterval / 6));
+        _contextAdaptiveSettingsService.CancelGeneration();
+        _contextAdaptiveSettingsService.UpdateInterval(Math.Max(5, _config.StyleProfileInterval / 3));
 
         RefreshLicenseStatus();
         if (_isProTier && _config.StyleProfileEnabled)
         {
             _styleProfileService.Start(_config.StyleProfileInterval);
             _vocabularyProfileService.Start(_config.StyleProfileInterval);
+            _correctionPatternService.Start(Math.Max(3, _config.StyleProfileInterval / 6));
+            _contextAdaptiveSettingsService.Start(Math.Max(5, _config.StyleProfileInterval / 3));
         }
 
         RefreshShellStatus();
@@ -517,6 +532,8 @@ public partial class App : Application
             baseEngine.LearningService          = _isProTier ? _learningService : null;
             baseEngine.StyleProfileService      = _isProTier && _config.StyleProfileEnabled ? _styleProfileService : null;
             baseEngine.VocabularyProfileService = _isProTier && _config.StyleProfileEnabled ? _vocabularyProfileService : null;
+            baseEngine.CorrectionPatternService = _isProTier && _config.StyleProfileEnabled ? _correctionPatternService : null;
+            baseEngine.ContextAdaptiveSettingsService = _isProTier && _config.StyleProfileEnabled ? _contextAdaptiveSettingsService : null;
         }
 
         // Ollama uses a fixed low temperature for local models
@@ -527,72 +544,6 @@ public partial class App : Application
     }
 
     // ==================== Window management ====================
-
-    private void ShowDebugWindow()
-    {
-        if (_debugWindow == null || !_debugWindow.IsLoaded)
-        {
-            _debugWindow = new DebugWindow();
-            _debugWindow.Closed += (s, e) => _debugWindow = null;
-            _debugWindow.Log("Debug window opened.");
-            _debugWindow.Log($"Status: {(_isEnabled ? "Enabled" : "Disabled")}");
-            _debugWindow.Log($"Engine: {_predictionEngine?.GetType().Name}");
-            _debugWindow.Log($"Buffer: \"{_typingBuffer.CurrentText}\"");
-            _debugWindow.Log($"Prediction state: {_predictionState}");
-            _debugWindow.Log($"Reliability log: {_reliabilityTrace.LogPath}");
-
-            // Show rolling context status
-            var ctxInfo = _rollingContext.GetInfo();
-            if (ctxInfo.Length > 0 && !ctxInfo.IsStale)
-            {
-                _debugWindow.Log($"Rolling context: {ctxInfo.Length} chars from {ctxInfo.Process}");
-                _debugWindow.Log($"  Last: \"{TruncateString(ctxInfo.WindowTitle, 40)}\"");
-            }
-            else
-            {
-                _debugWindow.Log("Rolling context: (empty or stale)");
-            }
-
-            // Show learning stats
-            var learningStats = _learningService.GetStats();
-            _debugWindow.Log($"Learning file: {learningStats.DataFilePath}");
-            _debugWindow.Log($"  Exists: {learningStats.DataFileExists}, Size: {learningStats.DataFileSize} bytes");
-
-            if (learningStats.TotalAccepted > 0)
-            {
-                _debugWindow.Log($"Learning data: {learningStats.TotalAccepted} accepted completions");
-                var categories = string.Join(", ", learningStats.ByCategory.Select(kvp => $"{kvp.Key}:{kvp.Value}"));
-                _debugWindow.Log($"  By category: {categories}");
-            }
-            else if (learningStats.DataFileExists && learningStats.DataFileSize > 0)
-            {
-                _debugWindow.Log("Learning data: File exists but 0 entries loaded (parsing issue?)");
-            }
-            else
-            {
-            _debugWindow.Log("Learning data: (no data yet)");
-            }
-
-            // Show style profile status
-            var styleProfile = _styleProfileService.GetProfile();
-            if (styleProfile != null)
-            {
-                _debugWindow.Log($"Style profile: {styleProfile.CategoryProfiles.Count} categories");
-                _debugWindow.Log($"  General: \"{TruncateString(styleProfile.GeneralProfile, 60)}...");
-                _debugWindow.Log($"  Last updated: {styleProfile.LastUpdated:yyyy-MM-dd}");
-            }
-            else
-            {
-                _debugWindow.Log("Style profile: (not generated yet)");
-            }
-
-            _debugWindow.Log("Type anywhere to see events here.\n");
-            foreach (var evt in _reliabilityTrace.GetRecentEvents().TakeLast(8))
-                _debugWindow.Log($"[{evt.TimestampUtc:HH:mm:ss}] {evt.Area}/{evt.EventName}: {evt.Message}");
-        }
-        _debugWindow.Show();
-        _debugWindow.Activate();
-    }
 
     private void ShowSettingsWindow()
     {
@@ -608,7 +559,10 @@ public partial class App : Application
                 _contextPreferencesService,
                 _contextMaintenanceService,
                 GetLastExternalWindowOrCurrent,
-                CreatePromptPreviewSnapshot);
+                CreatePromptPreviewSnapshot,
+                _correctionPatternService,
+                _contextAdaptiveSettingsService,
+                _analyticsService);
             _settingsWindow.ThemeChanged += themeId =>
                 _suggestionPanel?.ApplyTheme(ThemeDefinitions.Get(themeId));
             _settingsWindow.Closed += (s, e) =>
@@ -806,6 +760,7 @@ public partial class App : Application
             _isProTier ? _learningService : null,
             _isProTier && _config.StyleProfileEnabled ? _styleProfileService : null,
             _isProTier && _config.StyleProfileEnabled ? _vocabularyProfileService : null,
+            _isProTier && _config.StyleProfileEnabled ? _correctionPatternService : null,
             _ocrService?.CachedText,
             rollingContext);
     }
@@ -939,14 +894,6 @@ public partial class App : Application
         return state.CycleDepth;
     }
 
-    private void LogToDebug(string message)
-    {
-        if (_debugWindow != null)
-        {
-            Dispatcher.BeginInvoke(() => _debugWindow?.Log(message));
-        }
-    }
-
     private static readonly object _logLock = new();
     private void Log(string message)
     {
@@ -987,14 +934,9 @@ public partial class App : Application
         }
     }
 
-    /// <summary>
-    /// Helper to truncate strings for display in the debug window.
-    /// </summary>
-    private static string TruncateString(string value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value)) return value;
-        return value.Length <= maxLength ? value : value[..maxLength] + "...";
-    }
+    // Verbose per-keystroke diagnostics — no-op in production builds.
+    // Restore the debug window (ShowDebugWindow + _debugWindow field) to re-enable.
+    private void LogToDebug(string message) { }
 
     private long NextPredictionRequestId() => Interlocked.Increment(ref _predictionRequestCounter);
 

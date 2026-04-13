@@ -18,6 +18,7 @@ public static class PromptPreviewBuilder
         AcceptanceLearningService? learningService,
         StyleProfileService? styleProfileService,
         VocabularyProfileService? vocabularyProfileService,
+        CorrectionPatternService? correctionPatternService,
         string? screenText,
         string? rollingContext)
     {
@@ -47,6 +48,7 @@ public static class PromptPreviewBuilder
             learningService,
             styleProfileService,
             vocabularyProfileService,
+            correctionPatternService,
             context,
             outboundPrivacy);
         var promptPreview = BuildUserPromptPreview(context, learningHints);
@@ -143,11 +145,14 @@ public static class PromptPreviewBuilder
         AcceptanceLearningService? learningService,
         StyleProfileService? styleProfileService,
         VocabularyProfileService? vocabularyProfileService,
+        CorrectionPatternService? correctionPatternService,
         ContextSnapshot context,
         OutboundPrivacyService outboundPrivacy)
     {
         var parts = new List<string>();
-        var bundle = LearningHintBundleBuilder.Build(learningService, styleProfileService, vocabularyProfileService, context);
+        var bundle = LearningHintBundleBuilder.Build(
+            learningService, styleProfileService, vocabularyProfileService, context,
+            correctionPatternService);
 
         if (bundle.IsContextDisabled || bundle.Confidence <= 0)
             return null;
@@ -157,6 +162,9 @@ public static class PromptPreviewBuilder
 
         if (bundle.Confidence >= 0.45 && !string.IsNullOrWhiteSpace(bundle.VocabularyHint))
             parts.Add(outboundPrivacy.SanitizeForPrompt(bundle.VocabularyHint) ?? "");
+
+        if (bundle.Confidence >= 0.45 && !string.IsNullOrWhiteSpace(bundle.CorrectionHint))
+            parts.Add(outboundPrivacy.SanitizeForPrompt(bundle.CorrectionHint) ?? "");
 
         if (!string.IsNullOrWhiteSpace(bundle.PreferredClosings))
             parts.Add(outboundPrivacy.SanitizeForPrompt(bundle.PreferredClosings) ?? "");

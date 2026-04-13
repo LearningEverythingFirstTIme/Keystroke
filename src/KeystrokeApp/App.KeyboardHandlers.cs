@@ -39,6 +39,7 @@ public partial class App
             return;
         }
 
+        _postEditDetector.OnCharacterTyped(c);
         _typingBuffer.AddChar(c);
         var currentBuffer = _typingBuffer.CurrentText;
 
@@ -59,11 +60,6 @@ public partial class App
             }
         }
 
-        var debugWin = _debugWindow;
-        if (debugWin != null)
-        {
-            Dispatcher.BeginInvoke(() => debugWin.Log($"Char: '{c}' -> Buffer: \"{currentBuffer}\""));
-        }
     }
 
     private void OnSpecialKeyPressed(InputListenerService.SpecialKeyEventArgs args)
@@ -400,6 +396,7 @@ public partial class App
         {
             _styleProfileService.OnAccepted();
             _vocabularyProfileService.OnAccepted();
+            _contextAdaptiveSettingsService.OnAccepted();
         }
 
         var initialQuality = CompletionFeedbackService.ComputeQualityScore(
@@ -407,8 +404,10 @@ public partial class App
             cycleDepth,
             editedAfter: false);
 
-        _postEditDetector.StartWatching(editedAfter =>
+        _postEditDetector.StartWatching(correction =>
         {
+            bool editedAfter = correction.EditDetected;
+
             _acceptanceTracker.LogAccepted(
                 preparation.Buffer,
                 preparation.Completion,
@@ -428,10 +427,16 @@ public partial class App
                     preparation.Completion,
                     latencyMs,
                     cycleDepth,
-                    editedAfter);
+                    editedAfter,
+                    correction);
+
+                if (correction.HasCorrection && _isProTier)
+                    _correctionPatternService.OnCorrectionDetected();
             }
 
-            LogToDebug($"Tracked: latency={latencyMs}ms cycle={cycleDepth} edited={editedAfter} quality={CompletionFeedbackService.ComputeQualityScore(latencyMs, cycleDepth, editedAfter):F2}");
+            LogToDebug($"Tracked: latency={latencyMs}ms cycle={cycleDepth} edited={editedAfter}" +
+                       $" correction={correction.CorrectionType()}" +
+                       $" quality={CompletionFeedbackService.ComputeQualityScore(latencyMs, cycleDepth, editedAfter):F2}");
         });
 
         if (_isProTier)

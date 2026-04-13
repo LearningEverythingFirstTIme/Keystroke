@@ -240,6 +240,8 @@ public abstract class PredictionEngineBase
     public AcceptanceLearningService?  LearningService          { get; set; }
     public StyleProfileService?       StyleProfileService       { get; set; }
     public VocabularyProfileService?  VocabularyProfileService  { get; set; }
+    public CorrectionPatternService?  CorrectionPatternService  { get; set; }
+    public ContextAdaptiveSettingsService? ContextAdaptiveSettingsService { get; set; }
 
     // ── Context window limits (engines can override for their token budgets) ──
 
@@ -351,8 +353,23 @@ public abstract class PredictionEngineBase
         }
 
         sb.AppendLine();
-        sb.AppendLine(LengthInstruction);
+        sb.AppendLine(GetEffectiveLengthInstruction(context));
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns the length instruction for this context. Uses per-context adaptive
+    /// data when available (derived from actual accepted completion lengths),
+    /// falling back to the global LengthInstruction from config.
+    /// </summary>
+    private string GetEffectiveLengthInstruction(ContextSnapshot context)
+    {
+        var adaptiveProfile = ContextAdaptiveSettingsService?.GetSettings(
+            context.SubcontextKey, context.Category);
+        if (adaptiveProfile != null)
+            return adaptiveProfile.LengthInstruction;
+
+        return LengthInstruction;
     }
 
     /// <summary>
@@ -422,7 +439,9 @@ public abstract class PredictionEngineBase
     private string? BuildLearningHints(ContextSnapshot context)
     {
         var parts = new List<string>();
-        var bundle = LearningHintBundleBuilder.Build(LearningService, StyleProfileService, VocabularyProfileService, context);
+        var bundle = LearningHintBundleBuilder.Build(
+            LearningService, StyleProfileService, VocabularyProfileService, context,
+            CorrectionPatternService);
 
         if (bundle.IsContextDisabled)
             return null;
@@ -434,6 +453,9 @@ public abstract class PredictionEngineBase
 
             if (bundle.Confidence >= 0.45 && !string.IsNullOrWhiteSpace(bundle.VocabularyHint))
                 parts.Add(OutboundPrivacy.SanitizeForPrompt(bundle.VocabularyHint) ?? "");
+
+            if (bundle.Confidence >= 0.45 && !string.IsNullOrWhiteSpace(bundle.CorrectionHint))
+                parts.Add(OutboundPrivacy.SanitizeForPrompt(bundle.CorrectionHint) ?? "");
 
             if (!string.IsNullOrWhiteSpace(bundle.PreferredClosings))
                 parts.Add(OutboundPrivacy.SanitizeForPrompt(bundle.PreferredClosings) ?? "");
@@ -454,24 +476,41 @@ public abstract class PredictionEngineBase
     // ── Temperature and token sizing ──────────────────────────────────────────
 
     /// <summary>
-    /// Selects temperature based on app context category. Code/terminal → low (precision),
-    /// chat/browser → higher (variety to break out of repetitive patterns).
-    /// Falls back to the configured Temperature if no context.
+    /// Selects temperature based on app context category, then applies per-context
+    /// adaptive adjustment from ContextAdaptiveSettingsService when available.
+    /// Code/terminal → low (precision), chat/browser → higher (variety).
+    /// Adaptive adjustment nudges temperature based on accept rate history.
+    /// Final value is clamped to [0.10, 0.70].
     /// </summary>
     protected double GetDynamicTemperature(ContextSnapshot context)
     {
-        if (!context.HasAppContext) return Temperature;
-        var category = AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle);
-        return category switch
+        double baseTemp;
+        if (!context.HasAppContext)
         {
-            AppCategory.Category.Code     => 0.15,
-            AppCategory.Category.Terminal  => 0.15,
-            AppCategory.Category.Email     => 0.35,
-            AppCategory.Category.Document  => 0.35,
-            AppCategory.Category.Browser   => 0.45,
-            AppCategory.Category.Chat      => 0.5,
-            _                              => Temperature
-        };
+            baseTemp = Temperature;
+        }
+        else
+        {
+            var category = AppCategory.GetEffectiveCategory(context.ProcessName, context.WindowTitle);
+            baseTemp = category switch
+            {
+                AppCategory.Category.Code     => 0.15,
+                AppCategory.Category.Terminal  => 0.15,
+                AppCategory.Category.Email     => 0.35,
+                AppCategory.Category.Document  => 0.35,
+                AppCategory.Category.Browser   => 0.45,
+                AppCategory.Category.Chat      => 0.5,
+                _                              => Temperature
+            };
+        }
+
+        // Apply per-context adaptive temperature adjustment when available
+        var adaptiveProfile = ContextAdaptiveSettingsService?.GetSettings(
+            context.SubcontextKey, context.Category);
+        if (adaptiveProfile != null)
+            baseTemp += adaptiveProfile.TemperatureAdjustment;
+
+        return Math.Clamp(baseTemp, 0.10, 0.70);
     }
 
     /// <summary>

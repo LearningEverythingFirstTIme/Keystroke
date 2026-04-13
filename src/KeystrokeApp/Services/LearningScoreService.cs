@@ -37,6 +37,12 @@ public class LearningScoreService
     /// </summary>
     public event Action<string, int, int>? DriftDetected;
 
+    /// <summary>
+    /// Fires after every Recompute() with each (category, newScore) pair.
+    /// Used by AnalyticsAggregationService to build extended score history.
+    /// </summary>
+    public event Action<string, int>? ScoreComputed;
+
     // ── Constants ─────────────────────────────────────────────────────────────
 
     private const int MaxHistorySnapshots  = 3;
@@ -167,6 +173,10 @@ public class LearningScoreService
 
                 _cached = updatedScores;
             }
+
+            // Notify analytics of every category score so it can build extended history.
+            foreach (var (cat, intel) in _cached.Categories)
+                ScoreComputed?.Invoke(cat, intel.Score);
 
             SaveToDisk();
             return _cached;

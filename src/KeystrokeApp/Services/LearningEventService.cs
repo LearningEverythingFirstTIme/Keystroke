@@ -105,6 +105,28 @@ public sealed record LearningEventRecord
     public float QualityScore { get; init; } = 0.5f;
     public float SourceWeight { get; init; } = 0.5f;
     public double Confidence { get; init; } = 0.5;
+
+    // ── Correction fields (Phase 1: Correction Learning) ─────────────────────
+    // Populated when the user edits a suggestion immediately after accepting it.
+    // BackspaceCount > 0 means the user deleted from the end of the completion;
+    // CorrectedText contains the replacement they typed. Together these form a
+    // (deleted → replaced) pair that CorrectionPatternService uses to learn
+    // systematic editing patterns (word preferences, length, formality).
+
+    /// <summary>What the user deleted from the end of the accepted completion.</summary>
+    public string DeletedSuffix { get; init; } = "";
+
+    /// <summary>What the user typed as replacement after deleting.</summary>
+    public string CorrectedText { get; init; } = "";
+
+    /// <summary>Net backspace count into the original completion.</summary>
+    public int CorrectionBackspaces { get; init; }
+
+    /// <summary>
+    /// Classification: "none", "truncated" (deleted only),
+    /// "replaced_ending" (deleted and retyped), or "minor" (1-2 chars, likely typo fix).
+    /// </summary>
+    public string CorrectionType { get; init; } = "";
 }
 
 public sealed record LearningEventContextKeys

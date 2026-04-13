@@ -31,7 +31,9 @@ public sealed class LearningContextMaintenanceService
         [
             Path.Combine(root, "style-profile.json"),
             Path.Combine(root, "vocabulary-profile.json"),
-            Path.Combine(root, "learning-scores.json")
+            Path.Combine(root, "learning-scores.json"),
+            Path.Combine(root, "correction-patterns.json"),
+            Path.Combine(root, "context-adaptive-settings.json")
         ];
         _fingerprints = fingerprints ?? new ContextFingerprintService();
         _eventWriteLock = eventWriteLock;
@@ -62,6 +64,41 @@ public sealed class LearningContextMaintenanceService
                 var fingerprint = _fingerprints.Create(record.App, record.Window);
                 return !string.Equals(fingerprint.SubcontextKey, contextKey, StringComparison.OrdinalIgnoreCase);
             }));
+    }
+
+    /// <summary>
+    /// Removes only assist-preference data (accepted model completions) for a context,
+    /// keeping native writing examples and negative evidence. This lets users clear stale
+    /// assist patterns without losing their genuine voice data.
+    /// </summary>
+    public void ClearAssistData(string contextKey)
+    {
+        if (string.IsNullOrWhiteSpace(contextKey))
+            return;
+
+        // Keep: manual_continuation_committed, suggestion_dismiss, suggestion_typed_past
+        // Remove: suggestion_full_accept, suggestion_partial_accept, accepted_text_untouched
+        var assistEventTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "suggestion_full_accept",
+            "suggestion_partial_accept",
+            "accepted_text_untouched"
+        };
+
+        RunUnderLock(_eventWriteLock, () =>
+            RewriteJsonLines(_eventPath, line =>
+            {
+                var record = JsonSerializer.Deserialize<LearningEventRecord>(line, JsonOptions);
+                if (record == null) return true;
+
+                // Only remove assist events that match this context
+                if (!string.Equals(record.ContextKeys.SubcontextKey, contextKey, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                return !assistEventTypes.Contains(record.EventType);
+            }));
+
+        // Legacy store doesn't distinguish native/assist — skip it for this operation.
     }
 
     private static void RunUnderLock(object? lockObj, Action action)

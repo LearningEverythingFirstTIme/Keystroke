@@ -1,7 +1,8 @@
 <Window x:Class="KeystrokeApp.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Keystroke Settings [Scroll Fix Build]"
+        xmlns:controls="clr-namespace:KeystrokeApp.Controls"
+        Title="Keystroke Settings"
         Height="920"
         Width="1440"
         MinHeight="780"
@@ -180,6 +181,12 @@
                         <StackPanel>
                             <TextBlock Text="Your AI Profile"/>
                             <TextBlock Text="Profile building, personalization, and privacy" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavAnalyticsButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="Analytics" Style="{StaticResource NavRadioStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Analytics"/>
+                            <TextBlock Text="Writing trends, progress, and insights" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="NavAppControlButton" GroupName="SettingsNav" Checked="NavigateSection_Checked" Tag="AppControl" Style="{StaticResource NavRadioStyle}">
@@ -691,6 +698,8 @@
                                             <StackPanel x:Name="CategoryBreakdownPanel"/>
                                             <TextBlock Text="Top contexts" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,18,0,8"/>
                                             <StackPanel x:Name="ContextBreakdownPanel"/>
+                                            <TextBlock Text="Adaptive tuning" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,18,0,8"/>
+                                            <StackPanel x:Name="AdaptiveTuningPanel"/>
                                         </StackPanel>
                                         <StackPanel x:Name="CategoryBreakdownLocked" Visibility="Collapsed" Margin="0,16,0,0">
                                             <Border Style="{StaticResource InsetTileStyle}">
@@ -758,6 +767,158 @@
                                 </Border>
                             </StackPanel>
                         </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="AnalyticsSection" Visibility="Collapsed">
+                        <TextBlock Text="Analytics" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="See how your writing profile is evolving — acceptance rates, quality trends, and context insights." Style="{StaticResource SectionIntroStyle}"/>
+
+                        <!-- Locked teaser for free users -->
+                        <Border x:Name="AnalyticsLockedCard" Style="{StaticResource LearningCardStyle}" Margin="0,20,0,18" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Writing analytics are ready when you are" Foreground="{StaticResource TextPrimary}" FontSize="17" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Keystroke is already tracking your writing patterns. Enter a license key to unlock trends, progress milestones, and context insights." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Border Style="{StaticResource PillStyle}"><TextBlock Text="Score trajectories" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                        <Border Style="{StaticResource PillStyle}"><TextBlock Text="Weekly comparisons" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                        <Border Style="{StaticResource PillStyle}"><TextBlock Text="Milestones" Foreground="{StaticResource TextSecondary}" FontSize="11"/></Border>
+                                    </WrapPanel>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Unlock with License Key" Style="{StaticResource SecondaryButton}" Margin="18,0,0,0" VerticalAlignment="Top" Click="ActivateLearning_Click"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Pro analytics content -->
+                        <StackPanel x:Name="AnalyticsProContent" Visibility="Visible">
+
+                            <!-- Hero Summary Card -->
+                            <Border x:Name="AnalyticsHeroCard" Style="{StaticResource LearningCardStyle}" Margin="0,20,0,18">
+                                <StackPanel>
+                                    <TextBlock x:Name="AnalyticsHeroTitle" Text="Your writing profile is just getting started" Foreground="{StaticResource TextPrimary}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="AnalyticsHeroSubtitle" Text="Start accepting suggestions and your analytics will appear here." Foreground="{StaticResource TextSecondary}" FontSize="13" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    <WrapPanel x:Name="AnalyticsHeroPills" Margin="0,14,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Week-over-Week Comparison Row -->
+                            <Grid x:Name="AnalyticsWeekCompareGrid" Margin="0,0,0,18">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource InsetTileStyle}" Margin="0,0,8,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Acceptance rate" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                        <TextBlock x:Name="AnalyticsWeekAcceptRate" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Success}"/>
+                                        <TextBlock x:Name="AnalyticsWeekAcceptDelta" Text="" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource InsetTileStyle}" Margin="4,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Words assisted" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                        <TextBlock x:Name="AnalyticsWeekWordsAssisted" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Accent}"/>
+                                        <TextBlock x:Name="AnalyticsWeekWordsDelta" Text="" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource InsetTileStyle}" Margin="8,0,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Avg quality" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                        <TextBlock x:Name="AnalyticsWeekAvgQuality" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                                        <TextBlock x:Name="AnalyticsWeekQualityDelta" Text="" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Score Trajectory Card -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="Intelligence score over time" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <WrapPanel x:Name="AnalyticsScoreCategoryPills" Margin="0,10,0,8"/>
+                                    <Border Background="#21262D" CornerRadius="6" Padding="2" Margin="0,4,0,0">
+                                        <controls:SparklineControl x:Name="AnalyticsScoreSparkline" Height="140"/>
+                                    </Border>
+                                    <TextBlock x:Name="AnalyticsScoreEmptyText" Text="Score history will appear after your first profile recompute." Foreground="{StaticResource TextMuted}" FontSize="12" FontStyle="Italic" Margin="0,8,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Daily Activity Card -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="Daily activity \u2014 last 30 days" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Border Background="#3FB950" Width="10" Height="10" CornerRadius="2" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Accepted" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,12,0"/>
+                                        <Border Background="#2EA98F" Width="10" Height="10" CornerRadius="2" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Native" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,12,0"/>
+                                        <Border Background="#484F58" Width="10" Height="10" CornerRadius="2" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Dismissed" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                    </StackPanel>
+                                    <Border Background="#21262D" CornerRadius="6" Padding="2" Margin="0,8,0,0">
+                                        <controls:StackedBarChart x:Name="AnalyticsDailyBars" Height="120"/>
+                                    </Border>
+                                    <TextBlock x:Name="AnalyticsDailyEmptyText" Text="Daily activity will appear after your first day of use." Foreground="{StaticResource TextMuted}" FontSize="12" FontStyle="Italic" Margin="0,8,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Category Breakdown Card -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="By category this week" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <StackPanel x:Name="AnalyticsCategoryBreakdownPanel" Margin="0,12,0,0"/>
+                                    <TextBlock x:Name="AnalyticsCategoryEmptyText" Text="Category breakdown will appear after this week's first accepted suggestion." Foreground="{StaticResource TextMuted}" FontSize="12" FontStyle="Italic" Margin="0,8,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Time-of-Day Card -->
+                            <Border x:Name="AnalyticsTimeOfDayCard" Style="{StaticResource CardStyle}" Margin="0,0,0,18" Visibility="Collapsed">
+                                <StackPanel>
+                                    <TextBlock Text="When you write best" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <Grid x:Name="AnalyticsTimeOfDayGrid" Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Correction Trends Card -->
+                            <Border x:Name="AnalyticsCorrectionCard" Style="{StaticResource CardStyle}" Margin="0,0,0,18" Visibility="Collapsed">
+                                <StackPanel>
+                                    <TextBlock Text="Correction frequency" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="AnalyticsCorrectionSubtitle" Text="How often you edit accepted completions" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/>
+                                    <Border Background="#21262D" CornerRadius="6" Padding="2" Margin="0,8,0,0">
+                                        <controls:SparklineControl x:Name="AnalyticsCorrectionSparkline" Height="100"/>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Context Leaderboard Card -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="Strongest contexts" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <StackPanel x:Name="AnalyticsContextLeaderboardPanel" Margin="0,12,0,0"/>
+                                    <TextBlock x:Name="AnalyticsContextEmptyText" Text="Context rankings will appear after Keystroke sees repeated patterns in specific threads or documents." Foreground="{StaticResource TextMuted}" FontSize="12" FontStyle="Italic" Margin="0,8,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Milestones Card -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="Milestones" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                    <StackPanel x:Name="AnalyticsMilestonesPanel" Margin="0,12,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
                 </StackPanel>
 
                 <StackPanel x:Name="AppControlSection" Visibility="Collapsed">
@@ -1148,11 +1309,6 @@
                             <TextBlock Text="Every change updates immediately." Foreground="{StaticResource TextMuted}" FontSize="12" VerticalAlignment="Center"/>
                             <TextBlock x:Name="SaveStatus" Text=" Saved" Foreground="{StaticResource Success}" FontSize="12" FontWeight="SemiBold" Opacity="0" VerticalAlignment="Center"/>
                         </StackPanel>
-                        <TextBlock Text="Diagnostic build marker: Scroll Fix Build"
-                                   Foreground="{StaticResource Warning}"
-                                   FontSize="12"
-                                   FontWeight="SemiBold"
-                                   Margin="0,8,0,0"/>
                     </StackPanel>
                     <Button Grid.Column="1" Content="Done" Style="{StaticResource PrimaryButton}" Click="Done_Click"/>
                 </Grid>

@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using KeystrokeApp.Controls;
 using KeystrokeApp.Services;
 
 namespace KeystrokeApp.Views;
@@ -62,6 +63,9 @@ public partial class SettingsWindow : Window
     private StyleProfileService?        _styleProfileService;
     private VocabularyProfileService?   _vocabularyProfileService;
     private LearningScoreService?       _learningScoreService;
+    private CorrectionPatternService?   _correctionPatternService;
+    private ContextAdaptiveSettingsService? _contextAdaptiveSettingsService;
+    private AnalyticsAggregationService? _analyticsService;
     private readonly UsageCounters _usageCounters;
     private readonly LearningContextPreferencesService _contextPreferencesService;
     private readonly LearningContextMaintenanceService _contextMaintenanceService;
@@ -95,13 +99,19 @@ public partial class SettingsWindow : Window
         LearningContextPreferencesService? contextPreferencesService = null,
         LearningContextMaintenanceService? contextMaintenanceService = null,
         Func<(string ProcessName, string WindowTitle)>? appPicker = null,
-        Func<PromptPreviewSnapshot>? promptPreviewProvider = null)
+        Func<PromptPreviewSnapshot>? promptPreviewProvider = null,
+        CorrectionPatternService? correctionPatternService = null,
+        ContextAdaptiveSettingsService? contextAdaptiveSettingsService = null,
+        AnalyticsAggregationService? analyticsService = null)
     {
         InitializeComponent();
         _config                   = config;
         _styleProfileService      = styleProfileService;
         _vocabularyProfileService = vocabularyProfileService;
         _learningScoreService     = learningScoreService;
+        _correctionPatternService = correctionPatternService;
+        _contextAdaptiveSettingsService = contextAdaptiveSettingsService;
+        _analyticsService         = analyticsService;
         _learningService          = learningService;
         _usageCounters = usageCounters ?? new UsageCounters();
         _contextPreferencesService = contextPreferencesService ?? new LearningContextPreferencesService();
@@ -162,6 +172,7 @@ public partial class SettingsWindow : Window
         OverviewSection.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
         SuggestionsSection.Visibility = section == "Suggestions" ? Visibility.Visible : Visibility.Collapsed;
         PersonalizationSection.Visibility = section == "Personalization" ? Visibility.Visible : Visibility.Collapsed;
+        AnalyticsSection.Visibility = section == "Analytics" ? Visibility.Visible : Visibility.Collapsed;
         AppControlSection.Visibility = section == "AppControl" ? Visibility.Visible : Visibility.Collapsed;
         AppearanceSection.Visibility = section == "Appearance" ? Visibility.Visible : Visibility.Collapsed;
         AdvancedSection.Visibility = section == "Advanced" ? Visibility.Visible : Visibility.Collapsed;
@@ -174,6 +185,9 @@ public partial class SettingsWindow : Window
 
         if (section == "AppControl")
             RefreshAppPickerOptions();
+
+        if (section == "Analytics")
+            LoadAnalytics();
 
         UpdatePrivacyInspector();
         Dispatcher.BeginInvoke(() =>
@@ -695,6 +709,7 @@ public partial class SettingsWindow : Window
 
             CategoryBreakdownPanel.Children.Clear();
             ContextBreakdownPanel.Children.Clear();
+            AdaptiveTuningPanel.Children.Clear();
             if (stats.TotalAccepted > 0)
             {
                 var allCategories = stats.ByCategory.Keys
@@ -781,8 +796,147 @@ public partial class SettingsWindow : Window
                     });
                 }
             }
+            // ── Adaptive tuning panel ─────────────────────────────────────
+            PopulateAdaptiveTuningPanel();
         }
         catch (Exception) { /* Learning stats display is non-critical — failure is safe to ignore */ }
+    }
+
+    /// <summary>
+    /// Populates the adaptive tuning panel with per-context and per-category settings
+    /// that show how Keystroke has tuned temperature and length for each context.
+    /// </summary>
+    private void PopulateAdaptiveTuningPanel()
+    {
+        var allSettings = _contextAdaptiveSettingsService?.GetAllSettings();
+        if (allSettings == null || (allSettings.Contexts.Count == 0 && allSettings.Categories.Count == 0))
+        {
+            AdaptiveTuningPanel.Children.Add(new TextBlock
+            {
+                Text = "Adaptive tuning will appear after enough accept/dismiss signals accumulate per context.",
+                Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                FontSize = 12,
+                FontStyle = FontStyles.Italic,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+            return;
+        }
+
+        var age = DateTime.UtcNow - allSettings.LastUpdated;
+        string ageText = age.TotalHours < 1 ? "just now"
+                       : age.TotalDays < 1 ? $"{(int)age.TotalHours}h ago"
+                       : $"{(int)age.TotalDays}d ago";
+
+        AdaptiveTuningPanel.Children.Add(new TextBlock
+        {
+            Text = $"Last computed {ageText} from {allSettings.EventsProcessed} events",
+            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+            FontSize = 11,
+            Margin = new Thickness(0, 0, 0, 8)
+        });
+
+        // Per-context adaptive cards (most specific)
+        foreach (var (contextKey, profile) in allSettings.Contexts.OrderByDescending(c => c.Value.AcceptedCount + c.Value.DismissedCount))
+        {
+            if (!profile.HasSufficientData) continue;
+            AdaptiveTuningPanel.Children.Add(CreateAdaptiveTuningCard(
+                profile.Label ?? contextKey,
+                $"{profile.Category} context",
+                profile));
+        }
+
+        // Per-category adaptive cards (fallback layer)
+        foreach (var (category, profile) in allSettings.Categories.OrderByDescending(c => c.Value.AcceptedCount + c.Value.DismissedCount))
+        {
+            if (!profile.HasSufficientData) continue;
+            AdaptiveTuningPanel.Children.Add(CreateAdaptiveTuningCard(
+                category,
+                "category-level",
+                profile));
+        }
+    }
+
+    /// <summary>
+    /// Builds a compact adaptive tuning card showing temperature adjustment, length preset,
+    /// accept rate, and quality metrics for a single context or category.
+    /// </summary>
+    private UIElement CreateAdaptiveTuningCard(string label, string subtitle, ContextAdaptiveProfile profile)
+    {
+        var acceptRate = (int)Math.Round(profile.AcceptRate * 100);
+
+        // Colour based on temperature adjustment direction
+        var tempColor = profile.TemperatureAdjustment <= -0.05
+            ? Color.FromRgb(63, 185, 80)     // green — precision-tuned
+            : profile.TemperatureAdjustment >= 0.05
+                ? Color.FromRgb(240, 136, 62)     // amber — boosted for variety
+                : Color.FromRgb(47, 129, 247);    // blue — baseline
+
+        var card = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(22, 27, 34)),
+            CornerRadius = new CornerRadius(6),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(60, tempColor.R, tempColor.G, tempColor.B)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(10),
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+
+        var panel = new StackPanel();
+
+        // Header: label + subtitle
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = subtitle,
+            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+            FontSize = 10,
+            Margin = new Thickness(0, 1, 0, 6)
+        });
+
+        // Pill row: temperature, length, accept rate, quality
+        var pillRow = new WrapPanel { Orientation = Orientation.Horizontal };
+
+        var tempLabel = profile.TemperatureAdjustment switch
+        {
+            <= -0.05 => $"temp {profile.TemperatureAdjustment:+0.00;-0.00} (precision)",
+            >= 0.05 => $"temp {profile.TemperatureAdjustment:+0.00;-0.00} (variety)",
+            _ => "temp baseline"
+        };
+
+        AddPill(pillRow, tempLabel,
+            Color.FromArgb(40, tempColor.R, tempColor.G, tempColor.B), tempColor,
+            "Temperature adjustment applied to this context based on your accept/dismiss history");
+
+        AddPill(pillRow, $"{profile.SuggestedLengthPreset} length",
+            Color.FromArgb(40, 138, 180, 248), Color.FromRgb(138, 180, 248),
+            $"Avg {profile.AvgAcceptedWordCount:F0} words per accepted completion");
+
+        var rateColor = acceptRate >= 60 ? Color.FromRgb(63, 185, 80)
+                      : acceptRate >= 40 ? Color.FromRgb(240, 136, 62)
+                      : Color.FromRgb(139, 148, 158);
+        AddPill(pillRow, $"{acceptRate}% accept rate",
+            Color.FromArgb(40, rateColor.R, rateColor.G, rateColor.B), rateColor,
+            $"{profile.AcceptedCount} accepted, {profile.DismissedCount} dismissed");
+
+        if (profile.AvgQualityScore > 0)
+        {
+            int qPct = (int)Math.Round(profile.AvgQualityScore * 100);
+            AddPill(pillRow, $"{qPct}% quality",
+                Color.FromArgb(40, 63, 185, 80), Color.FromRgb(63, 185, 80),
+                $"Average quality score: latency, cycling, and post-edit corrections");
+        }
+
+        panel.Children.Add(pillRow);
+        card.Child = panel;
+        return card;
     }
 
     private void LoadStyleProfileStatus()
@@ -1361,6 +1515,64 @@ public partial class SettingsWindow : Window
         }
 
         contentPanel.Children.Add(pillRow);
+
+        // ── Adaptive tuning + correction insights per category ──────────────
+        var traitParts = new List<string>();
+
+        // Adaptive settings — show temperature/length tuning when available
+        var adaptiveProfile = _contextAdaptiveSettingsService?.GetSettings(null, category);
+        if (adaptiveProfile != null)
+        {
+            var tempLabel = adaptiveProfile.TemperatureAdjustment switch
+            {
+                <= -0.05 => "precision-tuned",
+                >= 0.05  => "variety-boosted",
+                _        => "baseline"
+            };
+            traitParts.Add($"Temperature {tempLabel} ({adaptiveProfile.TemperatureAdjustment:+0.00;-0.00})");
+            traitParts.Add($"Length preset: {adaptiveProfile.SuggestedLengthPreset} (avg {adaptiveProfile.AvgAcceptedWordCount:F0} words accepted)");
+
+            AddPill(pillRow, $"{adaptiveProfile.SuggestedLengthPreset} length",
+                Color.FromArgb(40, 138, 180, 248), Color.FromRgb(138, 180, 248),
+                $"Completions are tuned to {adaptiveProfile.SuggestedLengthPreset} length based on your accepted completion lengths in {category}");
+        }
+
+        // Correction pattern insights — show when the user has correction data for this category
+        var correctionPatterns = _correctionPatternService?.GetPatterns();
+        if (correctionPatterns != null &&
+            correctionPatterns.Categories.TryGetValue(category, out var catCorrections) &&
+            catCorrections.TotalCorrections >= 3)
+        {
+            if (catCorrections.TruncationRate >= 0.30)
+                traitParts.Add($"You shorten completions {catCorrections.TruncationRate:P0} of the time");
+            if (catCorrections.FrequentReplacements.Count > 0)
+            {
+                var top = catCorrections.FrequentReplacements[0];
+                traitParts.Add(top.Replacement == "(removed)"
+                    ? $"You often remove \"{top.Original}\""
+                    : $"You prefer \"{top.Replacement}\" over \"{top.Original}\"");
+            }
+            if (catCorrections.AvoidedWords.Count > 0)
+                traitParts.Add($"Words you avoid: {string.Join(", ", catCorrections.AvoidedWords.Take(3))}");
+
+            AddPill(pillRow, $"{catCorrections.TotalCorrections} corrections tracked",
+                Color.FromArgb(40, 216, 158, 106), Color.FromRgb(216, 158, 106),
+                $"Keystroke has tracked {catCorrections.TotalCorrections} post-acceptance corrections in {category}");
+        }
+
+        // Learned traits summary line — shows human-readable insights
+        if (traitParts.Count > 0)
+        {
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = string.Join(" · ", traitParts),
+                Foreground = new SolidColorBrush(Color.FromRgb(173, 181, 189)),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 6, 0, 0)
+            });
+        }
+
         Grid.SetColumn(contentPanel, 1);
 
         outerGrid.Children.Add(scoreBox);
@@ -1431,6 +1643,13 @@ public partial class SettingsWindow : Window
             "Clear",
             Color.FromRgb(240, 136, 62),
             (_, _) => ClearContextData(summary)));
+        if (summary.AssistCount > 0)
+        {
+            actionRow.Children.Add(CreateContextActionButton(
+                "Reset assist data",
+                Color.FromRgb(173, 181, 189),
+                (_, _) => ResetContextAssistData(summary)));
+        }
         panel.Children.Add(actionRow);
 
         if (summary.IsDisabled)
@@ -1511,8 +1730,110 @@ public partial class SettingsWindow : Window
         }
 
         panel.Children.Add(pillRow);
+
+        // ── Learned traits summary — shows what Keystroke has picked up in this context ──
+        var contextTraits = BuildContextTraitsSummary(summary);
+        if (contextTraits.Count > 0)
+        {
+            var traitsPanel = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+            foreach (var trait in contextTraits)
+            {
+                traitsPanel.Children.Add(new TextBlock
+                {
+                    Text = $"  {trait}",
+                    Foreground = new SolidColorBrush(Color.FromRgb(173, 181, 189)),
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 1, 0, 1)
+                });
+            }
+            panel.Children.Add(traitsPanel);
+        }
+
         card.Child = panel;
         return card;
+    }
+
+    /// <summary>
+    /// Builds a human-readable list of what Keystroke has learned about a specific context.
+    /// Draws from adaptive settings (temperature/length tuning), correction patterns,
+    /// and context summary stats to produce lines like:
+    ///   "Completions tuned to brief length (avg 4 words accepted)"
+    ///   "You prefer 'plan' over 'option' here"
+    ///   "Match rate: 78% — Keystroke is confident in this context"
+    /// </summary>
+    private List<string> BuildContextTraitsSummary(LearningContextSummary summary)
+    {
+        var traits = new List<string>();
+
+        // Adaptive settings for this specific context
+        var adaptiveProfile = _contextAdaptiveSettingsService?.GetSettings(
+            summary.ContextKey, summary.Category);
+        if (adaptiveProfile != null)
+        {
+            // Temperature tuning insight
+            if (adaptiveProfile.TemperatureAdjustment <= -0.05)
+                traits.Add($"Precision-tuned: temperature lowered by {Math.Abs(adaptiveProfile.TemperatureAdjustment):F2} because you accept quickly here");
+            else if (adaptiveProfile.TemperatureAdjustment >= 0.05)
+                traits.Add($"Variety-boosted: temperature raised by {adaptiveProfile.TemperatureAdjustment:F2} to improve match rate");
+
+            // Length insight
+            traits.Add($"Completions tuned to {adaptiveProfile.SuggestedLengthPreset} length (avg {adaptiveProfile.AvgAcceptedWordCount:F0} words accepted)");
+        }
+
+        // Correction patterns for this context's category
+        var correctionPatterns = _correctionPatternService?.GetPatterns();
+        if (correctionPatterns != null)
+        {
+            // Try subcontext-level patterns first, fall back to category
+            CategoryCorrectionPatterns? contextCorrections = null;
+            if (correctionPatterns.Contexts.TryGetValue(summary.ContextKey, out var subCtx))
+                contextCorrections = subCtx;
+            else if (correctionPatterns.Categories.TryGetValue(summary.Category, out var catCtx))
+                contextCorrections = catCtx;
+
+            if (contextCorrections is { TotalCorrections: >= 3 })
+            {
+                if (contextCorrections.TruncationRate >= 0.30)
+                    traits.Add($"You shorten completions {contextCorrections.TruncationRate:P0} of the time here");
+                foreach (var rep in contextCorrections.FrequentReplacements.Take(2))
+                {
+                    traits.Add(rep.Replacement == "(removed)"
+                        ? $"You often remove \"{rep.Original}\" from completions"
+                        : $"You prefer \"{rep.Replacement}\" over \"{rep.Original}\"");
+                }
+            }
+        }
+
+        // Match rate insight derived from summary
+        var matchRate = (int)Math.Round(summary.MatchRate * 100);
+        if (matchRate >= 70 && summary.NativeCount + summary.AssistCount >= 10)
+            traits.Add($"Match rate: {matchRate}% — Keystroke is confident in this context");
+        else if (matchRate <= 30 && summary.NativeCount + summary.AssistCount >= 10)
+            traits.Add($"Match rate: {matchRate}% — still learning your patterns here");
+
+        return traits;
+    }
+
+    /// <summary>
+    /// Resets only the assist-preference data (accepted model completions) for a context,
+    /// preserving native writing examples. This is useful when the user's style has changed
+    /// and old assist patterns are no longer representative.
+    /// </summary>
+    private void ResetContextAssistData(LearningContextSummary summary)
+    {
+        var result = MessageBox.Show(
+            $"Reset assist-preference data for \"{summary.ContextLabel}\"?\n\n" +
+            "This removes accepted completion history for this context but keeps your native " +
+            "writing examples. Use this when old suggestions feel stale but your voice data is still accurate.",
+            "Reset Assist Data",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        _contextMaintenanceService.ClearAssistData(summary.ContextKey);
+        RefreshLearningViews(invalidateDerivedArtifacts: true);
     }
 
     private Button CreateContextActionButton(string text, Color accent, RoutedEventHandler onClick)
@@ -1587,6 +1908,8 @@ public partial class SettingsWindow : Window
             _contextMaintenanceService.InvalidateDerivedArtifacts();
             _styleProfileService?.InvalidateProfile();
             _vocabularyProfileService?.InvalidateProfile();
+            _correctionPatternService?.InvalidatePatterns();
+            _contextAdaptiveSettingsService?.InvalidateSettings();
         }
 
         _learningService?.Refresh();
@@ -1863,7 +2186,9 @@ public partial class SettingsWindow : Window
                     Path.Combine(appDataPath, "usage.json"),
                     Path.Combine(appDataPath, "style-profile.json"),
                     Path.Combine(appDataPath, "vocabulary-profile.json"),
-                    Path.Combine(appDataPath, "learning-scores.json")
+                    Path.Combine(appDataPath, "learning-scores.json"),
+                    Path.Combine(appDataPath, "correction-patterns.json"),
+                    Path.Combine(appDataPath, "context-adaptive-settings.json")
                 };
 
                 foreach (var path in resetTargets)
@@ -2597,5 +2922,963 @@ public partial class SettingsWindow : Window
         SwatchRingForest.Stroke   = themeId == "forest"   ? accent : Brushes.Transparent;
         SwatchRingRose.Stroke     = themeId == "rose"     ? accent : Brushes.Transparent;
         SwatchRingSlate.Stroke    = themeId == "slate"    ? accent : Brushes.Transparent;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Analytics tab rendering (Phases B–F)
+    // ══════════════════════════════════════════════════════════════════════
+
+    private string _selectedScoreCategory = "All";
+
+    private void LoadAnalytics()
+    {
+        try
+        {
+            // Gate: free users see the locked teaser only
+            if (!_isPro)
+            {
+                AnalyticsLockedCard.Visibility = Visibility.Visible;
+                AnalyticsProContent.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            AnalyticsLockedCard.Visibility = Visibility.Collapsed;
+            AnalyticsProContent.Visibility = Visibility.Visible;
+
+            if (_analyticsService == null) return;
+
+            // Refresh data on a background thread, then render on UI thread
+            _ = System.Threading.Tasks.Task.Run(() =>
+            {
+                _analyticsService.Refresh();
+            }).ContinueWith(_ =>
+            {
+                Dispatcher.Invoke(RenderAnalytics);
+            });
+        }
+        catch (Exception) { /* Analytics display is non-critical */ }
+    }
+
+    private void RenderAnalytics()
+    {
+        if (_analyticsService == null) return;
+
+        try
+        {
+            RenderAnalyticsHero();
+            RenderWeekOverWeek();
+            RenderScoreTrajectory();
+            RenderDailyActivity();
+            RenderCategoryBreakdown();
+            RenderTimeOfDay();
+            RenderCorrectionTrends();
+            RenderContextLeaderboard();
+            RenderMilestones();
+        }
+        catch (Exception) { /* Non-critical */ }
+    }
+
+    // ── Hero Summary Card ─────────────────────────────────────────────────
+
+    private void RenderAnalyticsHero()
+    {
+        var store = _analyticsService!.GetStore();
+        var currentWeek = _analyticsService.GetCurrentWeekSummary();
+        int score = _analyticsService.GetWeightedAverageScore();
+        int prevScore = _analyticsService.GetPreviousWeekAverageScore();
+
+        // Headline
+        string headline;
+        if (score == 0 && store.CumulativeAccepted == 0)
+            headline = "Your writing profile is just getting started";
+        else if (score < 30)
+            headline = "Your writing profile is just getting started";
+        else if (score < 60)
+            headline = $"Your writing profile is building \u2014 {score}% tuned";
+        else if (score < 80)
+        {
+            string comparison = prevScore > 0 && prevScore != score
+                ? (score > prevScore ? $"up from {prevScore}% last week" : $"down from {prevScore}% last week")
+                : "holding steady";
+            headline = $"Your writing profile is {score}% tuned \u2014 {comparison}";
+        }
+        else
+        {
+            string comparison = prevScore > 0 && prevScore != score
+                ? (score > prevScore ? $"up from {prevScore}% last week" : "holding strong")
+                : "holding strong";
+            headline = $"Keystroke knows your style \u2014 {score}% tuned, {comparison}";
+        }
+        AnalyticsHeroTitle.Text = headline;
+
+        // Subtitle
+        int wordsThisWeek = currentWeek?.WordsAssisted ?? 0;
+        int contextsActive = store.ScoreHistory.Count;
+        if (wordsThisWeek > 0)
+            AnalyticsHeroSubtitle.Text = $"{wordsThisWeek} words assisted this week across {contextsActive} categor{(contextsActive == 1 ? "y" : "ies")}";
+        else if (store.CumulativeAccepted > 0)
+            AnalyticsHeroSubtitle.Text = $"{store.CumulativeAccepted} total completions tracked so far";
+        else
+            AnalyticsHeroSubtitle.Text = "Start accepting suggestions and your analytics will appear here.";
+
+        // Pills
+        AnalyticsHeroPills.Children.Clear();
+        if (store.CurrentStreak > 0)
+            AnalyticsHeroPills.Children.Add(CreateAnalyticsPill($"{store.CurrentStreak}-day streak"));
+
+        var latestMilestone = store.AchievedMilestones.LastOrDefault();
+        if (latestMilestone != null)
+            AnalyticsHeroPills.Children.Add(CreateAnalyticsPill(latestMilestone.Label.Split('\u2014')[0].Trim()));
+
+        // Top category this week
+        if (currentWeek != null && !string.IsNullOrEmpty(currentWeek.TopCategory))
+        {
+            var pct = (int)(currentWeek.TopCategoryRate * 100);
+            AnalyticsHeroPills.Children.Add(CreateAnalyticsPill($"{currentWeek.TopCategory} {pct}%"));
+        }
+    }
+
+    // ── Week-over-Week Comparison ─────────────────────────────────────────
+
+    private void RenderWeekOverWeek()
+    {
+        var current = _analyticsService!.GetCurrentWeekSummary();
+        var previous = _analyticsService.GetPreviousWeekSummary();
+
+        // Acceptance rate
+        if (current != null && current.TotalAccepted + current.TotalDismissed > 0)
+        {
+            int rate = (int)(current.AcceptanceRate * 100);
+            AnalyticsWeekAcceptRate.Text = $"{rate}%";
+            AnalyticsWeekAcceptRate.Foreground = new SolidColorBrush(
+                rate >= 50 ? Color.FromRgb(63, 185, 80) : rate >= 25 ? Color.FromRgb(240, 136, 62)
+                : Color.FromRgb(139, 148, 158));
+
+            if (previous != null && previous.TotalAccepted + previous.TotalDismissed > 0)
+            {
+                int prevRate = (int)(previous.AcceptanceRate * 100);
+                int delta = rate - prevRate;
+                AnalyticsWeekAcceptDelta.Text = delta > 0 ? $"\u2191 {delta}% from last week"
+                    : delta < 0 ? $"\u2193 {-delta}% from last week" : "Same as last week";
+                AnalyticsWeekAcceptDelta.Foreground = new SolidColorBrush(
+                    delta > 0 ? Color.FromRgb(63, 185, 80) : delta < 0 ? Color.FromRgb(240, 136, 62)
+                    : Color.FromRgb(139, 148, 158));
+            }
+            else
+                AnalyticsWeekAcceptDelta.Text = "";
+        }
+        else
+        {
+            AnalyticsWeekAcceptRate.Text = "--";
+            AnalyticsWeekAcceptDelta.Text = "";
+        }
+
+        // Words assisted
+        int words = current?.WordsAssisted ?? 0;
+        AnalyticsWeekWordsAssisted.Text = words > 0 ? words.ToString("N0") : "--";
+        if (previous != null && previous.WordsAssisted > 0)
+        {
+            int delta = words - previous.WordsAssisted;
+            AnalyticsWeekWordsDelta.Text = delta > 0 ? $"\u2191 {delta:N0} from last week"
+                : delta < 0 ? $"\u2193 {-delta:N0} from last week" : "Same as last week";
+            AnalyticsWeekWordsDelta.Foreground = new SolidColorBrush(
+                delta > 0 ? Color.FromRgb(63, 185, 80) : delta < 0 ? Color.FromRgb(240, 136, 62)
+                : Color.FromRgb(139, 148, 158));
+        }
+        else
+            AnalyticsWeekWordsDelta.Text = "";
+
+        // Average quality
+        if (current != null && current.AvgQuality > 0)
+        {
+            AnalyticsWeekAvgQuality.Text = current.AvgQuality.ToString("F2");
+            if (previous != null && previous.AvgQuality > 0)
+            {
+                float delta = current.AvgQuality - previous.AvgQuality;
+                AnalyticsWeekQualityDelta.Text = delta > 0.01f ? $"\u2191 {delta:+0.00} from last week"
+                    : delta < -0.01f ? $"\u2193 {-delta:0.00} from last week" : "Same as last week";
+                AnalyticsWeekQualityDelta.Foreground = new SolidColorBrush(
+                    delta > 0.01f ? Color.FromRgb(63, 185, 80) : delta < -0.01f ? Color.FromRgb(240, 136, 62)
+                    : Color.FromRgb(139, 148, 158));
+            }
+            else
+                AnalyticsWeekQualityDelta.Text = "";
+        }
+        else
+        {
+            AnalyticsWeekAvgQuality.Text = "--";
+            AnalyticsWeekQualityDelta.Text = "";
+        }
+    }
+
+    // ── Score Trajectory Sparkline ────────────────────────────────────────
+
+    private void RenderScoreTrajectory()
+    {
+        var store = _analyticsService!.GetStore();
+
+        // Build category selector pills
+        AnalyticsScoreCategoryPills.Children.Clear();
+        var categories = store.ScoreHistory.Keys.OrderBy(k => k).ToList();
+
+        if (categories.Count == 0)
+        {
+            AnalyticsScoreSparkline.Visibility = Visibility.Collapsed;
+            AnalyticsScoreEmptyText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        AnalyticsScoreSparkline.Visibility = Visibility.Visible;
+        AnalyticsScoreEmptyText.Visibility = Visibility.Collapsed;
+
+        var allButton = CreateScoreCategoryButton("All", _selectedScoreCategory == "All");
+        AnalyticsScoreCategoryPills.Children.Add(allButton);
+
+        foreach (var cat in categories)
+        {
+            var btn = CreateScoreCategoryButton(cat, _selectedScoreCategory == cat);
+            AnalyticsScoreCategoryPills.Children.Add(btn);
+        }
+
+        // Render sparkline for selected category
+        AnalyticsScoreSparkline.ClearSeries();
+        AnalyticsScoreSparkline.SetRange(0, 100);
+
+        if (_selectedScoreCategory == "All")
+        {
+            // Weighted average across all categories per date
+            var allDates = store.ScoreHistory.Values
+                .SelectMany(h => h.Select(s => s.Date))
+                .Distinct()
+                .OrderBy(d => d)
+                .ToList();
+
+            var avgPoints = new List<SparklineControl.DataPoint>();
+            foreach (var date in allDates)
+            {
+                double sum = 0;
+                int count = 0;
+                foreach (var (_, history) in store.ScoreHistory)
+                {
+                    var snap = history.FirstOrDefault(s => s.Date == date);
+                    if (snap != null) { sum += snap.Score; count++; }
+                }
+                if (count > 0)
+                    avgPoints.Add(new SparklineControl.DataPoint(date, sum / count));
+            }
+
+            AnalyticsScoreSparkline.AddSeries("All", avgPoints, Color.FromRgb(47, 129, 247));
+        }
+        else if (store.ScoreHistory.TryGetValue(_selectedScoreCategory, out var history))
+        {
+            var points = history
+                .Select(s => new SparklineControl.DataPoint(s.Date, s.Score))
+                .ToList();
+
+            var lastScore = points.Count > 0 ? (int)points[^1].Value : 0;
+            var color = lastScore >= 80 ? Color.FromRgb(63, 185, 80)
+                      : lastScore >= 60 ? Color.FromRgb(47, 129, 247)
+                      : lastScore >= 40 ? Color.FromRgb(240, 136, 62)
+                      : Color.FromRgb(139, 148, 158);
+
+            AnalyticsScoreSparkline.AddSeries(_selectedScoreCategory, points, color);
+        }
+
+        // Force layout then render
+        AnalyticsScoreSparkline.UpdateLayout();
+        AnalyticsScoreSparkline.Render();
+    }
+
+    private UIElement CreateScoreCategoryButton(string label, bool isSelected)
+    {
+        var border = new System.Windows.Controls.Border
+        {
+            Background = new SolidColorBrush(isSelected ? Color.FromRgb(47, 129, 247) : Color.FromRgb(24, 38, 62)),
+            BorderBrush = new SolidColorBrush(isSelected ? Color.FromRgb(47, 129, 247) : Color.FromRgb(48, 54, 61)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(10, 4, 10, 4),
+            Margin = new Thickness(0, 0, 6, 0),
+            Cursor = System.Windows.Input.Cursors.Hand
+        };
+
+        border.Child = new TextBlock
+        {
+            Text = label,
+            Foreground = new SolidColorBrush(isSelected ? Colors.White : Color.FromRgb(139, 148, 158)),
+            FontSize = 11
+        };
+
+        border.MouseLeftButtonDown += (_, _) =>
+        {
+            _selectedScoreCategory = label;
+            RenderScoreTrajectory();
+        };
+
+        return border;
+    }
+
+    // ── Daily Activity Bar Chart ──────────────────────────────────────────
+
+    private void RenderDailyActivity()
+    {
+        var rollups = _analyticsService!.GetRecentRollups(30);
+
+        if (rollups.Count == 0)
+        {
+            AnalyticsDailyBars.Visibility = Visibility.Collapsed;
+            AnalyticsDailyEmptyText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        AnalyticsDailyBars.Visibility = Visibility.Visible;
+        AnalyticsDailyEmptyText.Visibility = Visibility.Collapsed;
+
+        var today = DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+        // Fill gaps in the date range so the chart has a consistent 30-bar layout
+        var bars = new List<StackedBarChart.BarData>();
+        var startDate = DateTime.Now.Date.AddDays(-29);
+        for (int i = 0; i < 30; i++)
+        {
+            var date = startDate.AddDays(i);
+            var dateKey = date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            var rollup = rollups.FirstOrDefault(r => r.Date == dateKey);
+
+            string label = date.ToString("ddd MMM d");
+            bars.Add(new StackedBarChart.BarData(
+                label,
+                rollup?.TotalAccepted ?? 0,
+                rollup?.TotalNativeCommits ?? 0,
+                rollup?.TotalDismissed ?? 0,
+                dateKey == today));
+        }
+
+        AnalyticsDailyBars.SetBars(bars);
+        AnalyticsDailyBars.UpdateLayout();
+        AnalyticsDailyBars.Render();
+    }
+
+    // ── Category Breakdown ────────────────────────────────────────────────
+
+    private void RenderCategoryBreakdown()
+    {
+        AnalyticsCategoryBreakdownPanel.Children.Clear();
+        var current = _analyticsService!.GetCurrentWeekSummary();
+        var previous = _analyticsService.GetPreviousWeekSummary();
+
+        if (current == null || current.TotalAccepted == 0)
+        {
+            AnalyticsCategoryEmptyText.Visibility = Visibility.Visible;
+            return;
+        }
+        AnalyticsCategoryEmptyText.Visibility = Visibility.Collapsed;
+
+        // Aggregate category stats from current week's rollups
+        var rollups = _analyticsService.GetRecentRollups(7);
+        var catStats = new Dictionary<string, (int Accepted, int Dismissed)>();
+        foreach (var rollup in rollups)
+        {
+            foreach (var (cat, stats) in rollup.CategoryBreakdown)
+            {
+                if (!catStats.TryGetValue(cat, out var existing))
+                    existing = (0, 0);
+                catStats[cat] = (existing.Accepted + stats.Accepted, existing.Dismissed + stats.Dismissed);
+            }
+        }
+
+        // Previous week category stats for delta
+        var prevRollups = _analyticsService.GetRecentRollups(14)
+            .Where(r => !rollups.Any(cr => cr.Date == r.Date))
+            .Take(7)
+            .ToList();
+        var prevCatStats = new Dictionary<string, (int Accepted, int Dismissed)>();
+        foreach (var rollup in prevRollups)
+        {
+            foreach (var (cat, stats) in rollup.CategoryBreakdown)
+            {
+                if (!prevCatStats.TryGetValue(cat, out var existing))
+                    existing = (0, 0);
+                prevCatStats[cat] = (existing.Accepted + stats.Accepted, existing.Dismissed + stats.Dismissed);
+            }
+        }
+
+        var sorted = catStats.OrderByDescending(c =>
+        {
+            int total = c.Value.Accepted + c.Value.Dismissed;
+            return total > 0 ? (double)c.Value.Accepted / total : 0;
+        });
+
+        foreach (var (cat, stats) in sorted)
+        {
+            int total = stats.Accepted + stats.Dismissed;
+            if (total == 0) continue;
+            double rate = (double)stats.Accepted / total;
+            int ratePct = (int)(rate * 100);
+
+            // Previous week delta
+            string deltaText = "";
+            Color deltaColor = Color.FromRgb(139, 148, 158);
+            if (prevCatStats.TryGetValue(cat, out var prev))
+            {
+                int prevTotal = prev.Accepted + prev.Dismissed;
+                if (prevTotal > 0)
+                {
+                    int prevPct = (int)((double)prev.Accepted / prevTotal * 100);
+                    int delta = ratePct - prevPct;
+                    if (delta > 0) { deltaText = $"\u2191 {delta}%"; deltaColor = Color.FromRgb(63, 185, 80); }
+                    else if (delta < 0) { deltaText = $"\u2193 {-delta}%"; deltaColor = Color.FromRgb(240, 136, 62); }
+                }
+            }
+
+            var icon = GetCategoryIcon(cat);
+            var row = CreateCategoryBreakdownRow(icon, cat, ratePct, stats.Accepted, deltaText, deltaColor);
+            AnalyticsCategoryBreakdownPanel.Children.Add(row);
+        }
+    }
+
+    private UIElement CreateCategoryBreakdownRow(string icon, string category, int ratePct,
+        int acceptedCount, string deltaText, Color deltaColor)
+    {
+        var grid = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+
+        // Category label
+        var label = new TextBlock
+        {
+            Text = $"{icon} {category}",
+            Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(label, 0);
+
+        // Rate bar
+        var barBg = new System.Windows.Controls.Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(33, 38, 45)),
+            CornerRadius = new CornerRadius(3),
+            Height = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 8, 0)
+        };
+        var barFill = new System.Windows.Controls.Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(63, 185, 80)),
+            CornerRadius = new CornerRadius(3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Height = 6,
+            Width = 0
+        };
+        barBg.Child = barFill;
+        Grid.SetColumn(barBg, 1);
+
+        // Animate bar width
+        barBg.Loaded += (_, _) =>
+        {
+            var targetWidth = Math.Max(0, barBg.ActualWidth * ratePct / 100.0);
+            var anim = new DoubleAnimation(0, targetWidth, TimeSpan.FromMilliseconds(400))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            barFill.BeginAnimation(WidthProperty, anim);
+        };
+
+        // Rate %
+        var rateText = new TextBlock
+        {
+            Text = $"{ratePct}%",
+            Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        Grid.SetColumn(rateText, 2);
+
+        // Delta
+        var delta = new TextBlock
+        {
+            Text = deltaText,
+            Foreground = new SolidColorBrush(deltaColor),
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        Grid.SetColumn(delta, 3);
+
+        grid.Children.Add(label);
+        grid.Children.Add(barBg);
+        grid.Children.Add(rateText);
+        grid.Children.Add(delta);
+        return grid;
+    }
+
+    // ── Time-of-Day Heatmap ───────────────────────────────────────────────
+
+    private void RenderTimeOfDay()
+    {
+        var rollups = _analyticsService!.GetRecentRollups(14);
+        if (rollups.Count < 7)
+        {
+            AnalyticsTimeOfDayCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        AnalyticsTimeOfDayCard.Visibility = Visibility.Visible;
+
+        // Aggregate hours into 4 buckets
+        var buckets = new (string Label, int StartHour, int EndHour)[]
+        {
+            ("Morning", 6, 11),
+            ("Afternoon", 12, 17),
+            ("Evening", 18, 22),
+            ("Night", 23, 5)
+        };
+
+        int maxRate = 0;
+        var bucketData = new List<(string Label, int Accepts, int Dismisses, int Rate)>();
+
+        foreach (var (label, start, end) in buckets)
+        {
+            int accepts = 0, dismisses = 0;
+            foreach (var rollup in rollups)
+            {
+                for (int h = 0; h < 24; h++)
+                {
+                    bool inBucket = start <= end
+                        ? h >= start && h <= end
+                        : h >= start || h <= end;
+                    if (!inBucket) continue;
+                    accepts += rollup.HourAcceptDistribution[h];
+                    dismisses += rollup.HourDismissDistribution[h];
+                }
+            }
+
+            int total = accepts + dismisses;
+            int rate = total > 0 ? (int)((double)accepts / total * 100) : 0;
+            if (rate > maxRate) maxRate = rate;
+            bucketData.Add((label, accepts, dismisses, rate));
+        }
+
+        // Clear existing children beyond the column definitions
+        var toRemove = AnalyticsTimeOfDayGrid.Children.Cast<UIElement>().ToList();
+        foreach (var child in toRemove)
+            AnalyticsTimeOfDayGrid.Children.Remove(child);
+
+        for (int i = 0; i < bucketData.Count; i++)
+        {
+            var (label, accepts, dismisses, rate) = bucketData[i];
+
+            // Background tint proportional to rate
+            byte alpha = maxRate > 0 ? (byte)(rate * 80 / maxRate) : (byte)0;
+            var tile = new System.Windows.Controls.Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(alpha, 63, 185, 80)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(48, 54, 61)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 10, 12, 10),
+                Margin = new Thickness(i == 0 ? 0 : 4, 0, i == 3 ? 0 : 4, 0)
+            };
+
+            var content = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            content.Children.Add(new TextBlock
+            {
+                Text = label,
+                Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = rate > 0 ? $"{rate}%" : "--",
+                Foreground = new SolidColorBrush(rate > 0 ? Color.FromRgb(63, 185, 80) : Color.FromRgb(139, 148, 158)),
+                FontSize = 20,
+                FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 4, 0, 2)
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{accepts + dismisses} events",
+                Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            // "Best" badge
+            if (rate == maxRate && rate > 0)
+            {
+                var badge = new System.Windows.Controls.Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(50, 63, 185, 80)),
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(0, 4, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                badge.Child = new TextBlock
+                {
+                    Text = "Best",
+                    Foreground = new SolidColorBrush(Color.FromRgb(63, 185, 80)),
+                    FontSize = 10,
+                    FontWeight = FontWeights.SemiBold
+                };
+                content.Children.Add(badge);
+            }
+
+            tile.Child = content;
+            Grid.SetColumn(tile, i);
+            AnalyticsTimeOfDayGrid.Children.Add(tile);
+        }
+    }
+
+    // ── Correction Trends ─────────────────────────────────────────────────
+
+    private void RenderCorrectionTrends()
+    {
+        var rollups = _analyticsService!.GetRecentRollups(30);
+        var dataPoints = rollups
+            .Where(r => r.TotalAccepted > 0)
+            .Select(r => new SparklineControl.DataPoint(
+                r.Date,
+                r.TotalAccepted > 0 ? (double)r.TotalCorrections / r.TotalAccepted * 100 : 0))
+            .ToList();
+
+        if (dataPoints.Count < 7)
+        {
+            AnalyticsCorrectionCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        AnalyticsCorrectionCard.Visibility = Visibility.Visible;
+
+        // Check trend direction
+        var firstHalf = dataPoints.Take(dataPoints.Count / 2).Average(p => p.Value);
+        var secondHalf = dataPoints.Skip(dataPoints.Count / 2).Average(p => p.Value);
+        if (secondHalf < firstHalf - 2)
+            AnalyticsCorrectionSubtitle.Text = "Corrections are declining \u2014 the system is adapting to your preferences";
+        else if (secondHalf > firstHalf + 2)
+            AnalyticsCorrectionSubtitle.Text = "Correction rate is rising \u2014 your writing patterns may be shifting";
+        else
+            AnalyticsCorrectionSubtitle.Text = "How often you edit accepted completions";
+
+        double maxVal = dataPoints.Max(p => p.Value);
+        AnalyticsCorrectionSparkline.ClearSeries();
+        AnalyticsCorrectionSparkline.SetRange(0, Math.Max(maxVal * 1.2, 10));
+        AnalyticsCorrectionSparkline.AddSeries("Correction %", dataPoints,
+            secondHalf < firstHalf - 2 ? Color.FromRgb(63, 185, 80) : Color.FromRgb(240, 136, 62));
+        AnalyticsCorrectionSparkline.UpdateLayout();
+        AnalyticsCorrectionSparkline.Render();
+    }
+
+    // ── Context Leaderboard ───────────────────────────────────────────────
+
+    private void RenderContextLeaderboard()
+    {
+        AnalyticsContextLeaderboardPanel.Children.Clear();
+
+        var stats = _learningService?.GetStats();
+        if (stats == null || stats.ContextSummaries.Count == 0)
+        {
+            AnalyticsContextEmptyText.Visibility = Visibility.Visible;
+            return;
+        }
+        AnalyticsContextEmptyText.Visibility = Visibility.Collapsed;
+
+        // Find the most improved context (biggest positive score delta from recent rollups)
+        var rollups = _analyticsService!.GetRecentRollups(14);
+        var contextDeltas = new Dictionary<string, double>();
+        foreach (var ctx in stats.ContextSummaries)
+        {
+            var recentAccepts = rollups.Sum(r =>
+                r.TopContexts.FirstOrDefault(c => c.ContextKey == ctx.ContextKey)?.Accepted ?? 0);
+            contextDeltas[ctx.ContextKey] = recentAccepts;
+        }
+
+        string? mostImprovedKey = contextDeltas.Count > 0
+            ? contextDeltas.OrderByDescending(d => d.Value).FirstOrDefault().Key
+            : null;
+
+        var top5 = stats.ContextSummaries
+            .OrderByDescending(c => c.Confidence)
+            .Take(5);
+
+        foreach (var ctx in top5)
+        {
+            int matchPct = (int)(ctx.MatchRate * 100);
+            int eventCount = ctx.NativeCount + ctx.AssistCount + ctx.LegacyCount;
+            bool isMostImproved = ctx.ContextKey == mostImprovedKey && eventCount > 2;
+            var row = CreateContextLeaderboardRow(ctx.ContextLabel, ctx.Category, matchPct, eventCount, isMostImproved);
+            AnalyticsContextLeaderboardPanel.Children.Add(row);
+        }
+    }
+
+    private UIElement CreateContextLeaderboardRow(string label, string category,
+        int matchPct, int eventCount, bool isMostImproved)
+    {
+        var grid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var leftPanel = new StackPanel { Orientation = Orientation.Horizontal };
+        leftPanel.Children.Add(new TextBlock
+        {
+            Text = string.IsNullOrWhiteSpace(label) ? "(unnamed)" : label,
+            Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 250,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+
+        // Category badge pill
+        var catBadge = new System.Windows.Controls.Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(24, 38, 62)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(48, 54, 61)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        catBadge.Child = new TextBlock
+        {
+            Text = category,
+            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+            FontSize = 10
+        };
+        leftPanel.Children.Add(catBadge);
+
+        if (isMostImproved)
+        {
+            var badge = new System.Windows.Controls.Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(50, 63, 185, 80)),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            badge.Child = new TextBlock
+            {
+                Text = "Most improved",
+                Foreground = new SolidColorBrush(Color.FromRgb(63, 185, 80)),
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold
+            };
+            leftPanel.Children.Add(badge);
+        }
+        Grid.SetColumn(leftPanel, 0);
+
+        var matchText = new TextBlock
+        {
+            Text = $"{matchPct}%",
+            Foreground = new SolidColorBrush(matchPct >= 70 ? Color.FromRgb(63, 185, 80)
+                : matchPct >= 50 ? Color.FromRgb(47, 129, 247) : Color.FromRgb(139, 148, 158)),
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0)
+        };
+        Grid.SetColumn(matchText, 1);
+
+        var countText = new TextBlock
+        {
+            Text = $"{eventCount} events",
+            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0)
+        };
+        Grid.SetColumn(countText, 2);
+
+        grid.Children.Add(leftPanel);
+        grid.Children.Add(matchText);
+        grid.Children.Add(countText);
+
+        return new System.Windows.Controls.Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(22, 27, 34)),
+            CornerRadius = new CornerRadius(6),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(48, 54, 61)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(12, 8, 12, 8),
+            Child = grid
+        };
+    }
+
+    // ── Milestones Timeline ───────────────────────────────────────────────
+
+    private void RenderMilestones()
+    {
+        AnalyticsMilestonesPanel.Children.Clear();
+
+        var achieved = _analyticsService!.GetMilestones();
+        var next = _analyticsService.GetNextMilestone();
+
+        if (achieved.Count == 0 && next == null)
+        {
+            AnalyticsMilestonesPanel.Children.Add(new TextBlock
+            {
+                Text = "Start accepting suggestions to unlock your first milestone.",
+                Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                FontSize = 12,
+                FontStyle = FontStyles.Italic
+            });
+            return;
+        }
+
+        // Achieved milestones (newest first)
+        foreach (var milestone in achieved.AsEnumerable().Reverse())
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+
+            // Colored dot
+            row.Children.Add(new System.Windows.Shapes.Ellipse
+            {
+                Width = 10,
+                Height = 10,
+                Fill = new SolidColorBrush(Color.FromRgb(63, 185, 80)),
+                Margin = new Thickness(0, 3, 10, 0),
+                VerticalAlignment = VerticalAlignment.Top
+            });
+
+            var textPanel = new StackPanel();
+            textPanel.Children.Add(new TextBlock
+            {
+                Text = milestone.Label,
+                Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
+                FontSize = 12
+            });
+            textPanel.Children.Add(new TextBlock
+            {
+                Text = milestone.DateAchieved,
+                Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                FontSize = 10,
+                Margin = new Thickness(0, 2, 0, 0)
+            });
+            row.Children.Add(textPanel);
+
+            AnalyticsMilestonesPanel.Children.Add(row);
+        }
+
+        // Next milestone with progress bar
+        if (next != null)
+        {
+            var (id, label, current, threshold) = next.Value;
+            double progress = Math.Clamp((double)current / threshold, 0, 1);
+
+            var row = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+
+            var headerRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+            headerRow.Children.Add(new System.Windows.Shapes.Ellipse
+            {
+                Width = 10,
+                Height = 10,
+                Fill = new SolidColorBrush(Color.FromRgb(48, 54, 61)),
+                Stroke = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                StrokeThickness = 1,
+                Margin = new Thickness(0, 3, 10, 0),
+                VerticalAlignment = VerticalAlignment.Top
+            });
+            headerRow.Children.Add(new TextBlock
+            {
+                Text = label,
+                Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                FontSize = 12
+            });
+            row.Children.Add(headerRow);
+
+            // Progress bar
+            var barBg = new System.Windows.Controls.Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(33, 38, 45)),
+                CornerRadius = new CornerRadius(3),
+                Height = 6,
+                Margin = new Thickness(20, 0, 0, 4)
+            };
+            var barFill = new System.Windows.Controls.Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(47, 129, 247)),
+                CornerRadius = new CornerRadius(3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Height = 6,
+                Width = 0
+            };
+            barBg.Child = barFill;
+
+            barBg.Loaded += (_, _) =>
+            {
+                var targetWidth = Math.Max(0, barBg.ActualWidth * progress);
+                var anim = new DoubleAnimation(0, targetWidth, TimeSpan.FromMilliseconds(400))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                barFill.BeginAnimation(WidthProperty, anim);
+            };
+            row.Children.Add(barBg);
+
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{current} / {threshold}",
+                Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+                FontSize = 10,
+                Margin = new Thickness(20, 0, 0, 0)
+            });
+
+            AnalyticsMilestonesPanel.Children.Add(row);
+        }
+        else
+        {
+            AnalyticsMilestonesPanel.Children.Add(new TextBlock
+            {
+                Text = "All milestones achieved!",
+                Foreground = new SolidColorBrush(Color.FromRgb(63, 185, 80)),
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+        }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static string GetCategoryIcon(string category) => category.ToLower() switch
+    {
+        "chat"     => "\U0001F4AC",
+        "email"    => "\U0001F4E7",
+        "code"     => "\U0001F4BB",
+        "document" => "\U0001F4DD",
+        "browser"  => "\U0001F310",
+        "terminal" => "\u2328\uFE0F",
+        _          => "\U0001F4F1"
+    };
+
+    private UIElement CreateAnalyticsPill(string text)
+    {
+        var border = new System.Windows.Controls.Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(24, 38, 62)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(48, 54, 61)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(10, 4, 10, 4),
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        border.Child = new TextBlock
+        {
+            Text = text,
+            Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158)),
+            FontSize = 11
+        };
+        return border;
     }
 }

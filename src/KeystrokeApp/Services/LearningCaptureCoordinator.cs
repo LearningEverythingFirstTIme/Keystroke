@@ -73,9 +73,13 @@ public sealed class LearningCaptureCoordinator
         string completion,
         int latencyMs,
         int cycleDepth,
-        bool editedAfter)
+        bool editedAfter,
+        CorrectionInfo? correction = null)
     {
         var quality = CompletionFeedbackService.ComputeQualityScore(latencyMs, cycleDepth, editedAfter);
+
+        // Compute correction details from the raw watch-window signals.
+        var correctionDetails = ComputeCorrectionDetails(correction, completion);
 
         _eventService.Append(CreateRecord(
             "suggestion_full_accept",
@@ -92,7 +96,8 @@ public sealed class LearningCaptureCoordinator
             untouchedForMs: editedAfter ? 0 : 1500,
             qualityScore: quality,
             sourceWeight: editedAfter ? 0.2f : 0.55f,
-            confidence: context.ContextConfidence));
+            confidence: context.ContextConfidence,
+            correctionDetails: correctionDetails));
 
         if (!editedAfter)
         {
@@ -119,6 +124,38 @@ public sealed class LearningCaptureCoordinator
             if (_pendingSuggestion?.SuggestionId == suggestionId)
                 _pendingSuggestion.Resolved = true;
         }
+    }
+
+    /// <summary>
+    /// Derives structured correction details from the raw CorrectionInfo captured
+    /// during the post-acceptance watch window. Maps backspace count to a deleted
+    /// suffix from the original completion, and classifies the correction type.
+    /// </summary>
+    private static CorrectionDetails ComputeCorrectionDetails(CorrectionInfo? info, string completion)
+    {
+        if (info == null || !info.HasCorrection)
+            return CorrectionDetails.None;
+
+        int deleteChars = Math.Min(info.BackspaceCount, completion.Length);
+        string deletedSuffix = deleteChars > 0
+            ? completion[^deleteChars..]
+            : "";
+
+        string correctionType;
+        if (deleteChars <= 2 && info.ReplacementText.Length <= 2)
+            correctionType = "minor";
+        else if (info.ReplacementText.Length == 0)
+            correctionType = "truncated";
+        else
+            correctionType = "replaced_ending";
+
+        return new CorrectionDetails
+        {
+            DeletedSuffix = deletedSuffix,
+            ReplacementText = info.ReplacementText,
+            BackspaceCount = info.BackspaceCount,
+            CorrectionType = correctionType
+        };
     }
 
     public void OnDismiss(string reason, string suggestionId, long requestId, ContextSnapshot context, string prefix, string completion)
@@ -281,8 +318,10 @@ public sealed class LearningCaptureCoordinator
         float qualityScore = 0.5f,
         float sourceWeight = 0.5f,
         double confidence = 0.5,
-        string commitReason = "")
+        string commitReason = "",
+        CorrectionDetails? correctionDetails = null)
     {
+        var cd = correctionDetails ?? CorrectionDetails.None;
         return new LearningEventRecord
         {
             SessionId = _sessionId,
@@ -312,7 +351,11 @@ public sealed class LearningCaptureCoordinator
             UntouchedForMs = untouchedForMs,
             QualityScore = MathF.Round(qualityScore, 3),
             SourceWeight = MathF.Round(sourceWeight, 3),
-            Confidence = Math.Round(confidence, 3)
+            Confidence = Math.Round(confidence, 3),
+            DeletedSuffix = cd.DeletedSuffix,
+            CorrectedText = cd.ReplacementText,
+            CorrectionBackspaces = cd.BackspaceCount,
+            CorrectionType = cd.CorrectionType
         };
     }
 
@@ -338,4 +381,20 @@ public sealed class LearningCaptureCoordinator
         public bool TypedPastLogged { get; set; }
         public bool Resolved { get; set; }
     }
+}
+
+/// <summary>
+/// Structured correction details derived from raw <see cref="CorrectionInfo"/>.
+/// Contains the deleted suffix, replacement text, and classification of the correction type.
+/// </summary>
+public sealed class CorrectionDetails
+{
+    public static readonly CorrectionDetails None = new();
+
+    public string DeletedSuffix { get; init; } = "";
+    public string ReplacementText { get; init; } = "";
+    public int BackspaceCount { get; init; }
+    public string CorrectionType { get; init; } = "none";
+
+    public bool HasCorrection => CorrectionType != "none" && BackspaceCount > 0;
 }

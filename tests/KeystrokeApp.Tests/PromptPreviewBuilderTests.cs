@@ -25,6 +25,7 @@ public class PromptPreviewBuilderTests
             learningService: null,
             styleProfileService: null,
             vocabularyProfileService: null,
+            correctionPatternService: null,
             screenText: "Visible text",
             rollingContext: "Recent text");
 
@@ -57,6 +58,7 @@ public class PromptPreviewBuilderTests
             learningService: null,
             styleProfileService: null,
             vocabularyProfileService: null,
+            correctionPatternService: null,
             screenText: "Email thread",
             rollingContext: "Yesterday we said hi.");
 
