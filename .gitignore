@@ -4,6 +4,8 @@
 publish/
 artifacts/
 TestResults/
+dist/
+*.binlog
 
 # IDE
 .vs/
@@ -28,6 +30,8 @@ private-key.pem
 # AI tool workspace files
 .openclaw/
 memory/
+.claude/
+**/.claude/
 AGENTS.md
 HEARTBEAT.md
 IDENTITY.md

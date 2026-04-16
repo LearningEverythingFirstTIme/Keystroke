@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — Keystroke</title>
+  <meta name="description" content="How Keystroke handles your data. Short version: we don't collect any. Here's the long version." />
+  <meta name="robots" content="index,follow" />
+
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="legal-nav">
+    <div class="wrap legal-nav__inner">
+      <a href="index.html" class="nav__brand" aria-label="Keystroke home">
+        <span class="nav__mark">Keystroke</span>
+      </a>
+      <a href="index.html" class="legal-nav__back">← Back to home</a>
+    </div>
+  </header>
+
+  <main class="legal">
+    <header class="legal__head">
+      <p class="legal__updated">// last updated: April 16, 2026</p>
+      <h1>Privacy <em>Policy</em></h1>
+      <p class="legal__lede">
+        Keystroke is built on a single conviction: your words stay yours. This policy is the
+        long-form version of that promise — what we collect, what we don't, and where the
+        edges are.
+      </p>
+    </header>
+
+    <h2>The short version</h2>
+    <p>
+      The Keystroke desktop app collects nothing. No telemetry. No analytics. No crash
+      reports. No update pings. Everything you type, everything the app learns about your
+      writing, and your license key all live exclusively on your machine. The only data
+      that ever leaves your computer is the prompts you knowingly send to the AI provider
+      <em>you</em> chose, after sixteen PII detectors scrub them.
+    </p>
+    <p>
+      This website (the page you're reading) collects nothing either — no cookies, no
+      analytics, no fingerprinting. If you buy a Pro license, our payment processor
+      (Lemon Squeezy) handles the transaction and we receive your email address so we can
+      deliver your license key.
+    </p>
+
+    <h2>Who this policy applies to</h2>
+    <p>
+      "Keystroke" refers to the desktop application for Windows, this website, and the
+      services operated by <strong>Peter Nicholas Kessler</strong> ("we", "us"). It applies
+      to anyone who downloads the app, visits this site, or purchases a Pro license.
+    </p>
+
+    <h2>What the desktop app collects</h2>
+    <p>
+      <strong>Nothing.</strong> Specifically:
+    </p>
+    <ul>
+      <li>No telemetry, usage analytics, or feature flags</li>
+      <li>No crash or error reporting</li>
+      <li>No update checker or version pings</li>
+      <li>No account system, no login, no user identifier</li>
+      <li>No window titles, file paths, or screen contents are transmitted</li>
+    </ul>
+    <p>
+      Everything the app stores — your settings, your learning database (Pro), your
+      analytics dashboard data, your logs, your encrypted API keys — lives in
+      <span class="mono">%AppData%/Keystroke</span> on your local machine. We have no
+      copy. We have no way to access it. If you uninstall the app and delete that folder,
+      every trace is gone.
+    </p>
+
+    <h2>What leaves your machine, and when</h2>
+    <p>
+      Keystroke generates suggestions by sending prompts to an AI provider <em>you</em>
+      configured. The providers Keystroke supports are:
+    </p>
+    <ul>
+      <li><strong>Google Gemini</strong> — when you use the Gemini engine</li>
+      <li><strong>Anthropic Claude</strong> — when you use the Claude engine</li>
+      <li><strong>OpenAI GPT</strong> — when you use the GPT engine</li>
+      <li><strong>OpenRouter</strong> — when you use the OpenRouter engine (which then routes to whichever model you selected)</li>
+      <li><strong>Ollama</strong> — runs locally on your machine; no network calls leave your computer</li>
+    </ul>
+    <p>
+      When you use a cloud engine, the prompt — which contains a rolling window of recent
+      text you typed, plus context about the application you're typing in — is sent
+      directly from your machine to that provider's API using <em>your</em> API key. The
+      data does not pass through any Keystroke-operated server. We never see it.
+    </p>
+
+    <div class="legal__callout">
+      <p>
+        Before any prompt is transmitted, sixteen PII detectors run locally and either
+        redact or block the request. Categories include: credit cards, SSNs, emails, phone
+        numbers, IPv4/IPv6 addresses, JWTs, bearer tokens, API keys, AWS secrets, private
+        keys, OAuth tokens, IBANs, passwords, street addresses, and any custom regex you
+        define. You can inspect the exact prompt shape that would be sent, in real time,
+        from the Settings window.
+      </p>
+    </div>
+
+    <h2>Your relationship with AI providers</h2>
+    <p>
+      Each AI provider has its own privacy policy and data-handling practices. When you
+      configure Keystroke with a provider's API key, you are entering a direct relationship
+      with that provider, governed by their terms. We strongly recommend reviewing them:
+    </p>
+    <ul>
+      <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google (Gemini)</a></li>
+      <li><a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic (Claude)</a></li>
+      <li><a href="https://openai.com/policies/privacy-policy/" target="_blank" rel="noopener">OpenAI (GPT)</a></li>
+      <li><a href="https://openrouter.ai/privacy" target="_blank" rel="noopener">OpenRouter</a></li>
+    </ul>
+    <p>
+      Most providers offer enterprise or paid tiers where prompts are not used for model
+      training. If that matters to you, configure that with the provider directly.
+    </p>
+
+    <h2>Your API keys</h2>
+    <p>
+      API keys you enter into Keystroke are encrypted at rest using the Windows Data
+      Protection API (DPAPI), scoped to your user account. They are never stored in
+      plaintext, never transmitted to us, and never leave your machine except as part of
+      the standard authorization headers on requests to the provider you configured.
+    </p>
+
+    <h2>Your license key</h2>
+    <p>
+      Pro license keys are validated entirely offline using ECDSA P-256 signature
+      verification. The app never contacts any license server. There is no activation
+      check. There is no usage report. The key sits in your local config and is verified
+      mathematically on your machine.
+    </p>
+    <p>
+      We retain a record of which email address purchased which license key so we can
+      reissue keys if you lose them. That record is stored with our payment processor
+      (Lemon Squeezy) and in our email (see below).
+    </p>
+
+    <h2>This website</h2>
+    <p>
+      This site is a static set of HTML, CSS, and JavaScript files served from a CDN. It
+      sets no cookies, runs no analytics, and contains no third-party tracking scripts.
+      Web fonts are loaded from Google Fonts, which may log your IP address as part of
+      ordinary HTTP traffic — this is the only third-party network connection the page
+      makes.
+    </p>
+
+    <h2>Payments and license delivery</h2>
+    <p>
+      Pro purchases are processed by <a href="https://www.lemonsqueezy.com/" target="_blank" rel="noopener">Lemon Squeezy</a>,
+      acting as our merchant of record. When you check out, Lemon Squeezy collects:
+    </p>
+    <ul>
+      <li>Your email address</li>
+      <li>Your billing details (name, country, postal code where required for tax)</li>
+      <li>Your payment method (card or other method, handled by their PCI-compliant processors)</li>
+    </ul>
+    <p>
+      We receive your email address and order metadata so we can deliver your license key
+      and provide support. We do not receive your card number or full billing address.
+      Lemon Squeezy's privacy practices are governed by
+      <a href="https://www.lemonsqueezy.com/privacy" target="_blank" rel="noopener">their privacy policy</a>.
+    </p>
+
+    <h2>Email and support</h2>
+    <p>
+      If you email <a href="mailto:support@keystroke-app.com">support@keystroke-app.com</a>, your
+      message and email address are stored in our inbox so we can reply. We don't add you
+      to any list, send marketing email, or share your address with anyone.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+      Keystroke is not directed at children under 13 (or 16 in jurisdictions where that
+      threshold applies). We do not knowingly collect data from children.
+    </p>
+
+    <h2>Your rights (GDPR, CCPA, and similar)</h2>
+    <p>
+      Because the app collects no personal data, most data-subject rights are satisfied by
+      design — there is nothing to access, delete, or correct. For data held by our payment
+      processor (your purchase email and order history), you have the right to request
+      access, correction, deletion, or export. Contact us at the address below and we will
+      assist within 30 days.
+    </p>
+
+    <h2>Data retention</h2>
+    <p>
+      Data on your machine: kept until you delete it. Purchase records held by Lemon
+      Squeezy: retained as required by tax and accounting law (typically 7 years). Email
+      correspondence: retained until you ask us to delete it, or until it is no longer
+      relevant to providing support.
+    </p>
+
+    <h2>International transfers</h2>
+    <p>
+      The desktop app makes no transfers — its data stays on your machine. Cloud AI
+      requests go directly from your machine to the provider you selected; the provider's
+      jurisdiction is governed by their terms. Lemon Squeezy operates internationally and
+      may process payment data across borders under standard contractual clauses.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      If we materially change this policy, the "last updated" date at the top will reflect
+      the change. Significant changes affecting active customers will also be communicated
+      by email to the address on file with Lemon Squeezy.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions, requests, or concerns: <a href="mailto:support@keystroke-app.com">support@keystroke-app.com</a>.
+    </p>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <div class="foot__grid">
+        <div class="foot__brand">
+          <p class="foot__mark">Keystroke</p>
+          <p class="foot__tagline"><em>Your words stay yours.</em></p>
+        </div>
+        <nav class="foot__links" aria-label="Footer">
+          <a href="index.html">Home</a>
+          <a href="privacy.html">Privacy</a>
+          <a href="terms.html">Terms</a>
+          <a href="refunds.html">Refunds</a>
+          <a href="mailto:support@keystroke-app.com">support@keystroke-app.com</a>
+          <a href="https://gitlab.com/LearningEverythingFirstTIme/keystroke" target="_blank" rel="noopener">Source</a>
+        </nav>
+        <p class="foot__meta mono">
+          built by Nick Kessler · MIT license<br/>
+          zero telemetry · zero tracking · zero accounts
+        </p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
