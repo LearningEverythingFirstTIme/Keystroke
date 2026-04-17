@@ -34,7 +34,7 @@ function renderEmail({ key, orderRef, firstName }) {
     '',
     `    ${key}`,
     '',
-    'To activate: open Keystroke \u2192 Settings \u2192 License \u2192 paste the key.',
+    'To activate: open Keystroke \u2192 Settings \u2192 Advanced \u2192 paste the key.',
     'Pro unlocks immediately and validates offline \u2014 no internet required after activation.',
     '',
     `Order reference: ${orderRef}`,
@@ -50,7 +50,7 @@ function renderEmail({ key, orderRef, firstName }) {
 <p>${escape(greeting)}</p>
 <p>Your license key:</p>
 <pre style="background:#f4f4f5;border:1px solid #e4e4e7;border-radius:6px;padding:12px 14px;font-size:14px;overflow-x:auto;user-select:all;">${escape(key)}</pre>
-<p>To activate: open Keystroke &rarr; Settings &rarr; License &rarr; paste the key.<br>
+<p>To activate: open Keystroke &rarr; Settings &rarr; Advanced &rarr; paste the key.<br>
 Pro unlocks immediately and validates offline &mdash; no internet required after activation.</p>
 <p style="color:#52525b;font-size:13px;">Order reference: ${escape(orderRef)}</p>
 <p style="color:#52525b;font-size:13px;">14-day refunds, questions, or a lost key: reply to this email or write to <a href="mailto:support@keystroke-app.com" style="color:#2563eb;">support@keystroke-app.com</a>.</p>
