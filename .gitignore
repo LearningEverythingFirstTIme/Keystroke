@@ -6,6 +6,7 @@ artifacts/
 TestResults/
 dist/
 *.binlog
+node_modules/
 
 # IDE
 .vs/

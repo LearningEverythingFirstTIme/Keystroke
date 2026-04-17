@@ -1,0 +1,70 @@
+'use strict';
+
+const { createPrivateKey, randomFillSync, sign } = require('node:crypto');
+
+const PAYLOAD_LENGTH = 14;
+const SIGNATURE_LENGTH = 64;
+const KEY_PREFIX = 'KS-';
+const B32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+const TIER_PRO = 1;
+
+function buildPayload(tier) {
+  const payload = Buffer.alloc(PAYLOAD_LENGTH);
+  payload[0] = 1;
+  payload[1] = tier;
+  randomFillSync(payload, 2, 8);
+  const now = Math.floor(Date.now() / 1000) >>> 0;
+  payload.writeUInt32BE(now, 10);
+  return payload;
+}
+
+function base32Encode(data) {
+  const outLen = Math.trunc((data.length * 8 + 4) / 5);
+  const chars = new Array(outLen);
+  let bitBuffer = 0;
+  let bitsInBuffer = 0;
+  let index = 0;
+  for (const b of data) {
+    bitBuffer = (bitBuffer << 8) | b;
+    bitsInBuffer += 8;
+    while (bitsInBuffer >= 5) {
+      bitsInBuffer -= 5;
+      chars[index++] = B32_ALPHABET[(bitBuffer >> bitsInBuffer) & 0x1f];
+    }
+  }
+  if (bitsInBuffer > 0) {
+    chars[index++] = B32_ALPHABET[(bitBuffer << (5 - bitsInBuffer)) & 0x1f];
+  }
+  return chars.slice(0, index).join('');
+}
+
+function formatKey(base32) {
+  const groups = [];
+  for (let i = 0; i < base32.length; i += 8) {
+    groups.push(base32.slice(i, i + 8));
+  }
+  return KEY_PREFIX + groups.join('-');
+}
+
+function mintKey(privateKeyPem, tier) {
+  const keyObject = createPrivateKey(privateKeyPem);
+  const payload = buildPayload(tier);
+  const signature = sign('sha256', payload, {
+    key: keyObject,
+    dsaEncoding: 'ieee-p1363',
+  });
+  if (signature.length !== SIGNATURE_LENGTH) {
+    throw new Error(
+      `Unexpected signature length ${signature.length}; expected ${SIGNATURE_LENGTH}`,
+    );
+  }
+  const combined = Buffer.concat([payload, signature]);
+  return formatKey(base32Encode(combined));
+}
+
+function mintProKey(privateKeyPem) {
+  return mintKey(privateKeyPem, TIER_PRO);
+}
+
+module.exports = { mintProKey, mintKey, base32Encode, formatKey };

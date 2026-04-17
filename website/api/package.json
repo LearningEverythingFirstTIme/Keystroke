@@ -1,0 +1,9 @@
+{
+  "name": "keystroke-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vercel serverless functions for keystroke-app.com (license-key fulfillment).",
+  "dependencies": {
+    "resend": "^4.0.0"
+  }
+}
