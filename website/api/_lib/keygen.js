@@ -47,8 +47,32 @@ function formatKey(base32) {
   return KEY_PREFIX + groups.join('-');
 }
 
+function normalizePrivateKeyInput(raw) {
+  if (typeof raw !== 'string' || raw.length === 0) {
+    throw new Error('private key is empty');
+  }
+  let value = raw.trim();
+  if (value.includes('\\n') && !value.includes('\n')) {
+    value = value.replace(/\\n/g, '\n');
+  }
+  if (value.includes('\r\n')) {
+    value = value.replace(/\r\n/g, '\n');
+  }
+  if (!value.startsWith('-----BEGIN')) {
+    try {
+      const decoded = Buffer.from(value, 'base64').toString('utf8');
+      if (decoded.startsWith('-----BEGIN')) {
+        value = decoded;
+      }
+    } catch {
+      // fall through — createPrivateKey will surface a descriptive error
+    }
+  }
+  return value;
+}
+
 function mintKey(privateKeyPem, tier) {
-  const keyObject = createPrivateKey(privateKeyPem);
+  const keyObject = createPrivateKey(normalizePrivateKeyInput(privateKeyPem));
   const payload = buildPayload(tier);
   const signature = sign('sha256', payload, {
     key: keyObject,
