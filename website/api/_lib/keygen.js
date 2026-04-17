@@ -68,6 +68,17 @@ function normalizePrivateKeyInput(raw) {
       // fall through — createPrivateKey will surface a descriptive error
     }
   }
+  const headerMatch = value.match(/^(-----BEGIN [^-]+-----)/);
+  const footerMatch = value.match(/(-----END [^-]+-----)\s*$/);
+  if (headerMatch && footerMatch) {
+    const header = headerMatch[1];
+    const footer = footerMatch[1];
+    const body = value.slice(header.length, value.length - footer.length).replace(/\s+/g, '');
+    if (body.length > 0) {
+      const wrapped = body.match(/.{1,64}/g).join('\n');
+      value = `${header}\n${wrapped}\n${footer}\n`;
+    }
+  }
   return value;
 }
 
