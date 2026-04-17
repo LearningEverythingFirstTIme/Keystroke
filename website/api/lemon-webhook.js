@@ -138,7 +138,18 @@ module.exports = async function handler(req, res) {
   try {
     licenseKey = mintProKey(privateKeyPem);
   } catch (err) {
-    console.error('keygen failed', err);
+    const raw = privateKeyPem ?? '';
+    const shape = {
+      length: raw.length,
+      startsWithBegin: raw.startsWith('-----BEGIN'),
+      hasNewline: raw.includes('\n'),
+      hasCrlf: raw.includes('\r\n'),
+      hasEscapedNewline: raw.includes('\\n'),
+      newlineCount: (raw.match(/\n/g) || []).length,
+      first40: raw.slice(0, 40),
+      last40: raw.slice(-40),
+    };
+    console.error('keygen failed', { shape, err: err?.message });
     res.status(500).send('Keygen failed');
     return;
   }
