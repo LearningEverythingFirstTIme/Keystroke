@@ -1421,6 +1421,21 @@ kbd {
   transition: border-color 200ms;
 }
 .step a:hover { border-bottom-color: var(--amber); }
+.step__note {
+  margin-top: 0.75rem !important;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.82rem !important;
+  line-height: 1.55 !important;
+  color: var(--bone-dim);
+  background: var(--ink);
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  max-width: 34ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+.step__note strong { color: var(--bone); font-weight: 500; }
+.step__note em { font-style: italic; color: var(--amber); }
 
 .reqs {
   display: grid;
