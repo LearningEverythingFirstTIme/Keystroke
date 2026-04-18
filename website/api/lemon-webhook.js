@@ -4,9 +4,12 @@ const { createHmac, timingSafeEqual } = require('node:crypto');
 const { Resend } = require('resend');
 
 const { mintProKey } = require('./_lib/keygen');
+const { getDelivered, recordDelivered, recordMintOnly } = require('./_lib/storage');
 
 const FROM_ADDRESS = 'Keystroke <support@keystroke-app.com>';
 const SUBJECT = 'Your Keystroke Pro license key';
+const REPLAY_MAX_AGE_MS = 5 * 60 * 1000;
+const REPLAY_FUTURE_SLOP_MS = 60 * 1000;
 
 async function readRawBody(req) {
   const chunks = [];
@@ -67,7 +70,7 @@ function extractFirstName(attrs) {
   return first && first.length <= 40 ? first : null;
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     res.status(405).send('Method Not Allowed');
@@ -84,7 +87,8 @@ module.exports = async function handler(req, res) {
       hasPrivateKey: Boolean(privateKeyPem),
       hasResendApiKey: Boolean(resendApiKey),
     });
-    res.status(500).send('Server misconfigured');
+    // 200 to stop LS retry loop on deterministic config failures; Vercel error log is the signal.
+    res.status(200).send('misconfigured');
     return;
   }
 
@@ -121,16 +125,48 @@ module.exports = async function handler(req, res) {
   }
 
   const attrs = payload?.data?.attributes ?? {};
-  const email = typeof attrs.user_email === 'string' ? attrs.user_email.trim() : '';
+  const orderId = payload?.data?.id != null ? String(payload.data.id) : '';
   const orderRef = attrs.order_number != null
     ? `#${attrs.order_number}`
-    : payload?.data?.id
-      ? `#${payload.data.id}`
+    : orderId
+      ? `#${orderId}`
       : 'unknown';
 
+  if (!orderId) {
+    console.error('order_created missing data.id', { orderRef });
+    res.status(200).send('missing order id');
+    return;
+  }
+
+  const createdAtRaw = typeof attrs?.created_at === 'string' ? attrs.created_at : null;
+  const createdAt = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
+  if (Number.isFinite(createdAt)) {
+    const ageMs = Date.now() - createdAt;
+    if (ageMs > REPLAY_MAX_AGE_MS || ageMs < -REPLAY_FUTURE_SLOP_MS) {
+      console.warn('rejecting stale or future webhook', { orderRef, ageMs });
+      res.status(200).send('stale');
+      return;
+    }
+  }
+
+  const email = typeof attrs.user_email === 'string' ? attrs.user_email.trim() : '';
   if (!email) {
     console.error('order_created missing user_email', { orderRef });
     res.status(200).send('missing email');
+    return;
+  }
+
+  try {
+    const existing = await getDelivered(orderId);
+    if (existing) {
+      console.log('duplicate delivery (already issued)', { orderRef, resendId: existing.resendId });
+      res.status(200).send('already issued');
+      return;
+    }
+  } catch (err) {
+    console.error('kv lookup failed', { orderRef, err: err?.message });
+    // Fail closed: if we can't check idempotency, don't issue a key. LS will retry.
+    res.status(500).send('Storage unavailable');
     return;
   }
 
@@ -138,24 +174,15 @@ module.exports = async function handler(req, res) {
   try {
     licenseKey = mintProKey(privateKeyPem);
   } catch (err) {
-    const raw = privateKeyPem ?? '';
-    const shape = {
-      length: raw.length,
-      startsWithBegin: raw.startsWith('-----BEGIN'),
-      hasNewline: raw.includes('\n'),
-      hasCrlf: raw.includes('\r\n'),
-      hasEscapedNewline: raw.includes('\\n'),
-      newlineCount: (raw.match(/\n/g) || []).length,
-      first40: raw.slice(0, 40),
-      last40: raw.slice(-40),
-    };
-    console.error('keygen failed', { shape, err: err?.message });
-    res.status(500).send('Keygen failed');
+    console.error('keygen failed', { orderRef, err: err?.message });
+    // 200 so LS stops retrying a deterministic config failure. Vercel error alert is the signal.
+    res.status(200).send('keygen failed (not retrying)');
     return;
   }
 
   const { text, html } = renderEmail({ key: licenseKey, orderRef, firstName: extractFirstName(attrs) });
 
+  let resendId;
   try {
     const resend = new Resend(resendApiKey);
     const result = await resend.emails.send({
@@ -166,22 +193,39 @@ module.exports = async function handler(req, res) {
       html,
     });
     if (result?.error) {
-      console.error('resend error', { orderRef, email, licenseKey, error: result.error });
+      console.error('resend error', { orderRef, email, error: result.error });
+      await recordMintOnly(orderId, { email, attemptedAt: Date.now(), error: String(result.error?.message || result.error) }).catch((logErr) => {
+        console.error('failed to record mint-only audit entry', { orderRef, err: logErr?.message });
+      });
       res.status(500).send('Email send failed');
       return;
     }
-    console.log('license key fulfilled', { orderRef, email, licenseKey, resendId: result?.data?.id });
+    resendId = result?.data?.id;
   } catch (err) {
-    console.error('resend threw', { orderRef, email, licenseKey, err: err?.message });
+    console.error('resend threw', { orderRef, email, err: err?.message });
+    await recordMintOnly(orderId, { email, attemptedAt: Date.now(), error: String(err?.message || 'unknown') }).catch((logErr) => {
+      console.error('failed to record mint-only audit entry', { orderRef, err: logErr?.message });
+    });
     res.status(500).send('Email send failed');
     return;
   }
 
-  res.status(200).send('ok');
-};
+  try {
+    await recordDelivered(orderId, { email, issuedAt: Date.now(), resendId: resendId ?? null });
+  } catch (err) {
+    // Email was sent successfully — losing the audit entry is bad but don't double-send on retry.
+    // We can't undo the send, so log loudly and return 200 so LS doesn't retry.
+    console.error('failed to record delivered (email was sent)', { orderRef, resendId, err: err?.message });
+  }
 
+  console.log('license key fulfilled', { orderRef, email, resendId });
+  res.status(200).send('ok');
+}
+
+module.exports = handler;
 module.exports.config = {
   api: {
     bodyParser: false,
   },
 };
+module.exports.__test__ = { verifySignature, renderEmail, extractFirstName };
