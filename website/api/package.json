@@ -4,7 +4,7 @@
   "private": true,
   "description": "Vercel serverless functions for keystroke-app.com (license-key fulfillment).",
   "scripts": {
-    "test": "node --test --test-reporter=spec \"test/*.test.js\""
+    "test": "node --test --test-reporter=spec"
   },
   "dependencies": {
     "redis": "^4.7.0",
