@@ -19,6 +19,14 @@ build-and-test:
   stage: build
   tags:
     - windows
+  # Dormant until a Windows runner is available. GitLab.com shared Windows
+  # runners are paid, and no self-hosted runner is registered, so this job
+  # was sitting `pending` forever and creating stuck pipelines. Local
+  # `dotnet build && dotnet test` is the current gate before every push.
+  # To re-enable: register a runner tagged `windows` with the .NET 8 SDK,
+  # then set the CI/CD variable RUN_WINDOWS_CI=1 in Project Settings.
+  rules:
+    - if: $RUN_WINDOWS_CI
   cache:
     key:
       # GitLab caps cache:key:files at 2. KeystrokeHook shares deps with the
