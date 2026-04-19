@@ -1,4 +1,3 @@
-using System.Text.Json;
 using KeystrokeApp.Services;
 
 namespace KeystrokeApp.Tests;
@@ -6,17 +5,14 @@ namespace KeystrokeApp.Tests;
 public class LearningContextMaintenanceServiceTests : IDisposable
 {
     private readonly string _tempDir;
-    private readonly string _eventPath;
-    private readonly string _legacyPath;
-    private readonly object _eventLock = new();
-    private readonly object _legacyLock = new();
+    private readonly LearningDatabase _database;
 
     public LearningContextMaintenanceServiceTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "keystroke-maintenance-tests", Guid.NewGuid().ToString("n"));
         Directory.CreateDirectory(_tempDir);
-        _eventPath = Path.Combine(_tempDir, "tracking.jsonl");
-        _legacyPath = Path.Combine(_tempDir, "completions.jsonl");
+        _database = new LearningDatabase(Path.Combine(_tempDir, "learning.db"));
+        _database.EnsureCreated();
     }
 
     // ── ClearAssistData tests ────────────────────────────────────────────────
@@ -27,21 +23,18 @@ public class LearningContextMaintenanceServiceTests : IDisposable
         var targetContext = "ctx-slack-team";
 
         // Write mix of assist and native events for target context
-        var events = new[]
-        {
+        WriteEvents(
             MakeRecord("suggestion_full_accept", targetContext, "accepted completion"),
             MakeRecord("manual_continuation_committed", targetContext, userText: "typed this myself"),
             MakeRecord("suggestion_dismiss", targetContext, "dismissed completion"),
             MakeRecord("accepted_text_untouched", targetContext, "untouched accept"),
             MakeRecord("suggestion_partial_accept", targetContext, "partial accept"),
-            MakeRecord("suggestion_typed_past", targetContext, "typed past it"),
-        };
-        WriteEvents(events);
+            MakeRecord("suggestion_typed_past", targetContext, "typed past it"));
 
         var service = CreateService();
         service.ClearAssistData(targetContext);
 
-        var remaining = ReadRemainingEvents();
+        var remaining = _database.GetAllEvents();
 
         // Kept: manual_continuation_committed, suggestion_dismiss, suggestion_typed_past
         // Removed: suggestion_full_accept, accepted_text_untouched, suggestion_partial_accept
@@ -57,19 +50,16 @@ public class LearningContextMaintenanceServiceTests : IDisposable
         var targetContext = "ctx-slack-team";
         var otherContext = "ctx-email-inbox";
 
-        var events = new[]
-        {
+        WriteEvents(
             MakeRecord("suggestion_full_accept", targetContext, "target accept"),
             MakeRecord("suggestion_full_accept", otherContext, "other accept"),
             MakeRecord("manual_continuation_committed", targetContext, userText: "target native"),
-            MakeRecord("manual_continuation_committed", otherContext, userText: "other native"),
-        };
-        WriteEvents(events);
+            MakeRecord("manual_continuation_committed", otherContext, userText: "other native"));
 
         var service = CreateService();
         service.ClearAssistData(targetContext);
 
-        var remaining = ReadRemainingEvents();
+        var remaining = _database.GetAllEvents();
 
         // Target accept removed, everything else kept
         Assert.Equal(3, remaining.Count);
@@ -84,25 +74,20 @@ public class LearningContextMaintenanceServiceTests : IDisposable
     [Fact]
     public void ClearAssistData_EmptyContextKey_NoOp()
     {
-        var events = new[]
-        {
-            MakeRecord("suggestion_full_accept", "ctx-something", "accept"),
-        };
-        WriteEvents(events);
+        WriteEvents(MakeRecord("suggestion_full_accept", "ctx-something", "accept"));
 
         var service = CreateService();
         service.ClearAssistData("");
 
-        var remaining = ReadRemainingEvents();
+        var remaining = _database.GetAllEvents();
         Assert.Single(remaining);
     }
 
     [Fact]
-    public void ClearAssistData_NonexistentFile_DoesNotThrow()
+    public void ClearAssistData_NullDatabase_DoesNotThrow()
     {
         var service = new LearningContextMaintenanceService(
-            legacyPath: Path.Combine(_tempDir, "nonexistent-legacy.jsonl"),
-            eventPath: Path.Combine(_tempDir, "nonexistent-events.jsonl"),
+            database: null,
             appDataPath: _tempDir);
 
         // Should not throw
@@ -110,20 +95,20 @@ public class LearningContextMaintenanceServiceTests : IDisposable
     }
 
     [Fact]
-    public void ClearAssistData_CaseInsensitiveContextMatching()
+    public void ClearAssistData_ExactContextMatching()
     {
-        var events = new[]
-        {
+        // SubcontextKey matching is exact (SQL WHERE = binary collation), so only
+        // the exact-cased key is removed.
+        WriteEvents(
             MakeRecord("suggestion_full_accept", "CTX-SLACK-Team", "accept 1"),
-            MakeRecord("suggestion_full_accept", "ctx-slack-team", "accept 2"),
-        };
-        WriteEvents(events);
+            MakeRecord("suggestion_full_accept", "ctx-slack-team", "accept 2"));
 
         var service = CreateService();
         service.ClearAssistData("ctx-slack-team");
 
-        var remaining = ReadRemainingEvents();
-        Assert.Empty(remaining);
+        var remaining = _database.GetAllEvents();
+        Assert.Single(remaining);
+        Assert.Equal("CTX-SLACK-Team", remaining[0].ContextKeys.SubcontextKey);
     }
 
     // ── ClearContext tests ───────────────────────────────────────────────────
@@ -133,19 +118,16 @@ public class LearningContextMaintenanceServiceTests : IDisposable
     {
         var targetContext = "ctx-slack-team";
 
-        var events = new[]
-        {
+        WriteEvents(
             MakeRecord("suggestion_full_accept", targetContext, "accept"),
             MakeRecord("manual_continuation_committed", targetContext, userText: "native"),
             MakeRecord("suggestion_dismiss", targetContext, "dismiss"),
-            MakeRecord("suggestion_full_accept", "ctx-other", "other accept"),
-        };
-        WriteEvents(events);
+            MakeRecord("suggestion_full_accept", "ctx-other", "other accept"));
 
         var service = CreateService();
         service.ClearContext(targetContext);
 
-        var remaining = ReadRemainingEvents();
+        var remaining = _database.GetAllEvents();
         Assert.Single(remaining);
         Assert.Equal("ctx-other", remaining[0].ContextKeys.SubcontextKey);
     }
@@ -187,11 +169,8 @@ public class LearningContextMaintenanceServiceTests : IDisposable
 
     private LearningContextMaintenanceService CreateService() =>
         new(
-            legacyPath: _legacyPath,
-            eventPath: _eventPath,
-            appDataPath: _tempDir,
-            eventWriteLock: _eventLock,
-            legacyWriteLock: _legacyLock);
+            database: _database,
+            appDataPath: _tempDir);
 
     private static LearningEventRecord MakeRecord(
         string eventType,
@@ -200,6 +179,7 @@ public class LearningContextMaintenanceServiceTests : IDisposable
         string? userText = null) =>
         new()
         {
+            EventId = Guid.NewGuid().ToString("n"),
             TimestampUtc = DateTime.UtcNow,
             EventType = eventType,
             ProcessName = "testapp",
@@ -213,23 +193,15 @@ public class LearningContextMaintenanceServiceTests : IDisposable
             }
         };
 
-    private void WriteEvents(LearningEventRecord[] records)
+    private void WriteEvents(params LearningEventRecord[] records)
     {
-        var lines = records.Select(r => JsonSerializer.Serialize(r));
-        File.WriteAllLines(_eventPath, lines);
-    }
-
-    private List<LearningEventRecord> ReadRemainingEvents()
-    {
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        return File.ReadAllLines(_eventPath)
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .Select(l => JsonSerializer.Deserialize<LearningEventRecord>(l, options)!)
-            .ToList();
+        foreach (var record in records)
+            _database.InsertEvent(record);
     }
 
     public void Dispose()
     {
+        _database.Dispose();
         try
         {
             if (Directory.Exists(_tempDir))

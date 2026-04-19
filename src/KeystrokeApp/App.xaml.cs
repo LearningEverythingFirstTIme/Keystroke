@@ -94,6 +94,10 @@ public partial class App : Application
     //                              reset to 0 each time a new suggestion arrives.
     private readonly CorrectionDetector _postEditDetector = new();
     private readonly ReliabilityTraceService _reliabilityTrace = new();
+    // Last observed AuthFailure from the active engine. Written from engine event
+    // threads, read by the UI thread when the tooltip is rebuilt; a torn read just
+    // shows a slightly stale line, which is harmless.
+    private volatile PredictionFailure? _lastAuthFailure;
     private readonly OnboardingStateService _onboardingStateService = new();
     private readonly GeminiApiKeyValidationService _geminiApiKeyValidationService = new();
     private readonly ITextInjector _textInjector;
@@ -125,21 +129,26 @@ public partial class App : Application
     {
         _learningDatabase = new LearningDatabase();
         _acceptanceTracker = new CompletionFeedbackService(
-            database: _learningDatabase,
             preferences: _contextPreferencesService,
+            database: _learningDatabase,
             fingerprints: _contextFingerprintService);
         _learningEventService = new LearningEventService(
+            preferences: _contextPreferencesService,
             database: _learningDatabase,
-            preferences: _contextPreferencesService);
+            reliabilityTrace: _reliabilityTrace);
         _contextMaintenanceService = new LearningContextMaintenanceService(
             database: _learningDatabase,
             fingerprints: _contextFingerprintService);
         _learningService = new AcceptanceLearningService(
-            new LearningRepository(_learningDatabase, _contextFingerprintService, _contextPreferencesService),
+            new LearningRepository(_contextPreferencesService, _learningDatabase, _contextFingerprintService),
             new LearningRetrievalService(new LearningReranker()),
             _contextPreferencesService);
-        _styleProfileService = new StyleProfileService(database: _learningDatabase);
-        _vocabularyProfileService = new VocabularyProfileService(database: _learningDatabase);
+        _styleProfileService = new StyleProfileService(
+            preferences: _contextPreferencesService,
+            database: _learningDatabase);
+        _vocabularyProfileService = new VocabularyProfileService(
+            preferences: _contextPreferencesService,
+            database: _learningDatabase);
         _correctionPatternService = new CorrectionPatternService(database: _learningDatabase);
         _contextAdaptiveSettingsService = new ContextAdaptiveSettingsService(database: _learningDatabase);
         _analyticsService = new AnalyticsAggregationService(database: _learningDatabase);
@@ -181,11 +190,11 @@ public partial class App : Application
             // Load config
             _config = AppConfig.Load();
             _usageCounters.GetSnapshot();
-            Log($"Config loaded: Engine={_config.PredictionEngine}, Debounce={_config.DebounceMs}ms");
+            Log($"Config loaded: Engine={_config.EffectivePredictionEngine}, Debounce={_config.DebounceMs}ms");
             RefreshLicenseStatus();
             _reliabilityTrace.Trace("startup", "config_loaded", "Loaded app configuration.", new Dictionary<string, string>
             {
-                ["engine"] = _config.PredictionEngine,
+                ["engine"] = _config.EffectivePredictionEngine,
                 ["ocrEnabled"] = _config.OcrEnabled.ToString(),
                 ["licenseTier"] = _isProTier ? "Pro" : "Free"
             });
@@ -207,33 +216,12 @@ public partial class App : Application
             _learningScoreService.StyleProfileService     = _styleProfileService;
             _learningScoreService.VocabularyProfileService = _vocabularyProfileService;
 
-            // Recompute scores after each style profile generation.
-            // ProfileUpdated fires on a background thread — marshal to UI for balloon.
-            _styleProfileService.ProfileUpdated += () =>
-            {
-                var scores = _learningScoreService.Recompute();
-                Log($"Scores recomputed after profile update: {scores.Categories.Count} categories");
-            };
-
-            // Show a tray balloon when the model detects sustained drift in a category.
-            _learningScoreService.DriftDetected += (category, oldScore, newScore) =>
-            {
-                Dispatcher.BeginInvoke(() =>
-                {
-                    _trayIcon?.ShowBalloonTip(
-                        "Writing Pattern Shift Detected",
-                        $"Your {category} predictions have become less accurate (score {oldScore}→{newScore}). " +
-                        "Accept a few suggestions to help Keystroke recalibrate to your current style.",
-                        Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
-                    Log($"Drift balloon shown: {category} {oldScore}→{newScore}");
-                });
-            };
-
-            // Feed score snapshots into the analytics store for extended history.
-            _learningScoreService.ScoreComputed += (category, score) =>
-            {
-                _analyticsService.RecordScoreSnapshot(category, score);
-            };
+            // Recompute scores after each style profile generation, show drift balloons,
+            // and feed scores into analytics. Subscriptions use named methods (not lambdas)
+            // so OnExit can unsubscribe them cleanly.
+            _styleProfileService.ProfileUpdated += OnStyleProfileUpdated;
+            _learningScoreService.DriftDetected += OnLearningDriftDetected;
+            _learningScoreService.ScoreComputed += OnLearningScoreComputed;
 
             if (IsProfileLearningActive())
             {
@@ -304,6 +292,15 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         Log("App exiting...");
+
+        // Unsubscribe app-lifetime event handlers before disposal so no late
+        // background-thread event can fire a balloon or log after the tray is gone.
+        _styleProfileService.ProfileUpdated -= OnStyleProfileUpdated;
+        _learningScoreService.DriftDetected -= OnLearningDriftDetected;
+        _learningScoreService.ScoreComputed -= OnLearningScoreComputed;
+        _typingBuffer.BufferChanged -= OnBufferChanged;
+        _typingBuffer.BufferCleared -= OnBufferCleared;
+
         DeactivateRuntime();
         _postEditDetector.Dispose();
         _learningDatabase.Dispose();
@@ -312,6 +309,37 @@ public partial class App : Application
         _geminiApiKeyValidationService.Dispose();
         base.OnExit(e);
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Named handlers for app-lifetime subscriptions. Kept as instance methods
+    // (not lambdas) so OnExit can unsubscribe them by reference.
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private void OnStyleProfileUpdated()
+    {
+        var scores = _learningScoreService.Recompute();
+        Log($"Scores recomputed after profile update: {scores.Categories.Count} categories");
+    }
+
+    private void OnLearningDriftDetected(string category, int oldScore, int newScore)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _trayIcon?.ShowBalloonTip(
+                "Writing Pattern Shift Detected",
+                $"Your {category} predictions have become less accurate (score {oldScore}→{newScore}). " +
+                "Accept a few suggestions to help Keystroke recalibrate to your current style.",
+                Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+            Log($"Drift balloon shown: {category} {oldScore}→{newScore}");
+        });
+    }
+
+    private void OnLearningScoreComputed(string category, int score)
+    {
+        _analyticsService.RecordScoreSnapshot(category, score);
+    }
+
+    private void OnInputDiagnostic(string msg) => LogToDebug(msg);
 
     private bool ShouldRunOnboarding()
     {
@@ -389,9 +417,22 @@ public partial class App : Application
         DeactivateRuntime();
         RefreshLicenseStatus();
 
+        // Clear any stale auth-failure indicator from a previous engine/key so the tooltip
+        // reflects the new configuration until/unless the fresh engine reports a failure.
+        _lastAuthFailure = null;
+
         _predictionEngine = CreatePredictionEngine();
         _styleProfileService.Engine = _predictionEngine;
         Log($"Prediction engine: {_predictionEngine?.GetType().Name ?? "none"}");
+
+        // Wire engine reliability surfacing. All engines derive from PredictionEngineBase,
+        // which exposes ReliabilityTrace + FailureOccurred for routing typed failures into
+        // the ReliabilityTraceService and (for auth failures) into the tray tooltip.
+        if (_predictionEngine is PredictionEngineBase enginePlumbing)
+        {
+            enginePlumbing.ReliabilityTrace = _reliabilityTrace;
+            enginePlumbing.FailureOccurred += OnPredictionEngineFailure;
+        }
 
         _debounceTimer = new DebounceTimer(_config.DebounceMs);
         _debounceTimer.DebounceComplete += OnDebounceComplete;
@@ -401,7 +442,7 @@ public partial class App : Application
         _inputListener = new InputListenerService();
         _inputListener.CharacterTyped += OnCharacterTyped;
         _inputListener.SpecialKeyPressed += OnSpecialKeyPressed;
-        _inputListener.InputDiagnostic += msg => LogToDebug(msg);
+        _inputListener.InputDiagnostic += OnInputDiagnostic;
         _inputListener.Start();
         Log("Input listener started.");
 
@@ -462,9 +503,22 @@ public partial class App : Application
         _ocrService?.Dispose();
         _ocrService = null;
 
-        _inputListener?.Dispose();
-        _inputListener = null;
+        // Unsubscribe before disposing so no in-flight event (e.g. a last
+        // diagnostic message from the hook shutdown path) reaches a handler
+        // whose dependencies we've already torn down.
+        if (_inputListener != null)
+        {
+            _inputListener.CharacterTyped -= OnCharacterTyped;
+            _inputListener.SpecialKeyPressed -= OnSpecialKeyPressed;
+            _inputListener.InputDiagnostic -= OnInputDiagnostic;
+            _inputListener.Dispose();
+            _inputListener = null;
+        }
 
+        if (_predictionEngine is PredictionEngineBase enginePlumbing)
+        {
+            enginePlumbing.FailureOccurred -= OnPredictionEngineFailure;
+        }
         (_predictionEngine as IDisposable)?.Dispose();
         _predictionEngine = null;
         _styleProfileService.Engine = null;
@@ -472,12 +526,40 @@ public partial class App : Application
         _suggestionPanel?.Close();
         _suggestionPanel = null;
 
-        _debounceTimer?.Dispose();
-        _debounceTimer = null;
-        _fastDebounceTimer?.Dispose();
-        _fastDebounceTimer = null;
+        if (_debounceTimer != null)
+        {
+            _debounceTimer.DebounceComplete -= OnDebounceComplete;
+            _debounceTimer.Dispose();
+            _debounceTimer = null;
+        }
+        if (_fastDebounceTimer != null)
+        {
+            _fastDebounceTimer.DebounceComplete -= OnDebounceComplete;
+            _fastDebounceTimer.Dispose();
+            _fastDebounceTimer = null;
+        }
 
         _runtimeActivated = false;
+    }
+
+    /// <summary>
+    /// Handler for <see cref="PredictionEngineBase.FailureOccurred"/>. Invoked on
+    /// arbitrary engine threads — keep it non-blocking. AuthFailure is persisted for
+    /// the tray tooltip so the user has a visible signal that their API key needs
+    /// attention; other failure kinds are already traced by the base class and don't
+    /// need UI surfacing.
+    /// </summary>
+    private void OnPredictionEngineFailure(PredictionFailure failure)
+    {
+        if (failure.Kind == PredictionFailureKind.AuthFailure)
+        {
+            _lastAuthFailure = failure;
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_trayIcon != null)
+                    _trayIcon.ToolTipText = BuildToolTip();
+            });
+        }
     }
 
     private void EnterSetupIncompleteState(string reason)
@@ -505,7 +587,9 @@ public partial class App : Application
         }
 
         if (_engineMenuItem != null)
-            _engineMenuItem.Header = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
+            _engineMenuItem.Header = _config.UseLocalModel
+                ? $"Engine: ollama ({GetCurrentModelName()}) — local override"
+                : $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})";
         if (_sessionMenuItem != null)
             _sessionMenuItem.Header = BuildSessionMenuHeader();
         if (_profileMenuItem != null)
@@ -518,7 +602,7 @@ public partial class App : Application
 
     private IPredictionEngine CreatePredictionEngine()
     {
-        IPredictionEngine engine = _config.PredictionEngine.ToLower() switch
+        IPredictionEngine engine = _config.EffectivePredictionEngine.ToLower() switch
         {
             "gemini" when !string.IsNullOrWhiteSpace(_config.GeminiApiKey)
                 => new GeminiPredictionEngine(_config.GeminiApiKey, _config.GeminiModel),
@@ -760,7 +844,7 @@ public partial class App : Application
     private PromptPreviewSnapshot CreatePromptPreviewSnapshot()
     {
         var (processName, windowTitle) = GetLastExternalWindowOrCurrent();
-        var providerLabel = $"{_config.PredictionEngine} ({GetCurrentModelName()})";
+        var providerLabel = $"{_config.EffectivePredictionEngine} ({GetCurrentModelName()})";
         var rollingContext = _config.RollingContextEnabled
             ? _rollingContext.GetContext(processName, windowTitle)
             : null;

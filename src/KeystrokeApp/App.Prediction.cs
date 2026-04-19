@@ -112,23 +112,31 @@ public partial class App
             _activePredictionRequestId = requestId;
             _lastPredictionPrefix = buffer;
         }
-        _suggestionLifecycle.BeginPrediction(requestId, buffer);
 
-        SetPredictionState("Predicting", requestId, new Dictionary<string, string>
+        // Guard every step between CTS creation and Task.Run. If anything below
+        // throws synchronously (e.g. lifecycle bug, shutdown-phase Dispatcher
+        // failure), we must dispose the CTS here — no background task exists yet
+        // to run the finally block that normally owns disposal.
+        var taskLaunched = false;
+        try
         {
-            ["bufferLength"] = buffer.Length.ToString()
-        });
+            _suggestionLifecycle.BeginPrediction(requestId, buffer);
 
-        Dispatcher.BeginInvoke(() =>
-        {
-            if (!IsPredictionRequestCurrent(requestId))
-                return;
+            SetPredictionState("Predicting", requestId, new Dictionary<string, string>
+            {
+                ["bufferLength"] = buffer.Length.ToString()
+            });
 
-            _suggestionPanel?.BeginStreamingSuggestion(buffer);
-        });
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (!IsPredictionRequestCurrent(requestId))
+                    return;
 
-        _ = Task.Run(async () =>
-        {
+                _suggestionPanel?.BeginStreamingSuggestion(buffer);
+            });
+
+            _ = Task.Run(async () =>
+            {
             try
             {
                 using var timeoutCts = new CancellationTokenSource(_predictionEngine!.TimeoutMs);
@@ -255,6 +263,28 @@ public partial class App
                 }
             }
         }, ct);
+            taskLaunched = true;
+        }
+        finally
+        {
+            // If we threw before Task.Run could capture `cts`, no background task
+            // will ever run the finally that disposes it. Release the CTS here and
+            // clear the shared field if it still points to our instance so a new
+            // prediction can start cleanly.
+            if (!taskLaunched)
+            {
+                lock (_predictionCtsLock)
+                {
+                    if (ReferenceEquals(_predictionCts, cts))
+                    {
+                        _predictionCts = null;
+                        Interlocked.CompareExchange(ref _activePredictionRequestId, 0, requestId);
+                    }
+                }
+                cts.Dispose();
+                LogToDebug($"Prediction setup failed before task launch (requestId={requestId}); CTS disposed.");
+            }
+        }
     }
 
     // ==================== OCR ====================

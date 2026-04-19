@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 
 namespace KeystrokeApp.Services;
 
@@ -8,13 +9,21 @@ public sealed class LearningEventService
 {
     private readonly LearningDatabase? _database;
     private readonly LearningContextPreferencesService _preferences;
+    private readonly ReliabilityTraceService? _reliabilityTrace;
+
+    // Throttles how often we trace repeated failures. Without this, a locked database
+    // or full disk would flood the trace log on every keystroke worth recording.
+    private int _consecutiveFailures;
+    private DateTime _lastFailureTracedUtc = DateTime.MinValue;
 
     public LearningEventService(
+        LearningContextPreferencesService preferences,
         LearningDatabase? database = null,
-        LearningContextPreferencesService? preferences = null)
+        ReliabilityTraceService? reliabilityTrace = null)
     {
         _database = database;
-        _preferences = preferences ?? new LearningContextPreferencesService();
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _reliabilityTrace = reliabilityTrace;
     }
 
     public void Append(LearningEventRecord record)
@@ -33,13 +42,44 @@ public sealed class LearningEventService
             };
 
             _database?.InsertEvent(sanitized);
+            Interlocked.Exchange(ref _consecutiveFailures, 0);
         }
         catch (Exception ex)
         {
-            // Learning events must never interrupt typing or prediction.
-            Debug.WriteLine($"[LearningEvent] Append failed: {ex.Message}");
+            // Learning events must never interrupt typing or prediction — but silently
+            // dropping every write means the user has no signal that their learning
+            // corpus has stopped growing. Trace the first failure + every 10th after
+            // (throttled to once per minute) so the reliability log tells the story
+            // even if nobody's watching Debug.
+            var count = Interlocked.Increment(ref _consecutiveFailures);
+            Debug.WriteLine($"[LearningEvent] Append failed (#{count}): {ex.Message}");
+
+            var shouldTrace = count == 1 || count % 10 == 0;
+            var now = DateTime.UtcNow;
+            if (shouldTrace && (now - _lastFailureTracedUtc) > TimeSpan.FromSeconds(30))
+            {
+                _lastFailureTracedUtc = now;
+                var data = new Dictionary<string, string>
+                {
+                    ["event_type"] = record.EventType,
+                    ["consecutive_failures"] = count.ToString(),
+                    ["exception"] = ex.GetType().Name,
+                    ["message"] = Truncate(ex.Message, 200)
+                };
+                if (ex is SqliteException sqlEx)
+                    data["sqlite_code"] = sqlEx.SqliteErrorCode.ToString();
+
+                _reliabilityTrace?.Trace(
+                    area: "learning",
+                    eventName: "event_write_failed",
+                    message: $"Learning event write failed: {ex.Message}",
+                    data: data);
+            }
         }
     }
+
+    private static string Truncate(string s, int max)
+        => s.Length <= max ? s : s[..max];
 }
 
 public sealed record LearningEventRecord

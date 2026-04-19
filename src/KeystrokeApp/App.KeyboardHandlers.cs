@@ -307,9 +307,32 @@ public partial class App
 
     // ==================== Word-by-word acceptance ====================
 
+    // Bounded timeout for the acceptance gate. A single Tab-press injection should
+    // complete in tens of milliseconds; 500 ms is a large safety margin for clipboard
+    // contention. Past this, something has gone wrong — better to drop the press than
+    // queue duplicate injections.
+    private static readonly TimeSpan AcceptanceGateTimeout = TimeSpan.FromMilliseconds(500);
+
     private async Task AcceptSuggestionAsync(AcceptanceMode mode, string triggerLabel, string source)
     {
-        await _acceptanceGate.WaitAsync();
+        // Single-flight: if a prior acceptance is still running, a second Tab-press
+        // within the gate timeout is coalesced away rather than queued. Rapid double-taps
+        // (muscle memory, sticky keys) must not inject duplicates.
+        if (!await _acceptanceGate.WaitAsync(AcceptanceGateTimeout).ConfigureAwait(true))
+        {
+            LogToDebug($"{triggerLabel} -> Dropped: acceptance gate still held after {AcceptanceGateTimeout.TotalMilliseconds:F0}ms.");
+            _reliabilityTrace.Trace(
+                area: "acceptance",
+                eventName: "gate_dropped",
+                message: "Acceptance gate timeout — dropping this press to avoid duplicate injection.",
+                data: new Dictionary<string, string>
+                {
+                    ["source"] = source,
+                    ["trigger"] = triggerLabel,
+                    ["timeout_ms"] = ((int)AcceptanceGateTimeout.TotalMilliseconds).ToString()
+                });
+            return;
+        }
         try
         {
             var preparation = PrepareAcceptance(mode);

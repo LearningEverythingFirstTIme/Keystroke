@@ -94,6 +94,14 @@ public class AppConfig
     // Local LLM (Ollama) settings — no API key needed
     public string OllamaModel { get; set; } = DefaultOllamaModel;
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+    public bool UseLocalModel { get; set; } = false;
+
+    /// <summary>
+    /// The engine the app should actually use — returns "ollama" when the local
+    /// model override is active, otherwise the user's chosen cloud engine.
+    /// </summary>
+    [JsonIgnore]
+    public string EffectivePredictionEngine => UseLocalModel ? "ollama" : PredictionEngine;
 
     // OpenRouter settings — proxies hundreds of models via one OpenAI-compatible API
     public string OpenRouterModel { get; set; } = "google/gemini-flash-2.0";
@@ -237,6 +245,16 @@ public class AppConfig
                 MigrateLegacyTierFlags(json, config);
 
                 config.Validate();
+
+                // Migrate users who had Ollama as their primary engine —
+                // it's now a separate toggle, not a PredictionEngine value.
+                if (string.Equals(config.PredictionEngine, "ollama", StringComparison.OrdinalIgnoreCase))
+                {
+                    config.UseLocalModel = true;
+                    config.PredictionEngine = "gemini";
+                    config.Save();
+                }
+
                 return config;
             }
         }

@@ -18,12 +18,12 @@ public class CompletionFeedbackService
     private readonly ContextFingerprintService _fingerprints;
 
     public CompletionFeedbackService(
+        LearningContextPreferencesService preferences,
         LearningDatabase? database = null,
-        LearningContextPreferencesService? preferences = null,
         ContextFingerprintService? fingerprints = null)
     {
         _database = database;
-        _preferences = preferences ?? new LearningContextPreferencesService();
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _fingerprints = fingerprints ?? new ContextFingerprintService();
     }
 

@@ -1144,10 +1144,9 @@
                                     <ComboBoxItem Content="Gemini (recommended default)"/>
                                     <ComboBoxItem Content="GPT-5"/>
                                     <ComboBoxItem Content="Claude"/>
-                                    <ComboBoxItem Content="Ollama (local, experimental)"/>
                                     <ComboBoxItem Content="OpenRouter (many models)"/>
-                                    <ComboBoxItem Content="Dummy (testing)"/>
                                 </ComboBox>
+                                <TextBlock x:Name="EngineOverrideNotice" Text="⚠ Overridden — a local model is active below" Foreground="{StaticResource Warning}" FontSize="11" Margin="0,8,0,0" Visibility="Collapsed"/>
                             </StackPanel>
                         </Border>
 
@@ -1234,25 +1233,6 @@
                                     </ComboBox>
                                 </StackPanel>
 
-                                <StackPanel x:Name="OllamaPanel" Visibility="Collapsed" Margin="0,16,0,0">
-                                    <Border Style="{StaticResource ExperimentalCardStyle}" Margin="0,0,0,12">
-                                        <StackPanel>
-                                            <TextBlock Text="Experimental local engine" Foreground="{StaticResource Warning}" FontSize="13" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Ollama can be excellent when your local model and hardware are a good fit, but results vary more than hosted providers." Foreground="{StaticResource TextSecondary}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <TextBlock Text="Ollama model" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
-                                    <ComboBox x:Name="OllamaModelCombo" SelectionChanged="Setting_Changed">
-                                        <ComboBoxItem Content="Qwen 3 30B A3B (best local quality)" Tag="qwen3:30b-a3b"/>
-                                        <ComboBoxItem Content="Qwen 3 8B (recommended local default)" Tag="qwen3:8b"/>
-                                        <ComboBoxItem Content="Mistral 7B (clean prose)" Tag="mistral:7b"/>
-                                        <ComboBoxItem Content="Llama 3.1 8B (solid fallback)" Tag="llama3.1:8b"/>
-                                    </ComboBox>
-                                    <TextBlock Text="Endpoint" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,14,0,6"/>
-                                    <TextBox x:Name="OllamaEndpointBox" TextChanged="Setting_Changed"/>
-                                    <TextBlock x:Name="OllamaStatus" Text="Checking..." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,10,0,0"/>
-                                </StackPanel>
-
                                 <StackPanel x:Name="OpenRouterPanel" Visibility="Collapsed" Margin="0,16,0,0">
                                     <TextBlock Text="OpenRouter API key" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
                                     <Grid Margin="0,0,0,12">
@@ -1278,7 +1258,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource CardStyle}">
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
                             <StackPanel>
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
@@ -1290,6 +1270,36 @@
                                 </Grid>
                                 <TextBlock Text="These instructions are sent to the model. Only edit them if you want to deeply customize behavior." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,14" TextWrapping="Wrap"/>
                                 <TextBox x:Name="PromptBox" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="320" FontFamily="Consolas" FontSize="12" TextChanged="Setting_Changed"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── Local Models (Experimental) ── -->
+                        <Border Style="{StaticResource ExperimentalCardStyle}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Local Models — Experimental" Foreground="{StaticResource Warning}" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Run a local model via Ollama instead of a cloud provider. Quality varies by model and hardware — the cloud engine above is ignored while this is on." Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="UseLocalModelCheck" Grid.Column="1" Style="{StaticResource SwitchCheckBoxStyle}" Checked="UseLocalModelCheck_Changed" Unchecked="UseLocalModelCheck_Changed" VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <StackPanel x:Name="LocalModelConfigPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                                    <TextBlock Text="Ollama model" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="OllamaModelCombo" SelectionChanged="Setting_Changed">
+                                        <ComboBoxItem Content="Qwen 3 30B A3B (best local quality)" Tag="qwen3:30b-a3b"/>
+                                        <ComboBoxItem Content="Qwen 3 8B (recommended local default)" Tag="qwen3:8b"/>
+                                        <ComboBoxItem Content="Mistral 7B (clean prose)" Tag="mistral:7b"/>
+                                        <ComboBoxItem Content="Llama 3.1 8B (solid fallback)" Tag="llama3.1:8b"/>
+                                    </ComboBox>
+                                    <TextBlock Text="Endpoint" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,14,0,6"/>
+                                    <TextBox x:Name="OllamaEndpointBox" TextChanged="Setting_Changed"/>
+                                    <TextBlock x:Name="OllamaStatus" Text="Checking..." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,10,0,0"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                 </StackPanel>

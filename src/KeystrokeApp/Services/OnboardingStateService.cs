@@ -15,13 +15,15 @@ public sealed class OnboardingStateService
 
     public bool HasUsableProviderSetup(AppConfig config)
     {
+        if (config.UseLocalModel)
+            return !string.IsNullOrWhiteSpace(config.OllamaModel);
+
         return config.PredictionEngine.ToLowerInvariant() switch
         {
             "gemini" => HasApiKey(config.GeminiApiKey),
             "gpt5" => HasApiKey(config.OpenAiApiKey),
             "claude" => HasApiKey(config.AnthropicApiKey),
             "openrouter" => HasApiKey(config.OpenRouterApiKey),
-            "ollama" => !string.IsNullOrWhiteSpace(config.OllamaModel),
             _ => false
         };
     }
@@ -43,13 +45,15 @@ public sealed class OnboardingStateService
         if (!config.ConsentAccepted)
             return "Consent is required before predictions can start.";
 
+        if (config.UseLocalModel)
+            return "Finish local model setup to start completions.";
+
         return config.PredictionEngine.ToLowerInvariant() switch
         {
             "gemini" => "Add and verify a Gemini API key to start completions.",
             "gpt5" => "Add an OpenAI API key to start completions.",
             "claude" => "Add an Anthropic API key to start completions.",
             "openrouter" => "Add an OpenRouter API key to start completions.",
-            "ollama" => "Finish local model setup to start completions.",
             _ => "Finish onboarding to start completions."
         };
     }

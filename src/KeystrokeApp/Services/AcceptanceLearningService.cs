@@ -23,22 +23,14 @@ public class AcceptanceLearningService
     private readonly Queue<SessionAccept> _sessionBuffer = new();
     private readonly object _sessionLock = new();
 
-    public AcceptanceLearningService()
-        : this(
-            new LearningRepository(),
-            new LearningRetrievalService(new LearningReranker()),
-            new LearningContextPreferencesService())
-    {
-    }
-
     public AcceptanceLearningService(
         LearningRepository repository,
         LearningRetrievalService retrieval,
         LearningContextPreferencesService preferences)
     {
-        _repository = repository;
-        _retrieval = retrieval;
-        _preferences = preferences;
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _retrieval = retrieval ?? throw new ArgumentNullException(nameof(retrieval));
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke");

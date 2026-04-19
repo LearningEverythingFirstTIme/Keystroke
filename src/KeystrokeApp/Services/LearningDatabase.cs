@@ -138,21 +138,19 @@ public sealed class LearningDatabase : IDisposable
 
     public void InsertEvent(LearningEventRecord record)
     {
-        try
+        // Writes are allowed to throw — callers (LearningEventService,
+        // CompletionFeedbackService) wrap Append in a guarded try so user
+        // typing is never interrupted, and LearningEventService in particular
+        // surfaces repeated failures to ReliabilityTraceService. Swallowing
+        // here would strip the failure signal before it can reach anyone.
+        lock (_writeLock)
         {
-            lock (_writeLock)
-            {
-                EnsureWriteConnection();
-                using var cmd = _writeConnection!.CreateCommand();
-                cmd.CommandText = InsertSql;
-                BindEventParameters(cmd, record, "tracking");
-                cmd.ExecuteNonQuery();
-                Interlocked.Increment(ref _writeVersion);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[LearningDB] InsertEvent failed: {ex.Message}");
+            EnsureWriteConnection();
+            using var cmd = _writeConnection!.CreateCommand();
+            cmd.CommandText = InsertSql;
+            BindEventParameters(cmd, record, "tracking");
+            cmd.ExecuteNonQuery();
+            Interlocked.Increment(ref _writeVersion);
         }
     }
 

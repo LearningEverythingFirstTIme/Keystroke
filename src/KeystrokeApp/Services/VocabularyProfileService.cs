@@ -50,13 +50,17 @@ public class VocabularyProfileService
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public VocabularyProfileService(LearningDatabase? database = null)
+    public VocabularyProfileService(
+        LearningContextPreferencesService preferences,
+        LearningDatabase? database = null)
     {
         var appData     = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Keystroke");
         _profilePath    = Path.Combine(appData, "vocabulary-profile.json");
         _dataPath   = Path.Combine(appData, "completions.jsonl");
         _logPath        = Path.Combine(appData, "vocabulary-profile.log");
-        _repository     = new LearningRepository(database);
+        // Share the app-wide preferences instance so vocabulary learning respects
+        // the user's disabled-context opt-outs.
+        _repository     = new LearningRepository(preferences, database);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────

@@ -11,12 +11,12 @@ public sealed class LearningRepository
     private long _lastWriteVersion = -1;
 
     public LearningRepository(
+        LearningContextPreferencesService preferences,
         LearningDatabase? database = null,
-        ContextFingerprintService? fingerprints = null,
-        LearningContextPreferencesService? preferences = null)
+        ContextFingerprintService? fingerprints = null)
     {
         _database = database;
-        _preferences = preferences ?? new LearningContextPreferencesService();
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
     }
 
     public LearningCorpusSnapshot GetSnapshot(bool forceRefresh = false)

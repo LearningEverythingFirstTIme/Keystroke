@@ -82,7 +82,7 @@ public partial class App
 
         _engineMenuItem = new MenuItem
         {
-            Header    = $"Engine: {_config.PredictionEngine} ({GetCurrentModelName()})",
+            Header    = $"Engine: {_config.EffectivePredictionEngine} ({GetCurrentModelName()})",
             IsEnabled = false
         };
 
@@ -179,13 +179,26 @@ public partial class App
         }
 
         var status   = _isEnabled ? "Active" : "Paused";
-        var engine   = _config.PredictionEngine;
+        var engine   = _config.EffectivePredictionEngine;
         var model    = GetCurrentModelName();
         var currentApp = GetCurrentAppStatus();
-        return $"Keystroke - {status}\n{engine} ({model})\n{BuildUsageTooltipSummary()}\nAI profile: {BuildProfileTooltipSummary()}\n{currentApp.Label}: {currentApp.Reason}\nLast accept: {_lastAcceptanceStatus}";
+        var authLine = BuildAuthFailureTooltipLine();
+        return $"Keystroke - {status}\n{engine} ({model}){authLine}\n{BuildUsageTooltipSummary()}\nAI profile: {BuildProfileTooltipSummary()}\n{currentApp.Label}: {currentApp.Reason}\nLast accept: {_lastAcceptanceStatus}";
     }
 
-    private string GetCurrentModelName() => _config.PredictionEngine.ToLower() switch
+    /// <summary>
+    /// If the most recent engine failure was an auth failure, surface it as a tooltip
+    /// line. Any later successful request clears it — this is a best-effort hint, not
+    /// an authoritative status.
+    /// </summary>
+    private string BuildAuthFailureTooltipLine()
+    {
+        var failure = _lastAuthFailure;
+        if (failure is null) return string.Empty;
+        return $"\n\u26A0 {failure.ProviderName} auth failed — check API key";
+    }
+
+    private string GetCurrentModelName() => _config.EffectivePredictionEngine.ToLower() switch
     {
         "gemini" => _config.GeminiModel ?? "default",
         "gpt5"   => _config.Gpt5Model   ?? "default",

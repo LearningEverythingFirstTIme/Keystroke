@@ -226,7 +226,9 @@ public partial class SettingsWindow : Window
         HeroTitleText.Text = $"Keystroke is tuned for {lengthLabel}";
         HeroSubtitleText.Text = $"It feels {speedLabel}, with {SuggestionsSlider.Value:0} option{(SuggestionsSlider.Value == 1 ? "" : "s")} ready when you pause.";
 
-        var engineName = (EngineCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Gemini";
+        var engineName = _config.UseLocalModel
+            ? "Ollama (local override)"
+            : (EngineCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Gemini";
         var contextOn = RollingContextCheck.IsChecked == true || OcrEnabledCheck.IsChecked == true;
 
         HeroEngineStatusText.Text = engineName;
@@ -578,8 +580,8 @@ public partial class SettingsWindow : Window
     private void LoadValues()
     {
         // Engine settings
-        // Populate all model/endpoint fields BEFORE calling UpdateEngineUI(),
-        // because UpdateEngineUI() triggers CheckOllamaStatusAsync() which reads
+        // Populate all model/endpoint fields BEFORE calling UpdateLocalModelUI(),
+        // because it triggers CheckOllamaStatusAsync() which reads
         // OllamaModelCombo and OllamaEndpointBox — they must be set first.
         GeminiApiKeyBox.Text = _config.GeminiApiKey ?? "";
         Gpt5ApiKeyBox.Text = _config.OpenAiApiKey ?? "";
@@ -597,10 +599,11 @@ public partial class SettingsWindow : Window
             "gemini"      => 0,
             "gpt5"        => 1,
             "claude"      => 2,
-            "ollama"      => 3,
-            "openrouter"  => 4,
-            _             => 5 // Dummy
+            "openrouter"  => 3,
+            _             => 0 // fallback to Gemini
         };
+        UseLocalModelCheck.IsChecked = _config.UseLocalModel;
+        UpdateLocalModelUI();
         UpdateEngineUI();
 
         UpdateGeminiApiKeyStatus();
@@ -1993,27 +1996,41 @@ public partial class SettingsWindow : Window
     private void UpdateEngineUI()
     {
         var e = EngineCombo.SelectedIndex;
-        // 0=Gemini  1=GPT-5  2=Claude  3=Ollama  4=OpenRouter  5=Dummy
+        // 0=Gemini  1=GPT-5  2=Claude  3=OpenRouter
         GeminiApiKeyPanel.Visibility  = e == 0 ? Visibility.Visible : Visibility.Collapsed;
         Gpt5ApiKeyPanel.Visibility    = e == 1 ? Visibility.Visible : Visibility.Collapsed;
         ClaudeApiKeyPanel.Visibility  = e == 2 ? Visibility.Visible : Visibility.Collapsed;
         GeminiModelPanel.Visibility   = e == 0 ? Visibility.Visible : Visibility.Collapsed;
         Gpt5ModelPanel.Visibility     = e == 1 ? Visibility.Visible : Visibility.Collapsed;
         ClaudeModelPanel.Visibility   = e == 2 ? Visibility.Visible : Visibility.Collapsed;
-        OllamaPanel.Visibility        = e == 3 ? Visibility.Visible : Visibility.Collapsed;
-        OpenRouterPanel.Visibility    = e == 4 ? Visibility.Visible : Visibility.Collapsed;
+        OpenRouterPanel.Visibility    = e == 3 ? Visibility.Visible : Visibility.Collapsed;
         ProviderDetailIntroText.Text = e switch
         {
             0 => "Gemini is active. This is the recommended default provider, and Gemini 3.1 Flash-Lite Preview is the default model because it has given the best speed, accuracy, and cost balance in our testing.",
             1 => "GPT-5 is active. Add your OpenAI key and pick the model size you want.",
             2 => "Claude is active. Add your Anthropic key and choose the tradeoff between speed and quality.",
-            3 => "Ollama is active. Make sure your local endpoint and pulled model are ready.",
-            4 => "OpenRouter is active. Use one key to access many hosted models.",
-            _ => "Dummy mode is active for testing only."
+            _ => "OpenRouter is active. Use one key to access many hosted models."
         };
 
-        if (e == 3) _ = CheckOllamaStatusAsync();
-        if (e == 4) _ = LoadOpenRouterModelsAsync();
+        if (e == 3) _ = LoadOpenRouterModelsAsync();
+    }
+
+    private void UseLocalModelCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        UpdateLocalModelUI();
+        Setting_Changed(sender, e);
+    }
+
+    private void UpdateLocalModelUI()
+    {
+        var isLocal = UseLocalModelCheck.IsChecked == true;
+
+        LocalModelConfigPanel.Visibility = isLocal ? Visibility.Visible : Visibility.Collapsed;
+        EngineOverrideNotice.Visibility = isLocal ? Visibility.Visible : Visibility.Collapsed;
+        EngineCombo.Opacity = isLocal ? 0.5 : 1.0;
+
+        if (isLocal)
+            _ = CheckOllamaStatusAsync();
     }
 
     private void ShowSaveIndicator()
@@ -2035,10 +2052,10 @@ public partial class SettingsWindow : Window
             0 => "gemini",
             1 => "gpt5",
             2 => "claude",
-            3 => "ollama",
-            4 => "openrouter",
-            _ => "dummy"
+            3 => "openrouter",
+            _ => "gemini"
         };
+        _config.UseLocalModel = UseLocalModelCheck.IsChecked == true;
         _config.GeminiApiKey     = GeminiApiKeyBox.Text;
         _config.OpenAiApiKey     = Gpt5ApiKeyBox.Text;
         _config.AnthropicApiKey  = ClaudeApiKeyBox.Text;

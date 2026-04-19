@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text.Json;
 using KeystrokeApp.Services;
 
 namespace KeystrokeApp.Tests;
@@ -8,26 +6,28 @@ public class AnalyticsAggregationServiceTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _storePath;
-    private readonly string _trackingPath;
-    private readonly string _legacyPath;
+    private readonly string _dbPath;
+    private readonly LearningDatabase _database;
 
     public AnalyticsAggregationServiceTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), $"keystroke_analytics_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
         _storePath = Path.Combine(_tempDir, "analytics-daily.json");
-        _trackingPath = Path.Combine(_tempDir, "tracking.jsonl");
-        _legacyPath = Path.Combine(_tempDir, "completions.jsonl");
+        _dbPath = Path.Combine(_tempDir, "learning.db");
+        _database = new LearningDatabase(_dbPath);
+        _database.EnsureCreated();
     }
 
     public void Dispose()
     {
+        _database.Dispose();
         try { if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true); }
         catch { /* cleanup best-effort */ }
     }
 
     private AnalyticsAggregationService CreateService() =>
-        new(_storePath, _trackingPath, _legacyPath);
+        new(_database, _storePath);
 
     private void WriteTrackingEvent(string eventType, string category = "Email",
         DateTime? timestamp = null, string acceptedText = "hello world",
@@ -36,6 +36,7 @@ public class AnalyticsAggregationServiceTests : IDisposable
     {
         var record = new LearningEventRecord
         {
+            EventId = Guid.NewGuid().ToString("n"),
             EventType = eventType,
             Category = category,
             TimestampUtc = timestamp ?? DateTime.UtcNow,
@@ -50,22 +51,7 @@ public class AnalyticsAggregationServiceTests : IDisposable
                 SubcontextLabel = contextLabel
             }
         };
-        File.AppendAllText(_trackingPath, JsonSerializer.Serialize(record) + Environment.NewLine);
-    }
-
-    private void WriteLegacyEvent(string action, string category = "Chat",
-        DateTime? timestamp = null, string completion = "test completion")
-    {
-        var obj = new
-        {
-            Timestamp = timestamp ?? DateTime.UtcNow,
-            Action = action,
-            Completion = completion,
-            Category = category,
-            QualityScore = 0.6f,
-            LatencyMs = 500
-        };
-        File.AppendAllText(_legacyPath, JsonSerializer.Serialize(obj) + Environment.NewLine);
+        _database.InsertEvent(record);
     }
 
     // ── Rollup accuracy ───────────────────────────────────────────────────
@@ -209,39 +195,6 @@ public class AnalyticsAggregationServiceTests : IDisposable
             timestamp: DateTime.UtcNow.AddSeconds(2), acceptedText: "second");
         svc.Refresh();
         Assert.Equal(2, svc.GetStore().CumulativeAccepted);
-    }
-
-    // ── Legacy data ───────────────────────────────────────────────────────
-
-    [Fact]
-    public void Legacy_data_is_included_on_first_run()
-    {
-        WriteLegacyEvent("accepted", completion: "legacy text");
-        WriteLegacyEvent("dismissed");
-
-        var svc = CreateService();
-        svc.Refresh();
-        var store = svc.GetStore();
-
-        Assert.True(store.CumulativeAccepted >= 1);
-        Assert.True(store.Rollups.Count >= 1);
-        Assert.True(store.Rollups[0].TotalDismissed >= 1);
-    }
-
-    [Fact]
-    public void Deduplication_prevents_double_counting()
-    {
-        var timestamp = DateTime.UtcNow;
-        // Same timestamp in both files
-        WriteTrackingEvent("suggestion_full_accept", timestamp: timestamp, acceptedText: "same text");
-        WriteLegacyEvent("accepted", timestamp: timestamp, completion: "same text");
-
-        var svc = CreateService();
-        svc.Refresh();
-        var store = svc.GetStore();
-
-        // Should be 1, not 2 (deduped by timestamp proximity)
-        Assert.Equal(1, store.CumulativeAccepted);
     }
 
     // ── Streaks ───────────────────────────────────────────────────────────

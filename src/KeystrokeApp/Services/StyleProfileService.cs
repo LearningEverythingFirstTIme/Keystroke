@@ -48,7 +48,9 @@ public class StyleProfileService
         catch (IOException) { }
     }
 
-    public StyleProfileService(LearningDatabase? database = null)
+    public StyleProfileService(
+        LearningContextPreferencesService preferences,
+        LearningDatabase? database = null)
     {
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -56,7 +58,10 @@ public class StyleProfileService
         _profilePath  = Path.Combine(appData, "style-profile.json");
         _dataPath = Path.Combine(appData, "completions.jsonl");
         _logPath      = Path.Combine(appData, "style-profile.log");
-        _repository = new LearningRepository(database);
+        // Repository shares the app-wide preferences instance so profile generation
+        // honors disabled-context filters instead of learning from contexts the user
+        // opted out of.
+        _repository = new LearningRepository(preferences, database);
     }
 
     public void Start(int interval)

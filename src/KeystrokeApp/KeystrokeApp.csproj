@@ -3,7 +3,14 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <!-- Promote nullable annotations to errors so a missing null-check fails the
+         build instead of being lost in the warning stream. Narrow scope on
+         purpose — broader "treat all warnings as errors" would drown the build
+         in existing CS4014 (fire-and-forget) warnings from App.Prediction.cs
+         that are intentional. -->
+    <WarningsAsErrors>nullable</WarningsAsErrors>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
