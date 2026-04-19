@@ -59,6 +59,13 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
     public async Task<string?> GenerateTextAsync(string systemPrompt, string userPrompt, int maxTokens = 200, CancellationToken ct = default)
     {
+        // HttpClient is InfiniteTimeSpan so callers normally provide their own CT.
+        // For one-shot utilities (StyleProfileService etc.) that pass CancellationToken.None,
+        // bound the request with our TimeoutMs so a stalled local Ollama can't hang forever.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(TimeoutMs));
+        var linkedCt = timeoutCts.Token;
+
         try
         {
             if (_isBaseModel)
@@ -71,9 +78,14 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 };
                 var rawJson = JsonSerializer.Serialize(rawBody);
                 var rawResp = await _httpClient.PostAsync($"{_endpoint}/api/generate",
-                    new StringContent(rawJson, Encoding.UTF8, "application/json"), ct);
-                if (!rawResp.IsSuccessStatusCode) return null;
-                var rawRespBody = await rawResp.Content.ReadAsStringAsync(ct);
+                    new StringContent(rawJson, Encoding.UTF8, "application/json"), linkedCt);
+                if (!rawResp.IsSuccessStatusCode)
+                {
+                    var err = await rawResp.Content.ReadAsStringAsync(linkedCt);
+                    ReportFailure(ClassifyHttpResponse(rawResp, err));
+                    return null;
+                }
+                var rawRespBody = await rawResp.Content.ReadAsStringAsync(linkedCt);
                 return JsonSerializer.Deserialize<OllamaGenerateResponse>(rawRespBody)?.Response?.Trim();
             }
 
@@ -89,13 +101,18 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             };
             var json = JsonSerializer.Serialize(body);
             var response = await _httpClient.PostAsync($"{_endpoint}/api/chat",
-                new StringContent(json, Encoding.UTF8, "application/json"), ct);
-            if (!response.IsSuccessStatusCode) return null;
-            var respBody = await response.Content.ReadAsStringAsync(ct);
+                new StringContent(json, Encoding.UTF8, "application/json"), linkedCt);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(linkedCt);
+                ReportFailure(ClassifyHttpResponse(response, err));
+                return null;
+            }
+            var respBody = await response.Content.ReadAsStringAsync(linkedCt);
             return JsonSerializer.Deserialize<OllamaChatResponse>(respBody)?.Message?.Content?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     // ── Instruct path: /api/chat (non-Qwen3) and /api/generate raw (Qwen3) ──
@@ -223,7 +240,9 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             new StringContent(json, Encoding.UTF8, "application/json"), ct);
         if (!response.IsSuccessStatusCode)
         {
-            Log($"Chat error {response.StatusCode}: {await response.Content.ReadAsStringAsync(ct)}");
+            var err = await response.Content.ReadAsStringAsync(ct);
+            Log($"Chat error {response.StatusCode}: {err}");
+            ReportFailure(ClassifyHttpResponse(response, err));
             return null;
         }
         var respBody   = await response.Content.ReadAsStringAsync(ct);
@@ -260,7 +279,9 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             new StringContent(json, Encoding.UTF8, "application/json"), ct);
         if (!response.IsSuccessStatusCode)
         {
-            Log($"RawChatML error {response.StatusCode}: {await response.Content.ReadAsStringAsync(ct)}");
+            var err = await response.Content.ReadAsStringAsync(ct);
+            Log($"RawChatML error {response.StatusCode}: {err}");
+            ReportFailure(ClassifyHttpResponse(response, err));
             return null;
         }
         var respBody   = await response.Content.ReadAsStringAsync(ct);
@@ -344,7 +365,9 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             new StringContent(json, Encoding.UTF8, "application/json"), ct);
         if (!response.IsSuccessStatusCode)
         {
-            Log($"Error {response.StatusCode}: {await response.Content.ReadAsStringAsync(ct)}");
+            var err = await response.Content.ReadAsStringAsync(ct);
+            Log($"Error {response.StatusCode}: {err}");
+            ReportFailure(ClassifyHttpResponse(response, err));
             return null;
         }
         var respBody   = await response.Content.ReadAsStringAsync(ct);
@@ -376,13 +399,18 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
     // ── Public IPredictionEngine interface ───────────────────────────────────
 
-    public Task<string?> PredictAsync(ContextSnapshot context, CancellationToken ct = default)
+    public async Task<string?> PredictAsync(ContextSnapshot context, CancellationToken ct = default)
     {
         var prefix = context.TypedText;
-        if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3) return Task.FromResult<string?>(null);
-        if (_isBaseModel) return PredictGenerateAsync(context, ct);
-        if (IsQwen3)      return PredictRawChatMLAsync(context, ct);
-        return PredictChatAsync(context, ct);
+        if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3) return null;
+        try
+        {
+            if (_isBaseModel) return await PredictGenerateAsync(context, ct);
+            if (IsQwen3)      return await PredictRawChatMLAsync(context, ct);
+            return await PredictChatAsync(context, ct);
+        }
+        catch (OperationCanceledException) { return null; }
+        catch (Exception ex) { Log($"Predict exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     public async Task<string?> PredictStreamingAsync(ContextSnapshot context, Action<string> onChunk, CancellationToken ct = default)
@@ -390,13 +418,24 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
         var prefix = context.TypedText;
         if (string.IsNullOrWhiteSpace(prefix) || prefix.Length < 3) return null;
 
-        if (_isBaseModel)
-            return await PredictStreamingGenerateAsync(context, onChunk, ct);
+        try
+        {
+            if (_isBaseModel)
+                return await PredictStreamingGenerateAsync(context, onChunk, ct);
 
-        if (IsQwen3)
-            return await PredictStreamingRawChatMLAsync(context, onChunk, ct);
+            if (IsQwen3)
+                return await PredictStreamingRawChatMLAsync(context, onChunk, ct);
 
-        // Other instruct models: /api/chat streaming
+            // Other instruct models: /api/chat streaming
+            return await PredictStreamingChatAsync(context, onChunk, ct);
+        }
+        catch (OperationCanceledException) { return null; }
+        catch (Exception ex) { Log($"Streaming exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
+    }
+
+    private async Task<string?> PredictStreamingChatAsync(ContextSnapshot context, Action<string> onChunk, CancellationToken ct)
+    {
+        var prefix = context.TypedText;
         var dynamicTemp = GetDynamicTemperature(context);
         var body = new
         {
@@ -414,7 +453,13 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (!response.IsSuccessStatusCode) { Log($"Chat stream error {response.StatusCode}"); return null; }
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            Log($"Chat stream error {response.StatusCode}: {err}");
+            ReportFailure(ClassifyHttpResponse(response, err));
+            return null;
+        }
 
         var rawCompletion = new StringBuilder();
         var degenDetector = CreateDegenerationDetector();
@@ -476,7 +521,13 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (!response.IsSuccessStatusCode) { Log($"RawChatML stream error {response.StatusCode}"); return null; }
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            Log($"RawChatML stream error {response.StatusCode}: {err}");
+            ReportFailure(ClassifyHttpResponse(response, err));
+            return null;
+        }
 
         var rawCompletion = new StringBuilder();
         using var stream  = await response.Content.ReadAsStreamAsync(ct);
@@ -525,7 +576,13 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (!response.IsSuccessStatusCode) { Log($"Stream error {response.StatusCode}"); return null; }
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            Log($"Stream error {response.StatusCode}: {err}");
+            ReportFailure(ClassifyHttpResponse(response, err));
+            return null;
+        }
 
         var fullCompletion = new StringBuilder();
         bool isFirstChunk  = true;

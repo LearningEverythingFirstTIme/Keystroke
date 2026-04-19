@@ -252,11 +252,46 @@ public abstract class PredictionEngineBase
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Short provider identifier used in failure reports (e.g. "claude", "ollama").
+    /// Derived from the log file name when not specified — engines can override
+    /// via the two-arg constructor.
+    /// </summary>
+    public string ProviderName { get; }
+
+    /// <summary>
+    /// Optional trace sink for reliability events. Set once after construction by
+    /// <c>App.xaml.cs</c>. When null, <see cref="ReportFailure"/> still fires the
+    /// typed event; only the persistent trace is skipped.
+    /// </summary>
+    public ReliabilityTraceService? ReliabilityTrace { get; set; }
+
+    /// <summary>
+    /// Raised when the engine classifies a failure (auth, rate-limit, transient,
+    /// malformed response). Lets the shell surface auth failures in the tray
+    /// without string-sniffing. <see cref="OperationCanceledException"/> is NOT a
+    /// failure and never fires this event.
+    /// </summary>
+    public event Action<PredictionFailure>? FailureOccurred;
+
     protected PredictionEngineBase(string logFileName)
+        : this(logFileName, DeriveProviderName(logFileName))
+    {
+    }
+
+    protected PredictionEngineBase(string logFileName, string providerName)
     {
         _logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Keystroke", logFileName);
+        ProviderName = providerName;
+    }
+
+    private static string DeriveProviderName(string logFileName)
+    {
+        // "claude.log" → "claude", "openrouter.log" → "openrouter".
+        var stem = Path.GetFileNameWithoutExtension(logFileName);
+        return string.IsNullOrWhiteSpace(stem) ? "unknown" : stem;
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
@@ -265,6 +300,102 @@ public abstract class PredictionEngineBase
     {
         try { File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); }
         catch (IOException) { }
+    }
+
+    // ── Failure classification & reporting ────────────────────────────────────
+
+    /// <summary>
+    /// Map an HTTP response into a typed failure. Callers should invoke this at
+    /// every non-success branch and pass the result to <see cref="ReportFailure"/>.
+    /// </summary>
+    protected PredictionFailure ClassifyHttpResponse(HttpResponseMessage response, string body)
+    {
+        var code = (int)response.StatusCode;
+        var trimmedBody = body.Length > 400 ? body[..400] + "…" : body;
+
+        if (code == 401 || code == 403)
+            return new PredictionFailure(
+                PredictionFailureKind.AuthFailure,
+                ProviderName,
+                $"HTTP {code}: {trimmedBody}",
+                Retryable: false,
+                HttpStatusCode: code);
+
+        if (code == 429 || body.Contains("rate_limit", StringComparison.OrdinalIgnoreCase))
+            return new PredictionFailure(
+                PredictionFailureKind.RateLimit,
+                ProviderName,
+                $"HTTP {code}: {trimmedBody}",
+                Retryable: true,
+                HttpStatusCode: code);
+
+        if (code >= 500)
+            return new PredictionFailure(
+                PredictionFailureKind.Transient,
+                ProviderName,
+                $"HTTP {code}: {trimmedBody}",
+                Retryable: true,
+                HttpStatusCode: code);
+
+        return new PredictionFailure(
+            PredictionFailureKind.Unknown,
+            ProviderName,
+            $"HTTP {code}: {trimmedBody}",
+            Retryable: false,
+            HttpStatusCode: code);
+    }
+
+    /// <summary>
+    /// Map an exception from the HTTP or parse path into a typed failure. Never
+    /// call this with <see cref="OperationCanceledException"/> — cancellation is
+    /// not a failure and should be caught separately by the caller.
+    /// </summary>
+    protected PredictionFailure ClassifyException(Exception ex)
+    {
+        var kind = ex switch
+        {
+            HttpRequestException => PredictionFailureKind.Transient,
+            TimeoutException     => PredictionFailureKind.Transient,
+            IOException          => PredictionFailureKind.Transient,
+            JsonException        => PredictionFailureKind.MalformedResponse,
+            _                    => PredictionFailureKind.Unknown
+        };
+
+        return new PredictionFailure(
+            kind,
+            ProviderName,
+            ex.Message,
+            Retryable: kind == PredictionFailureKind.Transient);
+    }
+
+    /// <summary>
+    /// Raises <see cref="FailureOccurred"/> and writes a trace entry if a
+    /// <see cref="ReliabilityTraceService"/> is attached. Event handlers run
+    /// inline; keep them fast and exception-safe.
+    /// </summary>
+    protected void ReportFailure(PredictionFailure failure)
+    {
+        ReliabilityTrace?.Trace(
+            area: "prediction",
+            eventName: $"engine_{failure.Kind.ToString().ToLowerInvariant()}",
+            message: $"[{failure.ProviderName}] {failure.Message}",
+            data: failure.HttpStatusCode is int code
+                ? new Dictionary<string, string>
+                {
+                    ["provider"] = failure.ProviderName,
+                    ["kind"] = failure.Kind.ToString(),
+                    ["status"] = code.ToString(),
+                    ["retryable"] = failure.Retryable ? "true" : "false"
+                }
+                : new Dictionary<string, string>
+                {
+                    ["provider"] = failure.ProviderName,
+                    ["kind"] = failure.Kind.ToString(),
+                    ["retryable"] = failure.Retryable ? "true" : "false"
+                });
+
+        try { FailureOccurred?.Invoke(failure); }
+        catch (Exception ex) { Log($"FailureOccurred handler threw: {ex.Message}"); }
     }
 
     // ── Rate limiting ─────────────────────────────────────────────────────────
@@ -389,24 +520,32 @@ public abstract class PredictionEngineBase
 
         if (context.HasScreenContext)
         {
-            var screenText = context.ScreenText!;
+            // Scrub PII before truncation so a card/secret straddling the cut boundary
+            // cannot leak its tail into the prompt.
+            var screenText = OutboundPrivacy.SanitizeForPrompt(context.ScreenText) ?? "";
             if (screenText.Length > ScreenContextLimit)
                 screenText = "..." + screenText[^ScreenContextLimit..];
-            sb.AppendLine("<screen_context>");
-            sb.AppendLine(screenText);
-            sb.AppendLine("</screen_context>");
-            sb.AppendLine();
+            if (!string.IsNullOrEmpty(screenText))
+            {
+                sb.AppendLine("<screen_context>");
+                sb.AppendLine(screenText);
+                sb.AppendLine("</screen_context>");
+                sb.AppendLine();
+            }
         }
 
         if (context.HasRollingContext)
         {
-            var rollingText = context.RollingContext!;
+            var rollingText = OutboundPrivacy.SanitizeForPrompt(context.RollingContext) ?? "";
             if (rollingText.Length > RollingContextLimit)
                 rollingText = "..." + rollingText[^RollingContextLimit..];
-            sb.AppendLine("<recently_written>");
-            sb.AppendLine(rollingText);
-            sb.AppendLine("</recently_written>");
-            sb.AppendLine();
+            if (!string.IsNullOrEmpty(rollingText))
+            {
+                sb.AppendLine("<recently_written>");
+                sb.AppendLine(rollingText);
+                sb.AppendLine("</recently_written>");
+                sb.AppendLine();
+            }
         }
 
         // Learning signals — injected as soft contextual hints the model can weigh

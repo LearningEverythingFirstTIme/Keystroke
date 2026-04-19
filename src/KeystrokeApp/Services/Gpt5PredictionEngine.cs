@@ -70,6 +70,7 @@ public class Gpt5PredictionEngine : PredictionEngineBase, IPredictionEngine, IDi
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Error {response.StatusCode}: {err}");
                 CheckRateLimitResponse(response, err);
+                ReportFailure(ClassifyHttpResponse(response, err));
                 return null;
             }
 
@@ -86,7 +87,7 @@ public class Gpt5PredictionEngine : PredictionEngineBase, IPredictionEngine, IDi
             return processed;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Exception: {ex}"); return null; }
+        catch (Exception ex) { Log($"Exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     public async Task<string?> PredictStreamingAsync(ContextSnapshot context, Action<string> onChunk, CancellationToken ct = default)
@@ -129,6 +130,7 @@ public class Gpt5PredictionEngine : PredictionEngineBase, IPredictionEngine, IDi
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Stream error {response.StatusCode}: {err}");
                 CheckRateLimitResponse(response, err);
+                ReportFailure(ClassifyHttpResponse(response, err));
                 return null;
             }
 
@@ -139,7 +141,7 @@ public class Gpt5PredictionEngine : PredictionEngineBase, IPredictionEngine, IDi
             }, onChunk, ct);
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Stream exception: {ex}"); return null; }
+        catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     /// <summary>
@@ -240,13 +242,18 @@ public class Gpt5PredictionEngine : PredictionEngineBase, IPredictionEngine, IDi
             var json = JsonSerializer.Serialize(body);
             var response = await _httpClient.PostAsync(_endpoint,
                 new StringContent(json, Encoding.UTF8, "application/json"), ct);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(ct);
+                ReportFailure(ClassifyHttpResponse(response, err));
+                return null;
+            }
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<Gpt5Response>(respBody);
             return result?.Choices?[0]?.Message?.Content?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     // ── Response DTOs ─────────────────────────────────────────────────────────

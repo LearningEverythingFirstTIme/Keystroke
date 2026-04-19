@@ -72,6 +72,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Error {response.StatusCode}: {err}");
                 CheckRateLimitResponse(response, err);
+                ReportFailure(ClassifyHttpResponse(response, err));
                 return null;
             }
 
@@ -90,7 +91,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             return processed;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Exception: {ex}"); return null; }
+        catch (Exception ex) { Log($"Exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     public async Task<string?> PredictStreamingAsync(ContextSnapshot context, Action<string> onChunk, CancellationToken ct = default)
@@ -138,6 +139,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Stream error {response.StatusCode}: {err}");
                 CheckRateLimitResponse(response, err);
+                ReportFailure(ClassifyHttpResponse(response, err));
                 return null;
             }
 
@@ -148,7 +150,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             }, onChunk, ct);
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Stream exception: {ex}"); return null; }
+        catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     /// <summary>
@@ -255,13 +257,18 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             var json = JsonSerializer.Serialize(body);
             var response = await _httpClient.PostAsync(_endpoint,
                 new StringContent(json, Encoding.UTF8, "application/json"), ct);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(ct);
+                ReportFailure(ClassifyHttpResponse(response, err));
+                return null;
+            }
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<GeminiResponse>(respBody);
             return result?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     private class GeminiResponse  { [JsonPropertyName("candidates")] public GeminiCandidate[]? Candidates { get; set; } }

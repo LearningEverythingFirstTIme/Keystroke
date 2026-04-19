@@ -59,13 +59,18 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             var json = JsonSerializer.Serialize(body);
             var response = await _httpClient.PostAsync(Endpoint,
                 new StringContent(json, Encoding.UTF8, "application/json"), ct);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(ct);
+                ReportFailure(ClassifyHttpResponse(response, err));
+                return null;
+            }
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<ChatResponse>(respBody);
             return result?.Choices?[0]?.Message?.Content?.Trim();
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"GenerateText error: {ex}"); return null; }
+        catch (Exception ex) { Log($"GenerateText error: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     // ── Token sizing (override: reasoning models need a larger budget) ─────────
@@ -129,6 +134,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Error {response.StatusCode}: {err}");
                 CheckRateLimitResponse(response, err);
+                ReportFailure(ClassifyHttpResponse(response, err));
                 return null;
             }
 
@@ -150,14 +156,15 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             return processed;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Exception: {ex}"); return null; }
+        catch (Exception ex) { Log($"Exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     // ── Reasoning-first model path (non-streaming) ───────────────────────────
     // MiniMax M-series, Kimi K2.x: their streaming endpoint never produces delta.content.
-    // Strategy: ignore the per-keypress CancellationToken for the HTTP request so typing
-    // doesn't kill in-flight requests. Use a request-ID counter so only the most recent
-    // request ever delivers its result — stale responses are silently discarded.
+    // Strategy: link the per-keypress CT with a 45 s timeout cap so fresh predictions
+    // cancel stale in-flight reasoning requests (which otherwise burn API quota). Keep
+    // the request-ID counter as belt-and-braces in case a response lands right as the
+    // next keystroke arrives — only the most recent request ever delivers its result.
 
     private int _reasoningRequestId;
 
@@ -187,9 +194,12 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 : AppCategory.Category.Unknown;
             Log($"=== Reasoning-model request #{requestId}: \"{prefix}\" [model={_model}, cat={category}, tokens={adaptiveTokens}] ===");
 
-            // Use an internal timeout-only CTS — NOT the per-keypress ct.
-            // This lets the request survive while the user keeps typing.
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            // Link caller's CT with a 45 s timeout cap. If a fresh prediction kicks off
+            // (new keystroke → new CTS), this stale request is cancelled rather than
+            // left running to burn quota. The requestId post-check below handles the
+            // narrow race where a response lands between arrival and cancellation.
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(45));
 
             var response = await _httpClient.PostAsync(
                 Endpoint,
@@ -201,6 +211,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 var err = await response.Content.ReadAsStringAsync(timeoutCts.Token);
                 Log($"Reasoning-model #{requestId} error {response.StatusCode}: {err}");
                 CheckRateLimitResponse(response, err);
+                ReportFailure(ClassifyHttpResponse(response, err));
                 return null;
             }
 
@@ -211,7 +222,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             Log($"[reasoning-model #{requestId}] content={msg?.Content?.Length ?? 0}chars  reasoning={msg?.Reasoning?.Length ?? 0}chars");
 
             // Discard if a newer request has already been issued
-            if (requestId != _reasoningRequestId)
+            if (requestId != Volatile.Read(ref _reasoningRequestId))
             {
                 Log($"Reasoning-model #{requestId} discarded (superseded by #{_reasoningRequestId})");
                 return null;
@@ -230,8 +241,8 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             }
             return completion;
         }
-        catch (OperationCanceledException) { Log($"Reasoning-model #{requestId} timed out"); return null; }
-        catch (Exception ex) { Log($"Reasoning-model #{requestId} exception: {ex}"); return null; }
+        catch (OperationCanceledException) { Log($"Reasoning-model #{requestId} cancelled/timed out"); return null; }
+        catch (Exception ex) { Log($"Reasoning-model #{requestId} exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     // ── IPredictionEngine — streaming ─────────────────────────────────────────
@@ -283,6 +294,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 var err = await response.Content.ReadAsStringAsync(ct);
                 Log($"Stream error {response.StatusCode}: {err}");
                 CheckRateLimitResponse(response, err);
+                ReportFailure(ClassifyHttpResponse(response, err));
                 return null;
             }
 
@@ -309,7 +321,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             return result;
         }
         catch (OperationCanceledException) { return null; }
-        catch (Exception ex) { Log($"Stream exception: {ex}"); return null; }
+        catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
     // ── IPredictionEngine — alternatives ──────────────────────────────────────
