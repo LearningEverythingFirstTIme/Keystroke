@@ -1,102 +1,36 @@
 # Keystroke
 
-A system-wide AI autocomplete for Windows. Keystroke runs in the background, listens for your input in any application, and suggests completions powered by your choice of AI engine — Google Gemini, Anthropic Claude, OpenAI GPT, OpenRouter, or local models via Ollama.
+**A ghostwriter that lives in every app on your Windows machine.** System-wide AI autocomplete with five interchangeable engines, sub-300&nbsp;ms suggestions, and a privacy layer that scrubs your text before it ever leaves your keyboard.
 
-Keystroke only activates after consent, exposes live privacy/data-flow details in Settings, and documents its behavior in [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and [DATA_FLOW.md](DATA_FLOW.md).
+Live at **[keystroke-app.com](https://www.keystroke-app.com)** · [Download v0.1.0](https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/releases) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Data flow](DATA_FLOW.md)
 
-![.NET 8](https://img.shields.io/badge/.NET-8.0-purple) ![Windows](https://img.shields.io/badge/platform-Windows-blue) ![Gemini](https://img.shields.io/badge/AI-Gemini%203.1-orange) ![Claude](https://img.shields.io/badge/AI-Claude%20Haiku%204.5-blueviolet) ![GPT](https://img.shields.io/badge/AI-GPT--5.4-green) ![OpenRouter](https://img.shields.io/badge/AI-OpenRouter-red) ![Ollama](https://img.shields.io/badge/AI-Ollama%20(local)-gray)
+![.NET 8](https://img.shields.io/badge/.NET-8.0-purple) ![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-blue) ![Release](https://img.shields.io/badge/release-v0.1.0-brightgreen) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-## How it works
+## What it is
 
-1. An input listener watches the text you type in the currently focused application
-2. After a brief debounce, Keystroke builds a context bundle and strips or blocks sensitive data before any cloud request
-3. A suggestion panel appears near your cursor with the predicted completion
-4. Press **Tab** to accept, **Shift+Tab** to accept one word at a time, **Esc** to dismiss, or just keep typing
+Keystroke runs in the background, watches the text you're typing in the currently focused application, and proposes a completion inline — in Outlook, Slack, VS Code, Word, the terminal, the browser address bar, anywhere. Press **Tab** to accept, keep typing to ignore.
 
-## Features
+You pick the engine: **Google Gemini**, **Anthropic Claude**, **OpenAI GPT**, **OpenRouter** (hundreds of models behind one key), or **Ollama** running entirely on your machine. Before any cloud request is built, a centralized egress layer scrubs secrets and sensitive data — sixteen detectors covering credit cards, SSNs, API keys, private keys, JWTs, IBANs, and more. Raw window titles never leave the machine; outbound prompts see only a coarse app label like `code (Code)`.
 
-### Core
-- **System-wide** — works in any text field (browsers, chat apps, editors, email clients, etc.)
-- **5 engines** — Google Gemini, Anthropic Claude, OpenAI GPT, OpenRouter (hundreds of models), and local Ollama
-- **Streaming predictions** — suggestions appear progressively as the AI responds
-- **Animated glassmorphism panel** — acrylic-blur overlay with smooth fade-in/slide-up animations
-- **Draggable overlay** — grab the suggestion panel to reposition it; it follows your mouse on the next prediction
-- **Word-by-word acceptance** — press `Shift+Tab` or `Ctrl+Right` to accept one word at a time
-- **Multi-suggestion cycling** — fetches multiple alternative completions in parallel and displays a counter (e.g., `1/3`); press `Ctrl+Down` / `Ctrl+Up` to cycle through them
-- **5 color themes** — Midnight, Ember, Forest, Rose, and Slate panel themes
+A free tier (30 accepted completions per day, all engines, all privacy features) is enough to evaluate. **Pro** ($20 once, no subscription) unlocks unlimited usage and the adaptive learning stack — see [Free vs. Pro](#free-vs-pro).
 
-### Intelligence
-- **OCR screen reading** — reads visible text on screen for better context (GPU-accelerated via Windows built-in OCR)
-- **App-aware tone** — adjusts prediction style based on the active application (casual in Discord, professional in Outlook, syntax-aware in VS Code)
-- **Acceptance-based learning** — learns from completions you accept to match your style using few-shot conversation turns
-- **Adjacent category matching** — learning examples from stylistically similar apps (Chat/Email, Code/Terminal) improve suggestions even in new contexts
-- **Style profiling** — LLM-powered analysis of your accepted completions to build a natural-language description of your writing style, per app category
-- **Vocabulary fingerprinting** — deterministic analysis of your word choices, preferred phrases, sentence structure, and formality level to guide predictions
-- **Intelligence scoring** — per-category 0-100 score tracking learning quality across Volume, Quality, Accept Rate, and Richness, with drift detection
-- **Correction detection** — detects when you immediately backspace after accepting a suggestion to signal unwanted completions
-- **Rolling context window** — remembers your last 500 characters of accepted text for topic continuity across multiple completions
-- **Feedback loop hardening** — quality gates, staleness suppression, contamination filtering, and context-continuity checks prevent the learning system from amplifying bad patterns
+## Status
 
-### Performance
-- **Smart debounce** — triggers instantly on word boundaries (space, period), fast 100ms debounce mid-word
-- **LRU prediction cache** — repeated or backspaced prefixes get instant results
-- **Adaptive token caps** — short prefixes request fewer tokens for faster, more precise completions
-- **Dynamic temperature** — automatically adjusts creativity: precise (0.1) for code/terminal, balanced (0.25-0.3) for documents, flexible (0.35) for chat
-- **Anti-loop detection** — prevents the model from echoing text you've already written
-- **Whole-word trimming** — completions always end on clean word boundaries
-- **Rate limiting** — graceful backoff on API rate limits across all engines
+**v0.1.0** is the current public release. Actively developed. Windows 10 (build 19041+) and Windows 11. .NET 8. Shipping surface is [GitLab releases](https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/releases); the marketing site and checkout are at [keystroke-app.com](https://www.keystroke-app.com).
 
-### Security and privacy
-- **DPAPI-encrypted API keys** — keys are encrypted at rest using Windows Data Protection API, never stored in plaintext
-- **Centralized egress sanitization** — OCR, rolling context, learning hints, and few-shot examples all pass through one outbound privacy layer before any cloud request
-- **Safe app context labels** — raw window titles stay local; outbound prompts use coarse app/category labels instead
-- **Expanded sensitive-data detection** — detects credit cards, SSNs, email, phone, IPs, JWTs, bearer tokens, API keys, private keys, IBANs, and more
-- **High-risk input blocking** — predictions are suppressed entirely when the actively typed text appears to contain secrets or other blocking sensitive data
-- **Custom privacy rules** — add your own regex-based redaction/blocking rules in `%AppData%/Keystroke/privacy-rules.json`
-- **No telemetry** — all data stays on your machine; completion feedback is local-only JSONL
-- **Consent-first** — input processing only activates after explicit user consent on first launch
-- **Auto-pruning** — log files and completion data are automatically pruned to prevent unbounded disk usage
+## Install
 
-## Requirements
+### Option 1 — Installer (recommended)
 
-- Windows 10 (build 19041+) or Windows 11
-- [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (not required for self-contained builds)
-- An API key for at least one cloud engine, **or** a local [Ollama](https://ollama.com) installation:
-  - [Google Gemini](https://aistudio.google.com/apikey) (default, free tier available)
-  - [Anthropic Claude](https://console.anthropic.com/)
-  - [OpenAI](https://platform.openai.com/api-keys)
-  - [OpenRouter](https://openrouter.ai/keys) (access hundreds of models through one API key)
-  - [Ollama](https://ollama.com) (completely free, runs locally, no API key needed)
-
-## Getting started
-
-### Option 1 — Download a release
-
-Download `KeystrokeApp.exe` from the [Releases](../../releases) page and run it directly. No installation required.
+Grab the latest installer from [keystroke-app.com](https://www.keystroke-app.com) or directly from [GitLab releases](https://gitlab.com/LearningEverythingFirstTIme/keystroke/-/releases). Run it and walk through the onboarding wizard.
 
 ### Option 2 — Build from source
 
-**Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-
 ```bash
-git clone https://github.com/LearningEverythingFirstTIme/Keystroke.git
-cd Keystroke
+git clone https://gitlab.com/LearningEverythingFirstTIme/keystroke.git
+cd keystroke
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
-
-Run just the unit tests:
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\test.ps1
-```
-
-Optional flags:
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\test.ps1 -NoBuild -NoRestore
-```
-
-Avoid `dotnet test Keystroke.sln` for now. In this repo, the reliable path is `.\test.ps1`, the test project directly, or `.\build.ps1`, which already builds the app projects and then runs the test project explicitly.
 
 Run directly for development:
 
@@ -110,15 +44,59 @@ Build a portable single-file exe:
 dotnet publish src/KeystrokeApp/KeystrokeApp.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build; the runtime is not required for self-contained builds. You'll also need an API key for at least one cloud engine *or* a local [Ollama](https://ollama.com) install.
+
 ### First-time setup
 
-1. Launch `KeystrokeApp.exe` — a guided onboarding wizard walks you through setup
-2. **Welcome** — overview of what Keystroke does
-3. **Privacy & consent** — review privacy defaults and grant consent (required before any input processing)
-4. **API key** — paste your Gemini API key and verify it with one click (a link to Google AI Studio is provided). You can skip this step and add a key later
-5. **Ready** — confirms your configuration and starts Keystroke with the recommended defaults (Gemini 3.1 Flash-Lite, OCR on, rolling context on, learning off)
+A guided onboarding wizard walks you through privacy consent, picking an engine, and verifying your API key. Gemini is the default — it has a generous free tier. After onboarding, Keystroke runs in the system tray; right-click the tray icon to open **Settings**.
 
-After onboarding, Keystroke runs in the system tray. Right-click the tray icon to open **Settings** and switch engines, add additional API keys, or adjust any option. If you skipped the API key step, Keystroke starts paused until you configure one.
+## How it works
+
+1. The input listener watches text you type in the focused app.
+2. After a brief debounce, Keystroke builds a context bundle and passes it through the outbound privacy layer — secrets are redacted or, if the actively-typed text looks sensitive, the prediction is suppressed entirely.
+3. The selected engine returns a streaming completion (one or several alternatives in parallel).
+4. A glassmorphism panel appears near your cursor. **Tab** accepts, **Shift+Tab** accepts one word, **Esc** dismisses, **Ctrl+Up/Down** cycles alternatives.
+
+## Free vs. Pro
+
+| | **Free** | **Pro** ($20 one-time) |
+|---|---|---|
+| Accepted completions per day | 30 | Unlimited |
+| All five engines (cloud + local Ollama) | ✅ | ✅ |
+| Centralized privacy layer · DPAPI-encrypted keys · no telemetry | ✅ | ✅ |
+| OCR screen reading for context | ✅ | ✅ |
+| Rolling 500-char context window | ✅ | ✅ |
+| Multi-suggestion cycling · per-app filtering · themes · custom prompts | ✅ | ✅ |
+| Acceptance-based learning (few-shot from your accepted completions) | — | ✅ |
+| LLM-powered style profiling per app category | — | ✅ |
+| Deterministic vocabulary fingerprinting | — | ✅ |
+| Correction-pattern detection · context-adaptive tuning | — | ✅ |
+| Per-category intelligence scoring (0–100) with drift alerts | — | ✅ |
+| Writing analytics dashboard | — | ✅ |
+
+**How Pro works.** Pro is unlocked by a license key of the form `KS-…`, cryptographically signed offline with an ECDSA P-256 private key and verified locally against an embedded public key. No account, no server check, no trial countdown. Keys arrive by email immediately after purchase. Buy at [keystroke-app.com/#pricing](https://www.keystroke-app.com/#pricing).
+
+## Engines
+
+| Engine | Notes | API key |
+|---|---|---|
+| **Google Gemini** | Default. Generous free tier. Flash Lite (fastest), Flash (balanced), Pro (smartest). | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| **Anthropic Claude** | Haiku for speed, Sonnet for quality. | [console.anthropic.com](https://console.anthropic.com/) |
+| **OpenAI GPT** | Nano/mini/full tiers. | [platform.openai.com](https://platform.openai.com/api-keys) |
+| **OpenRouter** | Hundreds of models through one key; model catalog fetched live in Settings. | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| **Ollama** (Experimental) | 100% local, zero cloud calls, free. Needs 16&nbsp;GB+ RAM and a GPU to be usable. | None. [ollama.com](https://ollama.com) |
+
+## Privacy & security
+
+- **Centralized egress sanitization.** OCR text, rolling context, learning hints, and few-shot examples all pass through one outbound privacy layer before any cloud request.
+- **Sixteen PII/secret detectors.** Credit cards (Luhn-validated), SSNs, email, phone, IPv4/IPv6, JWTs, bearer tokens, GitHub/OpenAI/Google/AWS-style keys, private-key blocks, IBANs, password/token assignments. High-risk active input suppresses the prediction instead of redacting.
+- **DPAPI-encrypted API keys.** Encrypted at rest using Windows Data Protection API, scoped to your user account. Never on disk in plaintext. Legacy plaintext keys auto-migrate on upgrade.
+- **No raw window titles outbound.** Titles stay local for app classification; prompts see coarse labels like `chrome (Browser)`.
+- **No telemetry.** Completion feedback is stored locally in SQLite and auto-pruned. Learning stays on your machine.
+- **Local-only option.** Ollama runs predictions entirely on-device with zero cloud calls.
+- **Custom privacy rules.** Add your own regex-based redaction/blocking patterns at `%AppData%/Keystroke/privacy-rules.json`.
+
+For the full threat model see [SECURITY.md](SECURITY.md); for what is captured and how to delete it see [PRIVACY.md](PRIVACY.md); for the end-to-end pipeline from keystroke to suggestion see [DATA_FLOW.md](DATA_FLOW.md).
 
 ## Keyboard shortcuts
 
@@ -134,121 +112,61 @@ After onboarding, Keystroke runs in the system tray. Right-click the tray icon t
 
 ## Configuration
 
-All settings are stored in `%AppData%/Keystroke/config.json` and are editable through the Settings UI.
+All settings live at `%AppData%/Keystroke/config.json` and are editable through the Settings UI (right-click the tray icon). **Quick Presets** — Minimal, Balanced, Maximum — configure everything at once.
 
-| Setting | Default | Description |
+| Setting | Default | Notes |
 |---|---|---|
-| Engine | Gemini | `gemini`, `claude`, `gpt5`, `openrouter`, or `ollama` |
-| Gemini Model | gemini-3.1-flash-lite-preview | Options: flash-lite (fastest), 3-flash, 2.5-flash, 2.5-pro (smartest) |
-| Claude Model | claude-haiku-4-5-20251001 | Options: haiku-4-5 (fast), sonnet-4-5 (smart) |
-| GPT Model | gpt-5.4-nano | Options: nano (fastest), mini (balanced), 5.4 (smart) |
-| OpenRouter Model | google/gemini-flash-2.0 | Browse hundreds of models from the settings UI |
-| Ollama Model | llama3.2:latest | Any model you've pulled locally; supports instruct and base models |
-| Max Suggestions | 3 | Number of completions per prediction (1 = single, 2-5 = enables `Ctrl+Up/Down` cycling) |
-| Completion Length | Extended | Brief (3-5 words), Standard (8-15), Extended (15-30), Unlimited (30-50) |
-| Temperature | 0.3 | Lower = more predictable, higher = more creative (auto-adjusted per app category) |
-| Min Characters | 3 | Characters typed before predictions start |
-| Debounce Delay | 300ms | Delay after word boundaries before predicting |
-| Fast Debounce | 100ms | Delay mid-word before predicting |
+| Engine | Gemini | `gemini`, `claude`, `gpt5`, `openrouter`, `ollama` |
+| Max suggestions | 3 | `1` disables cycling; `2–5` enables `Ctrl+Up/Down` |
+| Completion length | Extended | Brief / Standard / Extended / Unlimited |
+| Temperature | 0.3 | Auto-adjusted per app category (code tightest, chat loosest) |
+| Min characters | 3 | Characters typed before predictions start |
+| Debounce | 300&nbsp;ms / 100&nbsp;ms fast | After word boundary / mid-word |
 | OCR | Enabled | Screen reading for context injection |
-| Learning | Disabled | Opt-in acceptance tracking for few-shot style learning |
-| Theme | Midnight | Panel color theme: Midnight, Ember, Forest, Rose, Slate |
-| System Prompt | Built-in | Customizable prediction instructions |
+| Learning (Pro) | Disabled | Opt-in acceptance tracking for few-shot style learning |
+| Theme | Midnight | Midnight, Ember, Forest, Rose, Slate |
 
-## Settings UI
+Current recommended models per engine are selected automatically on first run and can be switched in the Settings UI; the model list updates as providers release new versions.
 
-The Settings window provides an intuitive interface to customize Keystroke:
+## Architecture
 
-- **General Tab** — Engine selection, API keys, trigger behavior, debounce timing
-- **Quality Tab** — Toggle smart features (rolling context, learning, OCR), creativity settings
-- **Learning Tab** — Visual intelligence cards showing per-category scores (0-100), trends, and drift alerts
-- **Advanced Tab** — Custom system prompt editing, theme selection
-
-**Quick Presets:** Choose from Minimal, Balanced, or Maximum quality presets for instant configuration.
-
-## Project structure
+The runtime pipeline is a straight line: **input listener → typing buffer → debounce → outbound privacy layer → engine (streaming, multi-alternative) → suggestion overlay → acceptance feedback → learning store.** Each stage has a single service that owns it.
 
 ```
-src/KeystrokeApp/
-  App.xaml.cs                        # App startup, service wiring, consent dialog
-  App.KeyboardHandlers.cs            # Key input, text injection, word-by-word acceptance
-  App.Prediction.cs                  # Prediction pipeline, debounce, streaming, screen reading
-  App.TrayIcon.cs                    # System tray icon, context menu, global toggle
-  Services/
-    InputListenerService.cs          # System-wide input listener for autocomplete
-    IPredictionEngine.cs             # Engine interface with streaming + alternatives
-    PredictionEngineBase.cs          # Shared engine logic: prompts, rate limits, post-processing
-    GeminiPredictionEngine.cs        # Google Gemini API
-    ClaudePredictionEngine.cs        # Anthropic Claude API
-    Gpt5PredictionEngine.cs          # OpenAI GPT API
-    OpenRouterPredictionEngine.cs    # OpenRouter API (hundreds of models)
-    OpenRouterModelService.cs        # Fetches and caches the OpenRouter model catalog
-    OllamaPredictionEngine.cs        # Local Ollama (instruct + base model support)
-    ScreenReaderService.cs           # Windows.Media.Ocr screen text reading
-    AppContextService.cs             # Foreground window detection via P/Invoke
-    AppCategory.cs                   # App classification and tone hints
-    AppConfig.cs                     # Configuration with DPAPI-encrypted key storage
-    ApiKeyEncryption.cs              # Windows DPAPI encryption/decryption for API keys
-    PiiFilter.cs                     # Centralized text redaction built on the sensitive-data detector
-    SensitiveDataDetector.cs         # Secret/PII detection with built-in + custom regex rules
-    OutboundPrivacyService.cs        # Single policy layer for all outbound prompt text
-    ContaminationFilter.cs           # Shared prompt-leakage and contamination detection
-    TypingBuffer.cs                  # Input accumulation buffer
-    DebounceTimer.cs                 # Configurable debounce with cancellation
-    PredictionCache.cs               # LRU cache (50 entries)
-    CompletionFeedbackService.cs     # JSONL logging of accepted/dismissed predictions
-    AcceptanceLearningService.cs     # Few-shot prompting from accepted completions
-    StyleProfileService.cs           # LLM-powered writing style analysis per category
-    VocabularyProfileService.cs      # Deterministic vocabulary and structure fingerprinting
-    LearningScoreService.cs          # Per-category intelligence scoring with drift detection
-    CorrectionDetector.cs            # Detects immediate backspace after acceptance
-    RollingContextService.cs         # Tracks recently accepted text for continuity
-    CursorPositionHelper.cs          # Mouse cursor position for panel placement
-    ThemeDefinitions.cs              # Panel color themes (Midnight, Ember, Forest, Rose, Slate)
-    ContextSnapshot.cs               # Context bundle for prediction requests
-    SuggestionLifecycleController.cs # Suggestion state machine (pending → visible → accepted/dismissed)
-    SuggestionLifecycleState.cs      # Immutable lifecycle state snapshot
-    PromptPreviewBuilder.cs          # Builds prompt preview for debugging/display
-    PromptPreviewSnapshot.cs         # Prompt preview data snapshot
-    OnboardingStateService.cs        # Tracks first-run onboarding progress
-    GeminiApiKeyValidationService.cs # Validates Gemini API keys via test request
-  Views/
-    SuggestionPanel.xaml(.cs)        # Glassmorphism overlay with multi-suggestion support
-    SettingsWindow.xaml(.cs)         # Settings UI with per-engine model selection
-    OnboardingWindow.xaml(.cs)       # Guided first-run onboarding wizard
-    ConsentDialog.xaml(.cs)          # Standalone consent dialog (legacy/fallback)
+src/
+  KeystrokeApp/            # WPF app: tray, overlay, prediction pipeline
+    Services/              # Engines, privacy, learning, OCR, context
+    Views/                 # Suggestion panel, Settings, Onboarding
+  KeystrokeHook/           # Low-level Windows input hook
+tests/
+  KeystrokeApp.Tests/      # Unit + integration tests
+website/                   # Marketing site + Lemon Squeezy webhook
+installer/                 # Inno Setup installer script
+docs/                      # Reliability matrix, testing guide, plans
 ```
 
-## Security
+The engine layer is one interface (`IPredictionEngine`) with a shared base (`PredictionEngineBase`) that handles prompt assembly, rate limiting, anti-loop detection, and whole-word trimming. Adding a new engine is a single file.
 
-- **API keys** are encrypted at rest using Windows DPAPI (Data Protection API) — they are never stored in plaintext on disk. Legacy plaintext keys from older versions are automatically detected and re-encrypted on startup.
-- **Centralized outbound privacy policy** — all prompt-bound text now flows through a single sanitization layer before any cloud request is built.
-- **No raw window titles in prompts** — window titles are still used locally for app classification, but outbound prompts receive only a safe label such as `chrome (Browser)` or `code (Code)`.
-- **Expanded secret detection** — outgoing text is scrubbed for credit cards (Luhn-validated), SSNs, email addresses, phone numbers, IPv4/IPv6 addresses, JWTs, bearer tokens, GitHub/OpenAI/Google/AWS-style keys, private key blocks, IBANs, and password/token assignment patterns.
-- **Blocking on high-risk active input** — if the text currently being typed appears to contain secrets or other blocking sensitive data, Keystroke suppresses prediction instead of sending the prefix upstream.
-- **Custom privacy rules** — advanced users can define additional redaction/blocking patterns in `%AppData%/Keystroke/privacy-rules.json`.
-- **Contamination filtering** — prompt-leakage patterns are detected and excluded from all learning data so the model never trains on its own system prompt artifacts.
-- **No telemetry** — all data stays on your machine. Completion feedback is local-only JSONL, auto-pruned to 2,000 entries.
-- **Consent-first** — a guided onboarding wizard collects explicit consent and validates your API key before any input processing begins.
-- **Local-only option** — use Ollama to run predictions entirely on your machine with zero cloud API calls.
+Learning state lives in a local SQLite database (`LearningDatabase` / `LearningRepository`) — accepted completions, per-category style profiles, vocabulary fingerprints, correction patterns, and intelligence scores. It is never transmitted.
 
-Reviewer-oriented references:
+## Build & test
 
-- [PRIVACY.md](PRIVACY.md) explains what is captured, what leaves the machine, and how to disable or delete it.
-- [SECURITY.md](SECURITY.md) explains the hook/OCR/clipboard threat model and the guardrails around those features.
-- [DATA_FLOW.md](DATA_FLOW.md) walks through the runtime pipeline from keystroke to suggestion acceptance.
+```bash
+# Run the full test project
+powershell -ExecutionPolicy Bypass -File .\test.ps1
 
-## Learning system
+# Skip rebuild/restore
+powershell -ExecutionPolicy Bypass -File .\test.ps1 -NoBuild -NoRestore
+```
 
-Keystroke's adaptive learning system improves predictions based on your writing patterns. Several safeguards prevent the feedback loop from amplifying bad patterns:
+Avoid `dotnet test Keystroke.sln` in this repo — the reliable paths are `.\test.ps1`, invoking the test project directly, or `.\build.ps1` (which builds the app projects and then runs the test project explicitly).
 
-- **Quality-gated session buffer** — only high-confidence accepts (fast acceptance, no cycling, no immediate correction) influence real-time predictions
-- **Staleness suppression** — style and vocabulary profiles older than 7 days are suppressed until refreshed, preventing outdated patterns from fighting your current writing style
-- **Relative phrase thresholds** — vocabulary phrases must appear in at least 15% of samples (not a flat count), preventing early lock-in on small data sets
-- **Short-prefix suppression** — ambiguous openings (< 3 words) receive at most 1 few-shot example to preserve completion diversity
-- **Context-continuity filtering** — dismissed completions only become negative examples when you continued typing in the same app within 60 seconds, proving the dismissal was about quality
-- **Shared contamination filter** — a single centralized filter prevents prompt-leakage and known noise patterns from entering any learning pipeline
+## Contributing & issues
+
+Issues and merge requests live on [GitLab](https://gitlab.com/LearningEverythingFirstTIme/keystroke). Bug reports with a short repro and the active engine / OS build are the most useful; include anonymized logs from `%AppData%/Keystroke/logs` if relevant.
 
 ## License
 
-MIT
+MIT. The source is open and you can fork, modify, and redistribute under the MIT terms.
+
+Pro features (the learning stack, unlimited usage) are gated at runtime by an ECDSA-signed license key check in [LicenseService.cs](src/KeystrokeApp/Services/LicenseService.cs). The enforcement lives in the open — nothing is obfuscated — and a determined fork could bypass it. If you use Pro features for real work, buying a key at [keystroke-app.com](https://www.keystroke-app.com/#pricing) is what keeps the project alive. $20, once, no subscription.
