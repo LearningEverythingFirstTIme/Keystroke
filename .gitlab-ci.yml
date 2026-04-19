@@ -1,0 +1,56 @@
+# Minimal CI: build + test on push. Matches build.ps1 locally.
+#
+# Runner requirement: Windows with .NET 8 SDK installed. The app targets
+# net8.0-windows10.0.19041.0 and uses WPF, so Linux/macOS runners will not
+# work. Shared Windows runners are gated on GitLab.com; if they aren't
+# available on this tier, register a self-hosted runner with the tag below.
+
+stages:
+  - build
+  - test
+
+variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  # Keep NuGet cache inside the project dir so GitLab's cache key picks it up.
+  NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+
+build-and-test:
+  stage: build
+  tags:
+    - windows
+  cache:
+    key:
+      files:
+        - src/KeystrokeApp/KeystrokeApp.csproj
+        - src/KeystrokeHook/KeystrokeHook.csproj
+        - tests/KeystrokeApp.Tests/KeystrokeApp.Tests.csproj
+    paths:
+      - .nuget/packages/
+  script:
+    - powershell -ExecutionPolicy Bypass -File ./build.ps1
+  artifacts:
+    when: always
+    paths:
+      - artifacts/
+      - "**/*.binlog"
+    expire_in: 1 week
+
+webhook-tests:
+  stage: test
+  image: node:20-alpine
+  needs: []
+  cache:
+    key:
+      files:
+        - website/api/package.json
+    paths:
+      - website/api/node_modules/
+  script:
+    - cd website/api
+    - npm ci
+    - npm test
+  rules:
+    - changes:
+        - website/api/**/*
+        - .gitlab-ci.yml

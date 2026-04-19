@@ -31,21 +31,42 @@ const kvMock = {
     if (kvState.getShouldThrow) throw new Error('kv down');
     return kvState.delivered.get(key) ?? null;
   },
+  async set(key, value, options) {
+    // Fake atomicity: real redis enforces NX server-side; here the event-loop
+    // ordering of the two awaits in Promise.all([set, set]) gives us the same
+    // winner/loser behavior in practice.
+    if (options && options.NX && kvState.delivered.has(key)) return null;
+    kvState.delivered.set(key, value);
+    return 'OK';
+  },
+  async del(key) {
+    return kvState.delivered.delete(key) ? 1 : 0;
+  },
   async lPush(key, value) {
     if (key.endsWith('issued_log')) kvState.issuedLog.unshift(value);
     else if (key.endsWith('mint_only_log')) kvState.mintOnlyLog.unshift(value);
     return 1;
   },
+  async lTrim(key, start, stop) {
+    const list = key.endsWith('issued_log') ? kvState.issuedLog
+      : key.endsWith('mint_only_log') ? kvState.mintOnlyLog : null;
+    if (list && list.length > stop + 1) list.length = stop + 1;
+    return 'OK';
+  },
   multi() {
     const ops = [];
     const chain = {
-      set: (k, v) => { ops.push(['set', k, v]); return chain; },
+      set: (k, v, opts) => { ops.push(['set', k, v, opts]); return chain; },
       lPush: (k, v) => { ops.push(['lPush', k, v]); return chain; },
+      lTrim: (k, start, stop) => { ops.push(['lTrim', k, start, stop]); return chain; },
       exec: async () => {
-        for (const [op, k, v] of ops) {
-          if (op === 'set') kvState.delivered.set(k, v);
-          else if (op === 'lPush') await kvMock.lPush(k, v);
+        const results = [];
+        for (const op of ops) {
+          if (op[0] === 'set') results.push(await kvMock.set(op[1], op[2], op[3]));
+          else if (op[0] === 'lPush') results.push(await kvMock.lPush(op[1], op[2]));
+          else if (op[0] === 'lTrim') results.push(await kvMock.lTrim(op[1], op[2], op[3]));
         }
+        return results;
       },
     };
     return chain;
@@ -238,6 +259,19 @@ test('duplicate delivery — second request is a no-op', async () => {
   assert.equal(res2.body, 'already issued');
   assert.equal(resendState.sent.length, 1, 'no second email');
   assert.equal(kvState.issuedLog.length, 1, 'no second audit entry');
+});
+
+test('concurrent deliveries of the same order issue exactly one key', async () => {
+  const payload = makePayload({ orderId: 'order-race' });
+
+  const [, ] = await Promise.all([
+    handler(makeReq({ body: payload }), makeRes()),
+    handler(makeReq({ body: payload }), makeRes()),
+  ]);
+
+  assert.equal(resendState.sent.length, 1, 'exactly one email sent under concurrent retries');
+  assert.equal(kvState.delivered.size, 1, 'exactly one delivered record');
+  assert.equal(kvState.issuedLog.length, 1, 'exactly one audit entry');
 });
 
 test('stale webhook (old created_at) is rejected with 200', async () => {

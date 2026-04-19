@@ -4,7 +4,7 @@ const { createHmac, timingSafeEqual } = require('node:crypto');
 const { Resend } = require('resend');
 
 const { mintProKey } = require('./_lib/keygen');
-const { getDelivered, recordDelivered, recordMintOnly } = require('./_lib/storage');
+const { getDelivered, claimDelivered, releaseClaim, recordDelivered, recordMintOnly } = require('./_lib/storage');
 
 const FROM_ADDRESS = 'Keystroke <support@keystroke-app.com>';
 const SUBJECT = 'Your Keystroke Pro license key';
@@ -158,7 +158,7 @@ async function handler(req, res) {
 
   try {
     const existing = await getDelivered(orderId);
-    if (existing) {
+    if (existing && existing.status === 'done') {
       console.log('duplicate delivery (already issued)', { orderRef, resendId: existing.resendId });
       res.status(200).send('already issued');
       return;
@@ -170,11 +170,30 @@ async function handler(req, res) {
     return;
   }
 
+  let claimed;
+  try {
+    claimed = await claimDelivered(orderId);
+  } catch (err) {
+    console.error('kv claim failed', { orderRef, err: err?.message });
+    res.status(500).send('Storage unavailable');
+    return;
+  }
+  if (!claimed) {
+    // A concurrent handler won the claim. LS will retry; the next attempt
+    // will hit the 'already issued' fast-path once that handler finalizes.
+    console.log('concurrent delivery in progress', { orderRef });
+    res.status(200).send('in progress');
+    return;
+  }
+
   let licenseKey;
   try {
     licenseKey = mintProKey(privateKeyPem);
   } catch (err) {
     console.error('keygen failed', { orderRef, err: err?.message });
+    await releaseClaim(orderId).catch((relErr) => {
+      console.error('failed to release claim after keygen failure', { orderRef, err: relErr?.message });
+    });
     // 200 so LS stops retrying a deterministic config failure. Vercel error alert is the signal.
     res.status(200).send('keygen failed (not retrying)');
     return;
@@ -193,7 +212,10 @@ async function handler(req, res) {
       html,
     });
     if (result?.error) {
-      console.error('resend error', { orderRef, email, error: result.error });
+      console.error('resend error', { orderRef, email, err: String(result.error?.message || result.error) });
+      await releaseClaim(orderId).catch((relErr) => {
+        console.error('failed to release claim after resend error', { orderRef, err: relErr?.message });
+      });
       await recordMintOnly(orderId, { email, attemptedAt: Date.now(), error: String(result.error?.message || result.error) }).catch((logErr) => {
         console.error('failed to record mint-only audit entry', { orderRef, err: logErr?.message });
       });
@@ -203,6 +225,9 @@ async function handler(req, res) {
     resendId = result?.data?.id;
   } catch (err) {
     console.error('resend threw', { orderRef, email, err: err?.message });
+    await releaseClaim(orderId).catch((relErr) => {
+      console.error('failed to release claim after resend threw', { orderRef, err: relErr?.message });
+    });
     await recordMintOnly(orderId, { email, attemptedAt: Date.now(), error: String(err?.message || 'unknown') }).catch((logErr) => {
       console.error('failed to record mint-only audit entry', { orderRef, err: logErr?.message });
     });
@@ -211,10 +236,11 @@ async function handler(req, res) {
   }
 
   try {
-    await recordDelivered(orderId, { email, issuedAt: Date.now(), resendId: resendId ?? null });
+    await recordDelivered(orderId, { status: 'done', email, issuedAt: Date.now(), resendId: resendId ?? null });
   } catch (err) {
     // Email was sent successfully — losing the audit entry is bad but don't double-send on retry.
-    // We can't undo the send, so log loudly and return 200 so LS doesn't retry.
+    // The claim placeholder will expire after CLAIM_TTL_SECONDS, but by then LS has stopped
+    // retrying on our 200 below. We can't undo the send, so log loudly.
     console.error('failed to record delivered (email was sent)', { orderRef, resendId, err: err?.message });
   }
 
