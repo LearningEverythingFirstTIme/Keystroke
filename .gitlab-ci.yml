@@ -21,9 +21,11 @@ build-and-test:
     - windows
   cache:
     key:
+      # GitLab caps cache:key:files at 2. KeystrokeHook shares deps with the
+      # main app csproj, so skipping it from the key is fine — any NuGet
+      # churn will surface via one of these two.
       files:
         - src/KeystrokeApp/KeystrokeApp.csproj
-        - src/KeystrokeHook/KeystrokeHook.csproj
         - tests/KeystrokeApp.Tests/KeystrokeApp.Tests.csproj
     paths:
       - .nuget/packages/
