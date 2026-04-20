@@ -142,10 +142,14 @@ async function handler(req, res) {
   const createdAt = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
   if (Number.isFinite(createdAt)) {
     const ageMs = Date.now() - createdAt;
-    if (ageMs > REPLAY_MAX_AGE_MS || ageMs < -REPLAY_FUTURE_SLOP_MS) {
-      console.warn('rejecting stale or future webhook', { orderRef, ageMs });
+    if (ageMs < -REPLAY_FUTURE_SLOP_MS) {
+      console.warn('rejecting future-dated webhook', { orderRef, ageMs });
       res.status(200).send('stale');
       return;
+    }
+
+    if (ageMs > REPLAY_MAX_AGE_MS) {
+      console.warn('processing delayed webhook', { orderRef, ageMs });
     }
   }
 

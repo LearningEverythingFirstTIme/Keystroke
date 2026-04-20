@@ -274,14 +274,15 @@ test('concurrent deliveries of the same order issue exactly one key', async () =
   assert.equal(kvState.issuedLog.length, 1, 'exactly one audit entry');
 });
 
-test('stale webhook (old created_at) is rejected with 200', async () => {
+test('delayed webhook (old created_at) still fulfills the order', async () => {
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-  const req = makeReq({ body: makePayload({ createdAt: tenMinAgo }) });
+  const req = makeReq({ body: makePayload({ orderId: 'order-delayed', createdAt: tenMinAgo }) });
   const res = makeRes();
   await handler(req, res);
   assert.equal(res.statusCode, 200);
-  assert.equal(res.body, 'stale');
-  assert.equal(resendState.sent.length, 0);
+  assert.equal(res.body, 'ok');
+  assert.equal(resendState.sent.length, 1);
+  assert.equal(kvState.issuedLog.length, 1);
 });
 
 test('future-dated webhook (beyond slop) is rejected', async () => {
