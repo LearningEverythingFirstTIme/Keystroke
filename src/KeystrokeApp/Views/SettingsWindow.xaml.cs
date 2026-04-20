@@ -2111,8 +2111,8 @@ public partial class SettingsWindow : Window
         {
             LengthCombo.SelectedIndex = 0; // Brief
             MinCharsSlider.Value = 5;
-            DebounceSlider.Value = 500;
-            FastDebounceSlider.Value = 200;
+            DebounceSlider.Value = 700;
+            FastDebounceSlider.Value = 500;
             OcrEnabledCheck.IsChecked = false;
             RollingContextCheck.IsChecked = false;
             StyleProfileCheck.IsChecked = false;
@@ -2133,8 +2133,8 @@ public partial class SettingsWindow : Window
         {
             LengthCombo.SelectedIndex = 2; // Extended
             MinCharsSlider.Value = 3;
-            DebounceSlider.Value = 300;
-            FastDebounceSlider.Value = 100;
+            DebounceSlider.Value = 500;
+            FastDebounceSlider.Value = 400;
             OcrEnabledCheck.IsChecked = true;
             RollingContextCheck.IsChecked = true;
             StyleProfileCheck.IsChecked = false;
@@ -2153,8 +2153,8 @@ public partial class SettingsWindow : Window
         {
             LengthCombo.SelectedIndex = 3; // Unlimited
             MinCharsSlider.Value = 2;
-            DebounceSlider.Value = 150;
-            FastDebounceSlider.Value = 80;
+            DebounceSlider.Value = 300;
+            FastDebounceSlider.Value = 200;
             OcrEnabledCheck.IsChecked = true;
             RollingContextCheck.IsChecked = true;
             StyleProfileCheck.IsChecked = false;

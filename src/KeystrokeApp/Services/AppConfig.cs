@@ -107,8 +107,8 @@ public class AppConfig
     public string OpenRouterModel { get; set; } = "google/gemini-flash-2.0";
 
     // Behavior settings
-    public int DebounceMs { get; set; } = 300;
-    public int FastDebounceMs { get; set; } = 100;
+    public int DebounceMs { get; set; } = 500;
+    public int FastDebounceMs { get; set; } = 400;
     public int MinBufferLength { get; set; } = 3;
     public double Temperature { get; set; } = 0.3;
     public int MaxOutputTokens { get; set; } = 300;

@@ -420,16 +420,16 @@
 
                                 <Grid Margin="0,0,0,4">
                                     <TextBlock Text="Timing after punctuation" Foreground="{StaticResource TextSecondary}"/>
-                                    <TextBlock x:Name="DebounceLabel" Text="300ms" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="DebounceLabel" Text="500ms" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
                                 </Grid>
-                                <Slider x:Name="DebounceSlider" Minimum="100" Maximum="1500" Value="300" ValueChanged="DebounceSlider_Changed"/>
+                                <Slider x:Name="DebounceSlider" Minimum="100" Maximum="1500" Value="500" ValueChanged="DebounceSlider_Changed"/>
                                 <TextBlock Text="How long Keystroke waits after a clear pause like punctuation or a sentence break." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
 
                                 <Grid Margin="0,16,0,4">
                                     <TextBlock Text="Timing while typing" Foreground="{StaticResource TextSecondary}"/>
-                                    <TextBlock x:Name="FastDebounceLabel" Text="100ms" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="FastDebounceLabel" Text="400ms" HorizontalAlignment="Right" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
                                 </Grid>
-                                <Slider x:Name="FastDebounceSlider" Minimum="50" Maximum="500" Value="100" ValueChanged="FastDebounceSlider_Changed"/>
+                                <Slider x:Name="FastDebounceSlider" Minimum="50" Maximum="500" Value="400" ValueChanged="FastDebounceSlider_Changed"/>
                                 <TextBlock Text="How quickly Keystroke reacts when you briefly pause in the middle of a thought." Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
