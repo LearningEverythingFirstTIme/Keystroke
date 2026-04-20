@@ -2902,6 +2902,38 @@ public partial class SettingsWindow : Window
         PromptBox.Text = AppConfig.DefaultSystemPrompt;
     }
 
+    private void OpenLogsFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var logDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Keystroke");
+        var engine = _config.EffectivePredictionEngine?.ToLowerInvariant() ?? "gemini";
+        var logFile = Path.Combine(logDir, $"{engine}.log");
+
+        try
+        {
+            if (File.Exists(logFile))
+            {
+                // Open Explorer with the active engine's log pre-selected.
+                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{logFile}\"");
+                OpenLogsStatus.Text = $"Opened {engine}.log in File Explorer. Right-click it and choose Send to → Mail recipient, or attach it to an email.";
+            }
+            else if (Directory.Exists(logDir))
+            {
+                System.Diagnostics.Process.Start("explorer.exe", logDir);
+                OpenLogsStatus.Text = $"No {engine}.log yet — folder opened. Try typing a few lines first so the log gets created.";
+            }
+            else
+            {
+                OpenLogsStatus.Text = "Log folder doesn't exist yet. Type in any app, then try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            OpenLogsStatus.Text = $"Couldn't open Explorer: {ex.Message}";
+        }
+    }
+
     private void Done_Click(object sender, RoutedEventArgs e)
     {
         Close();

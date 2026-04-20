@@ -48,7 +48,10 @@ public sealed record TextInjectionResult(
 
 public interface ITextInjector
 {
-    Task<TextInjectionResult> InjectAsync(string text, CancellationToken cancellationToken = default);
+    Task<TextInjectionResult> InjectAsync(
+        string text,
+        bool preferSendInput = false,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class ClipboardTextInjector : ITextInjector
@@ -71,7 +74,10 @@ public sealed class ClipboardTextInjector : ITextInjector
         _trace = trace;
     }
 
-    public async Task<TextInjectionResult> InjectAsync(string text, CancellationToken cancellationToken = default)
+    public async Task<TextInjectionResult> InjectAsync(
+        string text,
+        bool preferSendInput = false,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -89,6 +95,14 @@ public sealed class ClipboardTextInjector : ITextInjector
 
         try
         {
+            if (preferSendInput)
+            {
+                _trace.Trace("injection", "sendinput_preferred",
+                    "Using SendInput directly because the target app is clipboard-unsafe (e.g. Outlook).",
+                    new Dictionary<string, string> { ["length"] = text.Length.ToString() });
+                return await InjectViaSendInputAsync(text, clipboardCaptured: false, cancellationToken);
+            }
+
             return await InjectCoreAsync(text, cancellationToken);
         }
         catch (OperationCanceledException)
@@ -175,30 +189,49 @@ public sealed class ClipboardTextInjector : ITextInjector
             {
                 ["error"] = ex.Message
             });
-
-            // SendInput produces LLKHF_INJECTED keystrokes which are (correctly)
-            // filtered by InputListenerService. The characters still reach the
-            // target app via CallNextHookEx, but Keystroke's typing buffer never
-            // sees them. Inject character-by-character with a small delay to
-            // avoid overwhelming slow target apps (e.g. Electron-based editors).
-            await Task.Delay(PasteDelayMs, cancellationToken);
-            foreach (var ch in text)
-            {
-                _inputSimulator.Keyboard.TextEntry(ch);
-                await Task.Delay(SendInputCharDelayMs, cancellationToken);
-            }
-
-            _trace.Trace("injection", "sendinput_fallback",
-                "Injected accepted text with SendInput fallback. " +
-                "Note: these keystrokes are filtered by the input hook (LLKHF_INJECTED) " +
-                "and bypass typing buffer tracking.",
-                new Dictionary<string, string>
-                {
-                    ["length"] = text.Length.ToString()
-                });
-
-            return new TextInjectionResult(TextInjectionOutcome.FallbackInjected, TextInjectionMethod.SendInputFallback, clipboardCaptured, false, false, false, ex.Message);
+            var fallback = await InjectViaSendInputAsync(text, clipboardCaptured, cancellationToken);
+            return fallback with { FailureReason = ex.Message };
         }
+    }
+
+    /// <summary>
+    /// Types the completion character-by-character via SendInput. Used both as the
+    /// fallback after a clipboard-path exception AND as the primary path for apps
+    /// flagged by <see cref="AppCategory.ShouldAvoidClipboardInjection"/>.
+    ///
+    /// SendInput produces LLKHF_INJECTED keystrokes which are (correctly) filtered
+    /// by InputListenerService. The characters still reach the target app via
+    /// CallNextHookEx, but Keystroke's typing buffer never sees them. Small
+    /// per-char delay avoids overwhelming slow targets (Electron editors, etc.).
+    /// </summary>
+    private async Task<TextInjectionResult> InjectViaSendInputAsync(
+        string text,
+        bool clipboardCaptured,
+        CancellationToken cancellationToken)
+    {
+        await Task.Delay(PasteDelayMs, cancellationToken);
+        foreach (var ch in text)
+        {
+            _inputSimulator.Keyboard.TextEntry(ch);
+            await Task.Delay(SendInputCharDelayMs, cancellationToken);
+        }
+
+        _trace.Trace("injection", "sendinput_injected",
+            "Injected accepted text with SendInput. " +
+            "Note: these keystrokes are filtered by the input hook (LLKHF_INJECTED) " +
+            "and bypass typing buffer tracking.",
+            new Dictionary<string, string>
+            {
+                ["length"] = text.Length.ToString()
+            });
+
+        return new TextInjectionResult(
+            TextInjectionOutcome.FallbackInjected,
+            TextInjectionMethod.SendInputFallback,
+            clipboardCaptured,
+            ClipboardRestoreAttempted: false,
+            ClipboardRestoreSucceeded: false,
+            ClipboardChangedExternally: false);
     }
 
     private async Task<(bool RestoreAttempted, bool RestoreSucceeded, bool ClipboardChangedExternally)> RestoreClipboardAsync(

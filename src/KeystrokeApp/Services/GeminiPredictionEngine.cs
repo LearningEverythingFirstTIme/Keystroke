@@ -28,6 +28,55 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
     public void Dispose() => _httpClient.Dispose();
 
+    /// <summary>
+    /// Gemini 3.x preview models reserve per-turn overhead even with thinkingBudget=0.
+    /// A 25-token cap (base-class default for <4-word prefixes) can be fully consumed
+    /// by that overhead, producing empty output with finishReason=MAX_TOKENS. Floor
+    /// Gemini specifically at 60 tokens so visible text always has headroom.
+    /// </summary>
+    protected override int GetAdaptiveMaxTokens(string prefix)
+    {
+        var wordCount = prefix.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        if (wordCount < 8) return Math.Min(60, MaxOutputTokens);
+        return MaxOutputTokens;
+    }
+
+    /// <summary>
+    /// Pulls the first visible text from a Gemini candidate, skipping any parts
+    /// flagged as `thought: true`. Logs finishReason / blockReason when present so
+    /// empty-stream incidents are diagnosable from gemini.log.
+    /// </summary>
+    private string? ExtractStreamText(string dataJson)
+    {
+        var chunk = JsonSerializer.Deserialize<GeminiResponse>(dataJson);
+        return ExtractVisibleText(chunk);
+    }
+
+    /// <summary>
+    /// Returns the first visible-text part from a Gemini response, skipping parts
+    /// flagged `thought: true`. Logs finishReason / blockReason when non-STOP /
+    /// present so empty-output incidents are diagnosable from gemini.log.
+    /// </summary>
+    private string? ExtractVisibleText(GeminiResponse? response)
+    {
+        if (response?.PromptFeedback?.BlockReason is { Length: > 0 } br)
+            Log($"blockReason={br}");
+
+        var cand = response?.Candidates is { Length: > 0 } cs ? cs[0] : null;
+        if (cand?.FinishReason is { Length: > 0 } fr && fr != "STOP")
+            Log($"finishReason={fr}");
+
+        var parts = cand?.Content?.Parts;
+        if (parts == null) return null;
+
+        foreach (var p in parts)
+        {
+            if (p == null || p.Thought) continue;
+            if (!string.IsNullOrEmpty(p.Text)) return p.Text;
+        }
+        return null;
+    }
+
     public async Task<string?> PredictAsync(ContextSnapshot context, CancellationToken ct = default)
     {
         var prefix = context.TypedText;
@@ -51,7 +100,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                     maxOutputTokens = adaptiveTokens,
                     temperature     = dynamicTemp,
                     topP            = 0.9,
-                    thinkingConfig  = new { thinkingBudget = 0 }
+                    thinkingConfig  = new { thinkingBudget = 0, includeThoughts = false }
                 }
             };
 
@@ -78,9 +127,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
 
             var respBody   = await response.Content.ReadAsStringAsync(ct);
             var result     = JsonSerializer.Deserialize<GeminiResponse>(respBody);
-            var completion = result?.Candidates is { Length: > 0 } cands
-                && cands[0]?.Content?.Parts is { Length: > 0 } parts
-                ? parts[0]?.Text?.Trim() : null;
+            var completion = ExtractVisibleText(result)?.Trim();
             Log($"Completion: {completion ?? "(null)"}");
 
             if (string.IsNullOrWhiteSpace(completion)) return null;
@@ -117,7 +164,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                     maxOutputTokens = adaptiveTokens,
                     temperature     = dynamicTemp,
                     topP            = 0.9,
-                    thinkingConfig  = new { thinkingBudget = 0 }
+                    thinkingConfig  = new { thinkingBudget = 0, includeThoughts = false }
                 }
             };
 
@@ -143,11 +190,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 return null;
             }
 
-            return await ParseSseStreamAsync(response, prefix, dataJson =>
-            {
-                var chunk = JsonSerializer.Deserialize<GeminiResponse>(dataJson);
-                return chunk?.Candidates?[0]?.Content?.Parts?[0]?.Text;
-            }, onChunk, ct);
+            return await ParseSseStreamAsync(response, prefix, ExtractStreamText, onChunk, ct);
         }
         catch (OperationCanceledException) { return null; }
         catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
@@ -185,7 +228,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                         maxOutputTokens = adaptiveTokens,
                         temperature     = altTemp,
                         topP            = 0.95,
-                        thinkingConfig  = new { thinkingBudget = 0 }
+                        thinkingConfig  = new { thinkingBudget = 0, includeThoughts = false }
                     }
                 };
                 var json     = JsonSerializer.Serialize(body);
@@ -196,9 +239,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 if (!response.IsSuccessStatusCode) return null;
                 var respBody = await response.Content.ReadAsStringAsync(ct);
                 var result   = JsonSerializer.Deserialize<GeminiResponse>(respBody);
-                return result?.Candidates is { Length: > 0 }
-                    ? result.Candidates[0]?.Content?.Parts?[0]?.Text?.Trim()
-                    : null;
+                return ExtractVisibleText(result)?.Trim();
             });
 
             var completions = await Task.WhenAll(tasks);
@@ -252,7 +293,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             {
                 systemInstruction = new { parts = new object[] { new { text = systemPrompt } } },
                 contents = new object[] { new { role = "user", parts = new[] { new { text = userPrompt } } } },
-                generationConfig = new { maxOutputTokens = maxTokens, temperature = 0.4, topP = 0.9, thinkingConfig = new { thinkingBudget = 0 } }
+                generationConfig = new { maxOutputTokens = maxTokens, temperature = 0.4, topP = 0.9, thinkingConfig = new { thinkingBudget = 0, includeThoughts = false } }
             };
             var json = JsonSerializer.Serialize(body);
             var response = await _httpClient.PostAsync(_endpoint,
@@ -265,14 +306,27 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             }
             var respBody = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<GeminiResponse>(respBody);
-            return result?.Candidates?[0]?.Content?.Parts?[0]?.Text?.Trim();
+            return ExtractVisibleText(result)?.Trim();
         }
         catch (OperationCanceledException) { return null; }
         catch (Exception ex) { Log($"GenerateText error: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
-    private class GeminiResponse  { [JsonPropertyName("candidates")] public GeminiCandidate[]? Candidates { get; set; } }
-    private class GeminiCandidate { [JsonPropertyName("content")]    public GeminiContent?     Content    { get; set; } }
-    private class GeminiContent   { [JsonPropertyName("parts")]      public GeminiPart[]?      Parts      { get; set; } }
-    private class GeminiPart      { [JsonPropertyName("text")]       public string?             Text       { get; set; } }
+    private class GeminiResponse
+    {
+        [JsonPropertyName("candidates")]     public GeminiCandidate[]? Candidates     { get; set; }
+        [JsonPropertyName("promptFeedback")] public GeminiPromptFeedback? PromptFeedback { get; set; }
+    }
+    private class GeminiCandidate
+    {
+        [JsonPropertyName("content")]      public GeminiContent? Content      { get; set; }
+        [JsonPropertyName("finishReason")] public string?        FinishReason { get; set; }
+    }
+    private class GeminiContent        { [JsonPropertyName("parts")]       public GeminiPart[]? Parts { get; set; } }
+    private class GeminiPart
+    {
+        [JsonPropertyName("text")]    public string? Text    { get; set; }
+        [JsonPropertyName("thought")] public bool    Thought { get; set; }
+    }
+    private class GeminiPromptFeedback { [JsonPropertyName("blockReason")] public string? BlockReason { get; set; } }
 }

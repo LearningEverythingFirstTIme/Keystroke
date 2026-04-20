@@ -1273,6 +1273,16 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- ── Troubleshooting ── -->
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,0,18">
+                            <StackPanel>
+                                <TextBlock Text="Troubleshooting" Foreground="{StaticResource TextPrimary}" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="Running into blank or missing suggestions? Open the diagnostic log for your active engine and attach it to an email so support can diagnose the issue." Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,14" TextWrapping="Wrap"/>
+                                <Button x:Name="OpenLogsButton" Content="Show my diagnostic log" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="OpenLogsFolder_Click"/>
+                                <TextBlock x:Name="OpenLogsStatus" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- ── Local Models (Experimental) ── -->
                         <Border Style="{StaticResource ExperimentalCardStyle}">
                             <StackPanel>

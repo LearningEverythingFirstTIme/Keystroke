@@ -192,9 +192,14 @@ public partial class App
                     if (_typingBuffer.CurrentText != buffer)
                         return;
 
+                    if (completion == null)
+                    {
+                        _suggestionPanel?.HideSuggestion();
+                        return;
+                    }
+
                     _suggestionPanel?.OnStreamingComplete();
-                    if (completion != null)
-                        RegisterVisibleSuggestion(requestId, context, buffer, completion);
+                    RegisterVisibleSuggestion(requestId, context, buffer, completion);
                 });
 
                 SetPredictionState("ShowingSuggestion", requestId, new Dictionary<string, string>

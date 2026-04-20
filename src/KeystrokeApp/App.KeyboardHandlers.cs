@@ -253,7 +253,14 @@ public partial class App
     {
         try
         {
-            var result = await _textInjector.InjectAsync(text);
+            // Skip clipboard injection for apps where the target reads the clipboard
+            // asynchronously after Ctrl+V (Outlook is the known offender). On a lost
+            // race the user's prior clipboard content gets pasted — a real-world leak
+            // occurred with a freshly-copied API key.
+            var (activeProcess, _) = AppContextService.GetActiveWindow();
+            var preferSendInput = AppCategory.ShouldAvoidClipboardInjection(activeProcess);
+
+            var result = await _textInjector.InjectAsync(text, preferSendInput);
             var data = new Dictionary<string, string>
             {
                 ["source"] = source,
@@ -273,7 +280,7 @@ public partial class App
                 $"Accepted text injection {(result.DeliveredToTarget ? "completed" : "failed")} via {result.Method}.",
                 data);
 
-            if (result.Method == TextInjectionMethod.SendInputFallback)
+            if (result.Method == TextInjectionMethod.SendInputFallback && !preferSendInput)
             {
                 LogToDebug("WARNING: Clipboard injection fell back to SendInput. " +
                            "Injected keystrokes bypass InputListenerService (LLKHF_INJECTED filtered). " +

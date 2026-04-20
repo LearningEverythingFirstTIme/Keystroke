@@ -18,6 +18,24 @@ public static class AppCategory
     }
 
     /// <summary>
+    /// Apps where clipboard-based paste injection is unreliable. The target reads
+    /// the clipboard asynchronously after Ctrl+V, racing our 100 ms restore — a
+    /// lost race pastes the user's prior clipboard content instead of the
+    /// completion, which can leak secrets (e.g. API keys). For these apps we skip
+    /// the clipboard entirely and use SendInput character-by-character.
+    /// </summary>
+    public static bool ShouldAvoidClipboardInjection(string? processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return false;
+        var name = processName.ToLowerInvariant();
+        // Office apps share a deferred-clipboard-read architecture that races our
+        // 100 ms restore. "outlook"/"olk" = classic/new Outlook; "winword" = Word;
+        // "excel" = Excel; "powerpnt" = PowerPoint; "onenote" = OneNote.
+        return name is "outlook" or "olk"
+            or "winword" or "excel" or "powerpnt" or "onenote";
+    }
+
+    /// <summary>
     /// Classify a process by name into an app category.
     /// </summary>
     public static Category Classify(string processName)
