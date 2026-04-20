@@ -13,6 +13,7 @@ internal static class Logger
     private static readonly string _path = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "Keystroke", "debug.log");
+    private static volatile bool _directoryEnsured;
 
     public static string LogPath => _path;
 
@@ -27,6 +28,16 @@ internal static class Logger
         {
             lock (_lock)
             {
+                // Create %APPDATA%\Keystroke on first write — it may not exist
+                // on a clean install if the logger is the first thing to touch it.
+                if (!_directoryEnsured)
+                {
+                    var dir = Path.GetDirectoryName(_path);
+                    if (!string.IsNullOrEmpty(dir))
+                        Directory.CreateDirectory(dir);
+                    _directoryEnsured = true;
+                }
+
                 File.AppendAllText(
                     _path,
                     $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}\n");

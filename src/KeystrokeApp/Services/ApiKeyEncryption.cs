@@ -51,12 +51,28 @@ public static class ApiKeyEncryption
             var plaintextBytes = ProtectedData.Unprotect(cipherBytes, null, DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(plaintextBytes);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Decryption failed (e.g., different user account, corrupted data, malformed base64).
-            // Return null so the user is prompted to re-enter the key.
+            // Return null so the user is prompted to re-enter the key, but log loudly —
+            // the old behavior silently dropped Pro users to Free with no diagnostic trail.
+            Logger.Warn($"DPAPI decrypt failed ({ex.GetType().Name}: {ex.Message}). " +
+                        "Stored key cannot be read under this Windows user profile.");
             return null;
         }
+    }
+
+    /// <summary>
+    /// True when the stored value looked encrypted but could not be decrypted under
+    /// the current Windows user. Callers use this to distinguish "no key saved"
+    /// (stored==null, decryptFailed==false) from "key saved but unreadable here"
+    /// (stored!=null, decryptFailed==true) so the UI can prompt for re-entry.
+    /// </summary>
+    public static bool WasDecryptionAttemptRejected(string? stored, string? decrypted)
+    {
+        if (string.IsNullOrEmpty(stored)) return false;
+        if (!stored.StartsWith(EncryptedPrefix)) return false;
+        return decrypted == null;
     }
 
     /// <summary>

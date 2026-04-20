@@ -60,20 +60,47 @@ public sealed class ClipboardTextInjector : ITextInjector
 {
     private readonly InputSimulator _inputSimulator;
     private readonly ReliabilityTraceService _trace;
+    private readonly Func<AppConfig>? _configProvider;
     private readonly SemaphoreSlim _injectGate = new(1, 1);
 
-    private const int PasteDelayMs = 30;
-    private const int RestoreDelayMs = 100;
+    // Defaults are a safer floor than the originals (30/100ms) — those were tuned on
+    // a fast dev machine and raced on slower/contended hardware, letting the target
+    // app read the restored clipboard instead of the completion. Override per-install
+    // via AppConfig.ClipboardPasteDelayMs / ClipboardRestoreDelayMs.
+    private const int DefaultPasteDelayMs = 50;
+    private const int DefaultRestoreDelayMs = 250;
     private const int RestoreAttempts = 3;
     private const int SendInputCharDelayMs = 5;
 
     [DllImport("user32.dll")]
     private static extern uint GetClipboardSequenceNumber();
 
-    public ClipboardTextInjector(InputSimulator inputSimulator, ReliabilityTraceService trace)
+    public ClipboardTextInjector(
+        InputSimulator inputSimulator,
+        ReliabilityTraceService trace,
+        Func<AppConfig>? configProvider = null)
     {
         _inputSimulator = inputSimulator;
         _trace = trace;
+        _configProvider = configProvider;
+    }
+
+    private int PasteDelayMs
+    {
+        get
+        {
+            var configured = _configProvider?.Invoke().ClipboardPasteDelayMs ?? 0;
+            return configured > 0 ? configured : DefaultPasteDelayMs;
+        }
+    }
+
+    private int RestoreDelayMs
+    {
+        get
+        {
+            var configured = _configProvider?.Invoke().ClipboardRestoreDelayMs ?? 0;
+            return configured > 0 ? configured : DefaultRestoreDelayMs;
+        }
     }
 
     public async Task<TextInjectionResult> InjectAsync(

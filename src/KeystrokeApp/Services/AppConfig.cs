@@ -155,6 +155,13 @@ public class AppConfig
     public List<string> BlockedProcesses { get; set; } = [];
     public List<string> AllowedProcesses { get; set; } = [];
 
+    // Clipboard injection timings. The defaults are conservative so the paste path
+    // works on slower/contended machines; tuning them down makes injection feel
+    // snappier but risks the target app reading the restored clipboard instead of
+    // the completion. Values <= 0 fall back to the defaults.
+    public int ClipboardPasteDelayMs { get; set; } = 50;
+    public int ClipboardRestoreDelayMs { get; set; } = 250;
+
     // User-customizable system prompt (empty = use default)
     public string? CustomSystemPrompt { get; set; }
 

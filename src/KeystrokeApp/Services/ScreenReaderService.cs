@@ -70,6 +70,13 @@ public class ScreenReaderService : IDisposable
     public string? CachedText => _cachedText;
 
     /// <summary>
+    /// True when the Windows OCR engine initialized successfully for the user's
+    /// languages. False means the service will silently no-op on every read —
+    /// callers should surface this to the user rather than pretending OCR is on.
+    /// </summary>
+    public bool IsAvailable => _ocrEngine != null;
+
+    /// <summary>
     /// Read and OCR the active window. Call this from a background thread.
     /// Results are stored in CachedText for the prediction engine to read.
     /// </summary>
@@ -84,6 +91,11 @@ public class ScreenReaderService : IDisposable
 
         try
         {
+            // Snapshot which window this read is for. If the foreground changes
+            // mid-read, we must discard the result so window A's text doesn't
+            // get stored under window B's key.
+            var expectedWindowKey = _cachedForWindow;
+
             var hwnd = GetForegroundWindow();
             if (hwnd == IntPtr.Zero) return;
 
@@ -127,6 +139,14 @@ public class ScreenReaderService : IDisposable
             var result = await _ocrEngine.RecognizeAsync(softwareBitmap);
             var text = result.Text?.Trim();
 
+            // Abort the commit if the foreground window changed while we were reading —
+            // otherwise we'd store this window's text under the next window's key.
+            if (_cachedForWindow != expectedWindowKey)
+            {
+                Log("Window changed mid-read, discarding OCR result");
+                return;
+            }
+
             if (!string.IsNullOrEmpty(text))
             {
                 // Strip Keystroke's own UI text that the OCR picks up from the overlay
@@ -161,6 +181,9 @@ public class ScreenReaderService : IDisposable
 
         if (windowKey != _cachedForWindow)
         {
+            // Clear the previous window's text immediately so that any consumer reading
+            // CachedText between now and the next successful OCR can't leak prior content.
+            _cachedText = null;
             _cachedForWindow = windowKey;
             _readCount = 0;
             Log($"Window changed → {processName} \"{windowTitle}\"");

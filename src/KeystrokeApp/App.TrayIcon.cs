@@ -515,12 +515,22 @@ public partial class App
 
     private Icon CreateKeyboardIcon(bool enabled = true)
     {
-        using var bitmap = new Bitmap(32, 32);
+        // Scale the notification-area icon to the system DPI. A fixed 32×32 bitmap
+        // looks undersized and blurry at 125/150/200% scaling — Windows upscales it
+        // with bilinear filtering instead of snapping to a higher-res asset. Drawing
+        // at (dpi/96)·32 and applying the same scale transform keeps all the logical
+        // coordinates below unchanged.
+        double scale = Math.Max(1.0, SystemDiagnostics.SystemDpi > 0 ? SystemDiagnostics.SystemDpi / 96.0 : 1.0);
+        int size = (int)Math.Round(32 * scale);
+        using var bitmap = new Bitmap(size, size);
         using var g = Graphics.FromImage(bitmap);
 
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
         g.Clear(System.Drawing.Color.Transparent);
+
+        // After this the drawing coordinates below are interpreted in a 32-unit grid.
+        g.ScaleTransform((float)scale, (float)scale);
 
         // Keyboard body — rounded rectangle
         var bodyColor = System.Drawing.Color.FromArgb(200, 210, 225);

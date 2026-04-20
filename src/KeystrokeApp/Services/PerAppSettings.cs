@@ -44,14 +44,25 @@ public static class PerAppSettings
     public static bool IsEnabled(AppConfig config, string? processName)
     {
         var normalizedProcess = NormalizeProcessName(processName);
-        if (string.IsNullOrWhiteSpace(normalizedProcess))
-            return true;
-
+        var mode = NormalizeMode(config.AppFilteringMode);
         var blocked = NormalizeProcessList(config.BlockedProcesses);
+
+        if (string.IsNullOrWhiteSpace(normalizedProcess))
+        {
+            // Unknown window — foreground lookup failed (protected process, elevated
+            // target, UWP sandbox, process exited mid-check, etc.). Fail safe whenever
+            // the user has expressed any app-gating intent: an allow-list mode, or an
+            // explicit block list. In the plain default with no guards, stay permissive
+            // so ordinary but hard-to-inspect windows still get predictions.
+            if (mode == AllowListedOnly) return false;
+            if (blocked.Count > 0) return false;
+            return true;
+        }
+
         if (blocked.Contains(normalizedProcess, StringComparer.OrdinalIgnoreCase))
             return false;
 
-        return NormalizeMode(config.AppFilteringMode) switch
+        return mode switch
         {
             AllowListedOnly => NormalizeProcessList(config.AllowedProcesses)
                 .Contains(normalizedProcess, StringComparer.OrdinalIgnoreCase),
@@ -104,13 +115,22 @@ public static class PerAppSettings
     public static string GetAvailabilityReason(AppConfig config, string? processName)
     {
         var normalized = NormalizeProcessName(processName);
-        if (string.IsNullOrWhiteSpace(normalized))
-            return "No active app detected.";
+        var mode = NormalizeMode(config.AppFilteringMode);
+        var blocked = NormalizeProcessList(config.BlockedProcesses);
 
-        if (NormalizeProcessList(config.BlockedProcesses).Contains(normalized, StringComparer.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            if (mode == AllowListedOnly)
+                return "Blocked: active app could not be identified (allow-list mode).";
+            if (blocked.Count > 0)
+                return "Blocked: active app could not be identified.";
+            return "No active app detected.";
+        }
+
+        if (blocked.Contains(normalized, StringComparer.OrdinalIgnoreCase))
             return "Blocked explicitly.";
 
-        return NormalizeMode(config.AppFilteringMode) switch
+        return mode switch
         {
             AllowListedOnly when !NormalizeProcessList(config.AllowedProcesses).Contains(normalized, StringComparer.OrdinalIgnoreCase)
                 => "Not on the allow list.",

@@ -92,6 +92,44 @@ public class PerAppSettingsTests
     }
 
     [Fact]
+    public void IsEnabled_UnknownProcessStaysAllowedWhenNoGuardsConfigured()
+    {
+        var config = new AppConfig
+        {
+            AppFilteringMode = PerAppSettings.AllowAllExceptBlocked,
+            BlockedProcesses = []
+        };
+
+        Assert.True(PerAppSettings.IsEnabled(config, ""));
+        Assert.True(PerAppSettings.IsEnabled(config, null));
+    }
+
+    [Fact]
+    public void IsEnabled_UnknownProcessIsBlockedWhenAllowListModeActive()
+    {
+        var config = new AppConfig
+        {
+            AppFilteringMode = PerAppSettings.AllowListedOnly,
+            AllowedProcesses = ["discord"]
+        };
+
+        Assert.False(PerAppSettings.IsEnabled(config, ""));
+        Assert.False(PerAppSettings.IsEnabled(config, null));
+    }
+
+    [Fact]
+    public void IsEnabled_UnknownProcessIsBlockedWhenBlockListNonEmpty()
+    {
+        var config = new AppConfig
+        {
+            AppFilteringMode = PerAppSettings.AllowAllExceptBlocked,
+            BlockedProcesses = ["discord"]
+        };
+
+        Assert.False(PerAppSettings.IsEnabled(config, ""));
+    }
+
+    [Fact]
     public void GetAvailabilityReason_ExplainsWhyProcessIsSuppressed()
     {
         var config = new AppConfig

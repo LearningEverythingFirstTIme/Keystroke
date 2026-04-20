@@ -21,6 +21,10 @@ public static class AppContextService
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
+    // Hot path: called on every keystroke. Track the last logged failure reason so
+    // we surface a single WARN per distinct failure mode instead of flooding the log.
+    private static string _lastLoggedFailureReason = "";
+
     /// <summary>
     /// Get info about the currently focused window.
     /// Returns (processName, windowTitle). Both may be empty on failure.
@@ -31,7 +35,10 @@ public static class AppContextService
         {
             var hwnd = GetForegroundWindow();
             if (hwnd == IntPtr.Zero)
+            {
+                LogFailureOnce("foreground hwnd was zero");
                 return ("", "");
+            }
 
             // Window title
             var sb = new StringBuilder(512);
@@ -40,16 +47,28 @@ public static class AppContextService
 
             // Process name
             GetWindowThreadProcessId(hwnd, out uint pid);
-            if (pid == 0) return ("", title);
+            if (pid == 0)
+            {
+                LogFailureOnce("GetWindowThreadProcessId returned pid=0");
+                return ("", title);
+            }
             using var process = Process.GetProcessById((int)pid);
             var processName = process.ProcessName;
 
             return (processName, title);
         }
-        catch
+        catch (Exception ex)
         {
+            LogFailureOnce($"{ex.GetType().Name}: {ex.Message}");
             return ("", "");
         }
+    }
+
+    private static void LogFailureOnce(string reason)
+    {
+        if (reason == _lastLoggedFailureReason) return;
+        _lastLoggedFailureReason = reason;
+        Logger.Warn($"AppContextService.GetActiveWindow failed: {reason}");
     }
 
     public static List<VisibleAppInfo> GetVisibleApps(string? excludedProcessName = null)

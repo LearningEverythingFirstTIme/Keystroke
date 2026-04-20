@@ -40,6 +40,7 @@ public partial class App : Application
     //                   _predictionState (written on Background, read on UI for debug)
     //   Lock-protected: _predictionCts, _lastPredictionPrefix (via _predictionCtsLock)
     private AppConfig                _config           = new();
+    private List<string>             _undecryptableSecrets = [];
     private TypingBuffer             _typingBuffer     = new();
     private DebounceTimer?           _debounceTimer;
     private DebounceTimer?           _fastDebounceTimer;
@@ -153,7 +154,7 @@ public partial class App : Application
         _correctionPatternService = new CorrectionPatternService(database: _learningDatabase);
         _contextAdaptiveSettingsService = new ContextAdaptiveSettingsService(database: _learningDatabase);
         _analyticsService = new AnalyticsAggregationService(database: _learningDatabase);
-        _textInjector = new ClipboardTextInjector(new InputSimulator(), _reliabilityTrace);
+        _textInjector = new ClipboardTextInjector(new InputSimulator(), _reliabilityTrace, () => _config);
         _learningCaptureCoordinator = new LearningCaptureCoordinator(_learningEventService);
         _reliabilityTrace.EventRecorded += evt => LogToDebug(
             $"[reliability:{evt.Area}] {evt.EventName} - {evt.Message}");
@@ -208,6 +209,17 @@ public partial class App : Application
             _config = AppConfig.Load();
             _usageCounters.GetSnapshot();
             Log($"Config loaded: Engine={_config.EffectivePredictionEngine}, Debounce={_config.DebounceMs}ms");
+
+            // Detect encrypted secrets that could not be read under this Windows
+            // profile. Previously this silently dropped Pro users to Free with no
+            // trace — now we collect the list so a tray balloon can prompt re-entry.
+            _undecryptableSecrets = CollectUndecryptableSecrets(_config);
+            if (_undecryptableSecrets.Count > 0)
+            {
+                LogWarn("DPAPI could not decrypt: " + string.Join(", ", _undecryptableSecrets)
+                        + ". User will be prompted to re-enter.");
+            }
+
             RefreshLicenseStatus();
             _reliabilityTrace.Trace("startup", "config_loaded", "Loaded app configuration.", new Dictionary<string, string>
             {
@@ -259,6 +271,21 @@ public partial class App : Application
             _isEnabled = false;
             CreateTrayIcon();
             Log("Tray icon created.");
+
+            // Tell the user when we have on-disk secrets that can't be read here —
+            // common when a roaming profile landed on a different account SID or the
+            // profile was migrated. Silent Free-tier fallback was the old failure mode.
+            if (_undecryptableSecrets.Count > 0)
+            {
+                var what = _undecryptableSecrets.Count == 1
+                    ? _undecryptableSecrets[0]
+                    : $"{_undecryptableSecrets.Count} saved keys";
+                _trayIcon?.ShowBalloonTip(
+                    "Keystroke can't read your saved keys",
+                    $"{what} couldn't be unlocked on this Windows user profile. " +
+                    "Open Settings → Advanced and paste them again to restore predictions.",
+                    BalloonIcon.Warning);
+            }
 
             if (_onboardingStateService.TryCompleteOnboardingFromExistingSetup(_config))
             {
@@ -474,7 +501,21 @@ public partial class App : Application
         {
             _ocrService = new ScreenReaderService();
             _ocrTimer = new Timer(OnOcrTimerTick, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
-            Log("OCR service initialized.");
+            if (_ocrService.IsAvailable)
+            {
+                Log("OCR service initialized.");
+            }
+            else
+            {
+                // OCR is enabled in settings but Windows.Media.Ocr couldn't spin up
+                // an engine for any of the user's installed languages. Left silent,
+                // predictions would just be worse for no visible reason — warn.
+                Log("WARN: OCR enabled in settings but Windows OCR engine unavailable (language pack missing?).");
+                _trayIcon?.ShowBalloonTip(
+                    "Keystroke: screen reading unavailable",
+                    "OCR is enabled but Windows couldn't load an engine for your languages. Install an OCR language pack in Windows Settings → Time & Language, or disable OCR in Keystroke settings.",
+                    Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Warning);
+            }
         }
         else
         {
@@ -1040,6 +1081,27 @@ public partial class App : Application
     private void LogError(string message) => Logger.Error(message);
 
     /// <summary>
+    /// Return a list of human-readable secret names that were present on disk in
+    /// encrypted form but could not be unlocked under the current Windows user.
+    /// Empty list = all secrets either absent or successfully decrypted.
+    /// </summary>
+    private static List<string> CollectUndecryptableSecrets(AppConfig config)
+    {
+        var rejected = new List<string>();
+        if (ApiKeyEncryption.WasDecryptionAttemptRejected(config.LicenseKeyEncrypted, config.LicenseKey))
+            rejected.Add("Pro license key");
+        if (ApiKeyEncryption.WasDecryptionAttemptRejected(config.GeminiApiKeyEncrypted, config.GeminiApiKey))
+            rejected.Add("Gemini API key");
+        if (ApiKeyEncryption.WasDecryptionAttemptRejected(config.AnthropicApiKeyEncrypted, config.AnthropicApiKey))
+            rejected.Add("Anthropic API key");
+        if (ApiKeyEncryption.WasDecryptionAttemptRejected(config.OpenAiApiKeyEncrypted, config.OpenAiApiKey))
+            rejected.Add("OpenAI API key");
+        if (ApiKeyEncryption.WasDecryptionAttemptRejected(config.OpenRouterApiKeyEncrypted, config.OpenRouterApiKey))
+            rejected.Add("OpenRouter API key");
+        return rejected;
+    }
+
+    /// <summary>
     /// Dump a one-time snapshot of host environment — OS, runtime, hardware,
     /// display, culture, app version. Lets us debug hardware/driver-specific
     /// issues from a user's log without needing their machine.
@@ -1071,6 +1133,17 @@ public partial class App : Application
                 $"work={SystemParameters.WorkArea.Width:0}x{SystemParameters.WorkArea.Height:0}");
             Log($"Virtual:   {SystemParameters.VirtualScreenWidth:0}x{SystemParameters.VirtualScreenHeight:0} " +
                 $"origin=({SystemParameters.VirtualScreenLeft:0},{SystemParameters.VirtualScreenTop:0})");
+            Log($"Monitors:  {SystemDiagnostics.MonitorCount} (system DPI {SystemDiagnostics.SystemDpi}, awareness={SystemDiagnostics.DpiAwareness})");
+
+            // Integrity / elevation: UIPI blocks SendInput from non-elevated senders
+            // into elevated targets, which is a common silent-failure mode for injection.
+            Log($"Elevated:  {SystemDiagnostics.IsElevated}");
+
+            // AppData writability — if this fails, log appends would be dropping silently.
+            var appData = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Keystroke");
+            Log($"AppData:   {appData} writable={SystemDiagnostics.IsDirectoryWritable(appData)}");
 
             Log($"======================");
         }

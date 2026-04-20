@@ -18,7 +18,11 @@ public partial class SuggestionPanel : Window
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
 
-    private const double CaretGap = 4;
+    // Vertical gap between the cursor and the top of the panel, in DIPs. Previously
+    // the cursor helper baked in a fixed 20 *physical* pixel offset that shrank at
+    // high DPI (13 DIPs @ 150%, 10 @ 200%), pushing the panel onto the caret.
+    // Offsets are now applied here in DIP-space so they stay visually constant.
+    private const double CaretGap = 24;
     private const double ScreenEdgeMargin = 10;
 
     private static readonly Duration ShowDuration = new(TimeSpan.FromMilliseconds(280));
@@ -674,25 +678,37 @@ public partial class SuggestionPanel : Window
         if (_isDragged) return;
 
         var cursor = CursorPositionHelper.GetMousePosition();
-        var workArea = SystemParameters.WorkArea;
+        var monitor = CursorPositionHelper.GetWorkAreaForCursor();
+
+        // Use the cursor-monitor's DPI, not the source window's. Mixed-DPI setups
+        // (laptop 150% + external 100%) would otherwise off-place the panel by
+        // hundreds of pixels when the cursor crosses monitors.
+        double scaleX = monitor.DpiScaleX > 0 ? monitor.DpiScaleX : _dpiScaleX;
+        double scaleY = monitor.DpiScaleY > 0 ? monitor.DpiScaleY : _dpiScaleY;
 
         double panelWidth = Math.Max(ActualWidth, 200);
         double panelHeight = Math.Max(ActualHeight, 60);
 
-        double cursorX = cursor.X / _dpiScaleX;
-        double cursorY = cursor.Y / _dpiScaleY;
+        double cursorX = cursor.X / scaleX;
+        double cursorY = cursor.Y / scaleY;
+
+        // Convert the monitor work area to DIPs too, so clamping math matches.
+        double workLeft = monitor.Left / scaleX;
+        double workTop = monitor.Top / scaleY;
+        double workRight = monitor.Right / scaleX;
+        double workBottom = monitor.Bottom / scaleY;
 
         double x = cursorX;
         double y = cursorY + CaretGap;
 
-        if (x + panelWidth > workArea.Right - ScreenEdgeMargin)
-            x = workArea.Right - panelWidth - ScreenEdgeMargin;
+        if (x + panelWidth > workRight - ScreenEdgeMargin)
+            x = workRight - panelWidth - ScreenEdgeMargin;
 
-        if (y + panelHeight > workArea.Bottom - ScreenEdgeMargin)
+        if (y + panelHeight > workBottom - ScreenEdgeMargin)
             y = cursorY - panelHeight - CaretGap;
 
-        x = Math.Max(workArea.Left + ScreenEdgeMargin, x);
-        y = Math.Max(workArea.Top + ScreenEdgeMargin, y);
+        x = Math.Max(workLeft + ScreenEdgeMargin, x);
+        y = Math.Max(workTop + ScreenEdgeMargin, y);
 
         Left = x;
         Top = y;

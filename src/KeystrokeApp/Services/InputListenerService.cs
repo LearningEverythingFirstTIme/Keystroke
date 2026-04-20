@@ -338,7 +338,7 @@ public class InputListenerService : IDisposable
         uint threadId = GetWindowThreadProcessId(hwnd, out _);
         IntPtr layout = GetKeyboardLayout(threadId);
 
-        var sb = new System.Text.StringBuilder(4);
+        var sb = new System.Text.StringBuilder(8);
         int result = ToUnicodeEx((uint)vkCode, scanCode, keyState, sb, sb.Capacity, 0, layout);
 
         if (result == 1)
@@ -348,18 +348,46 @@ public class InputListenerService : IDisposable
             return !char.IsControl(c) ? c : null;
         }
 
-        // result == 2+: dead key sequence (accent characters) — skip for now.
+        // result >= 2: some layouts emit multiple code points at once (dead-key
+        // composition already resolved, ligatures, etc.). Return the base letter
+        // so the typing buffer still sees something — losing the accent is better
+        // than losing the keystroke entirely. A full composition-aware path is
+        // future work tracked for post-0.1.6.
+        if (result >= 2)
+        {
+            LogDeadKeyOnce($"ToUnicodeEx produced {result} chars: '{sb}' (layout={layout.ToInt64():x})");
+            for (int i = 0; i < result; i++)
+            {
+                var ch = sb[i];
+                if (!char.IsControl(ch)) return ch;
+            }
+            return null;
+        }
+
         // result == 0: no translation (function keys, etc.).
         // result < 0: dead key stored in driver state. Call ToUnicodeEx again
         //             with a dummy key to flush the dead-key state so it doesn't
-        //             affect the next real keystroke.
+        //             leak into the foreground window's composition. We lose the
+        //             dead key itself for buffer tracking — the tradeoff is that
+        //             we don't corrupt the user's next real keystroke.
         if (result < 0)
         {
-            // Flush the dead key from the internal driver buffer.
+            LogDeadKeyOnce($"dead key detected (vk={vkCode}, layout={layout.ToInt64():x}) — flushing");
             ToUnicodeEx((uint)VK_ESCAPE, 0, keyState, sb, sb.Capacity, 0, layout);
         }
 
         return null;
+    }
+
+    // Throttled to once per distinct reason: dead keys fire often on non-US layouts
+    // and we don't want to flood debug.log. One line per reason is enough to know
+    // a user has crossed into dead-key territory.
+    private static string _lastLoggedDeadKeyReason = "";
+    private static void LogDeadKeyOnce(string reason)
+    {
+        if (reason == _lastLoggedDeadKeyReason) return;
+        _lastLoggedDeadKeyReason = reason;
+        Logger.Debug($"InputListener dead-key path: {reason}");
     }
 
     // ==================== Modifier Helpers ====================
