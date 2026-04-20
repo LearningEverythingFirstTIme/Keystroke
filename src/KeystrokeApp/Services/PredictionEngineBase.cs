@@ -724,12 +724,43 @@ public abstract class PredictionEngineBase
         }
 
         var raw = fullCompletion.ToString().TrimEnd('"').Trim();
-        var result = TrimToWholeWords(StripThinkTags(raw));
-        result = RejectDuplicate(prefix, result) ?? "";
-        Log($"Stream complete: {result.Length} chars{(string.IsNullOrWhiteSpace(result) ? " (rejected as duplicate)" : "")}");
-        if (!string.IsNullOrWhiteSpace(result))
-            RecordRecentCompletion(result);
-        return string.IsNullOrWhiteSpace(result) ? null : result;
+
+        if (raw.Length == 0)
+        {
+            Log($"Stream complete: 0 raw chars — model produced no visible text");
+            return null;
+        }
+
+        var afterThink = StripThinkTags(raw);
+        if (afterThink.Length != raw.Length)
+            Log($"StripThinkTags trimmed {raw.Length} → {afterThink.Length} chars");
+
+        var afterTrim = TrimToWholeWords(afterThink);
+        if (afterTrim.Length != afterThink.Length)
+            Log($"TrimToWholeWords trimmed {afterThink.Length} → {afterTrim.Length} chars");
+
+        if (string.IsNullOrWhiteSpace(afterTrim))
+        {
+            Log($"Stream complete: post-processing emptied output. raw=\"{TruncateForPrompt(raw, 160)}\"");
+            return null;
+        }
+
+        if (RejectPromptLeakage(afterTrim) == null)
+        {
+            Log($"Stream complete: rejected for prompt leakage. raw=\"{TruncateForPrompt(raw, 160)}\"");
+            return null;
+        }
+
+        var result = RejectDuplicate(prefix, afterTrim);
+        if (string.IsNullOrWhiteSpace(result))
+        {
+            Log($"Stream complete: rejected as duplicate of typed text. completion=\"{TruncateForPrompt(afterTrim, 160)}\"");
+            return null;
+        }
+
+        Log($"Stream complete: {result.Length} chars");
+        RecordRecentCompletion(result);
+        return result;
     }
 
     /// <summary>

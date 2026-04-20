@@ -190,9 +190,30 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 return null;
             }
 
-            return await ParseSseStreamAsync(response, prefix, ExtractStreamText, onChunk, ct);
+            // Wrap the extractor so we can count thought-flagged parts across the whole
+            // stream — if the visible output ends up empty, this tells us whether Gemini
+            // streamed nothing at all or streamed only thought parts (despite
+            // includeThoughts=false, which is preview-API behavior and may not be honored).
+            var thoughtPartsWithText = 0;
+            string? CountingExtractor(string dataJson)
+            {
+                var chunk = JsonSerializer.Deserialize<GeminiResponse>(dataJson);
+                var parts = chunk?.Candidates is { Length: > 0 } cs ? cs[0]?.Content?.Parts : null;
+                if (parts != null)
+                {
+                    foreach (var p in parts)
+                        if (p != null && p.Thought && !string.IsNullOrEmpty(p.Text))
+                            thoughtPartsWithText++;
+                }
+                return ExtractVisibleText(chunk);
+            }
+
+            var result = await ParseSseStreamAsync(response, prefix, CountingExtractor, onChunk, ct);
+            if (thoughtPartsWithText > 0)
+                Log($"Stream included {thoughtPartsWithText} thought-flagged part(s) with text (skipped as non-visible)");
+            return result;
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { Log("Stream cancelled before completion"); return null; }
         catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 

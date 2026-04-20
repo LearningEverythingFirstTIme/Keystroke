@@ -137,9 +137,9 @@ public partial class App
 
             _ = Task.Run(async () =>
             {
+            var timeoutCts = new CancellationTokenSource(_predictionEngine!.TimeoutMs);
             try
             {
-                using var timeoutCts = new CancellationTokenSource(_predictionEngine!.TimeoutMs);
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
                 bool firstChunk = true;
@@ -220,6 +220,15 @@ public partial class App
             }
             catch (OperationCanceledException)
             {
+                // Distinguish "user typed a new character" (outer ct) from "8s wall-clock
+                // budget elapsed" (timeoutCts). Both surface as OperationCanceledException.
+                var cause = ct.IsCancellationRequested ? "superseded" : "timeout";
+                LogToDebug($"Prediction cancelled ({cause})");
+                _reliabilityTrace.Trace("prediction", "cancelled", $"Prediction cancelled ({cause}).", new Dictionary<string, string>
+                {
+                    ["requestId"] = requestId.ToString(),
+                    ["cause"] = cause
+                });
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (!IsPredictionRequestCurrent(requestId))
@@ -260,6 +269,7 @@ public partial class App
 
                 // Always dispose our own CTS — we are the sole owner.
                 cts.Dispose();
+                timeoutCts.Dispose();
 
                 if (IsPredictionRequestCurrent(requestId))
                 {
