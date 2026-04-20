@@ -94,7 +94,7 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 RecordRecentCompletion(processed);
             return processed;
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
@@ -149,7 +149,7 @@ public class ClaudePredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 return chunk?.Delta?.Text;
             }, onChunk, ct);
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 

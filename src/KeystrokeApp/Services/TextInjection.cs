@@ -15,6 +15,7 @@ public enum TextInjectionMethod
 public enum TextInjectionOutcome
 {
     Injected,
+    ClipboardRestoreSkipped,
     ClipboardRestoreFailed,
     ClipboardChangedExternally,
     FallbackInjected,
@@ -35,6 +36,7 @@ public sealed record TextInjectionResult(
     public bool Success => DeliveredToTarget;
     public bool DeliveredToTarget => Outcome is
         TextInjectionOutcome.Injected or
+        TextInjectionOutcome.ClipboardRestoreSkipped or
         TextInjectionOutcome.ClipboardRestoreFailed or
         TextInjectionOutcome.ClipboardChangedExternally or
         TextInjectionOutcome.FallbackInjected;
@@ -166,10 +168,12 @@ public sealed class ClipboardTextInjector : ITextInjector
             _trace.Trace("injection", "paste_sent", "Sent Ctrl+V for accepted text.");
 
             await Task.Delay(RestoreDelayMs, cancellationToken);
-            var restoreResult = await RestoreClipboardAsync(savedClipboard, clipboardSequenceAfterSet);
+            var restoreResult = await RestoreClipboardAsync(savedClipboard, clipboardCaptured, clipboardSequenceAfterSet);
 
             var outcome = restoreResult.ClipboardChangedExternally
                 ? TextInjectionOutcome.ClipboardChangedExternally
+                : restoreResult.RestoreSkipped
+                    ? TextInjectionOutcome.ClipboardRestoreSkipped
                 : restoreResult.RestoreAttempted && !restoreResult.RestoreSucceeded
                     ? TextInjectionOutcome.ClipboardRestoreFailed
                     : TextInjectionOutcome.Injected;
@@ -179,9 +183,9 @@ public sealed class ClipboardTextInjector : ITextInjector
                 TextInjectionMethod.ClipboardPaste,
                 clipboardCaptured,
                 restoreResult.RestoreAttempted,
-                restoreResult.RestoreSucceeded || !restoreResult.RestoreAttempted,
+                restoreResult.RestoreSucceeded,
                 restoreResult.ClipboardChangedExternally,
-                restoreResult.RestoreSucceeded || !restoreResult.RestoreAttempted ? null : "Clipboard restore failed");
+                restoreResult.RestoreAttempted && !restoreResult.RestoreSucceeded ? "Clipboard restore failed" : null);
         }
         catch (Exception ex)
         {
@@ -234,8 +238,9 @@ public sealed class ClipboardTextInjector : ITextInjector
             ClipboardChangedExternally: false);
     }
 
-    private async Task<(bool RestoreAttempted, bool RestoreSucceeded, bool ClipboardChangedExternally)> RestoreClipboardAsync(
+    private async Task<(bool RestoreAttempted, bool RestoreSucceeded, bool ClipboardChangedExternally, bool RestoreSkipped)> RestoreClipboardAsync(
         DataObject? savedClipboard,
+        bool clipboardCaptured,
         uint clipboardSequenceAfterSet)
     {
         var currentSequence = await RunOnUiAsync(GetClipboardSequenceNumber);
@@ -248,7 +253,18 @@ public sealed class ClipboardTextInjector : ITextInjector
                 ["expectedSequence"] = clipboardSequenceAfterSet.ToString(),
                 ["actualSequence"] = currentSequence.ToString()
             });
-            return (false, false, true);
+            return (false, false, true, false);
+        }
+
+        if (savedClipboard == null && clipboardCaptured)
+        {
+            _trace.Trace("injection", "clipboard_restore_skipped",
+                "Skipped clipboard restore because the original clipboard contents could not be safely cloned.",
+                new Dictionary<string, string>
+                {
+                    ["reason"] = "uncloneable_original_clipboard"
+                });
+            return (false, false, false, true);
         }
 
         for (var attempt = 1; attempt <= RestoreAttempts; attempt++)
@@ -267,7 +283,7 @@ public sealed class ClipboardTextInjector : ITextInjector
                 {
                     ["attempt"] = attempt.ToString()
                 });
-                return (true, true, false);
+                return (true, true, false, false);
             }
             catch (Exception ex)
             {
@@ -281,7 +297,7 @@ public sealed class ClipboardTextInjector : ITextInjector
         }
 
         _trace.Trace("injection", "clipboard_restore_failed", "All clipboard restore attempts failed.");
-        return (true, false, false);
+        return (true, false, false, false);
     }
 
     private static async Task RunOnUiAsync(Action action)

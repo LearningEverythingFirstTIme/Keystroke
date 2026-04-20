@@ -12,7 +12,7 @@ public partial class App
 
     private void OnBufferChanged(string newText)
     {
-        LogToDebug($"Buffer: \"{newText}\" ({newText.Length} chars)");
+        LogToDebug($"Buffer changed: {newText.Length} chars");
         TraceBufferChanged(newText);
 
         CancelPendingPrediction();
@@ -236,6 +236,14 @@ public partial class App
 
                     _suggestionPanel?.HideSuggestion();
                 });
+                if (cause == "timeout" && _predictionWarningsShown.TryAdd(PredictionFailureKind.Transient, 0))
+                {
+                    _ = Dispatcher.BeginInvoke(() => ReportPredictionFailure(new PredictionFailure(
+                        PredictionFailureKind.Transient,
+                        _config.EffectivePredictionEngine,
+                        "Prediction timed out before a completion was returned.",
+                        Retryable: true)));
+                }
                 SetPredictionState("Cancelled", requestId);
             }
             catch (Exception ex)

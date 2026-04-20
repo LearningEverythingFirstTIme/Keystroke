@@ -86,7 +86,7 @@ public class Gpt5PredictionEngine : PredictionEngineBase, IPredictionEngine, IDi
                 RecordRecentCompletion(processed);
             return processed;
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
@@ -140,7 +140,7 @@ public class Gpt5PredictionEngine : PredictionEngineBase, IPredictionEngine, IDi
                 return chunk?.Choices?[0]?.Delta?.Content;
             }, onChunk, ct);
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 

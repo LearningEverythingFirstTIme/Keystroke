@@ -409,7 +409,7 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             if (IsQwen3)      return await PredictRawChatMLAsync(context, ct);
             return await PredictChatAsync(context, ct);
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Predict exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
@@ -429,7 +429,7 @@ public class OllamaPredictionEngine : PredictionEngineBase, IPredictionEngine, I
             // Other instruct models: /api/chat streaming
             return await PredictStreamingChatAsync(context, onChunk, ct);
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Streaming exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 

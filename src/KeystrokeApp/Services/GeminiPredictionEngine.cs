@@ -137,7 +137,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 RecordRecentCompletion(processed);
             return processed;
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
@@ -213,7 +213,7 @@ public class GeminiPredictionEngine : PredictionEngineBase, IPredictionEngine, I
                 Log($"Stream included {thoughtPartsWithText} thought-flagged part(s) with text (skipped as non-visible)");
             return result;
         }
-        catch (OperationCanceledException) { Log("Stream cancelled before completion"); return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 

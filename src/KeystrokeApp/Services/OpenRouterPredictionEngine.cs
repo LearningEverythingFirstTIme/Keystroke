@@ -155,7 +155,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
                 RecordRecentCompletion(processed);
             return processed;
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
@@ -241,7 +241,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
             }
             return completion;
         }
-        catch (OperationCanceledException) { Log($"Reasoning-model #{requestId} cancelled/timed out"); return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Reasoning-model #{requestId} exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 
@@ -320,7 +320,7 @@ public class OpenRouterPredictionEngine : PredictionEngineBase, IPredictionEngin
 
             return result;
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { Log($"Stream exception: {ex}"); ReportFailure(ClassifyException(ex)); return null; }
     }
 

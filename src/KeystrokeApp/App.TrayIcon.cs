@@ -204,6 +204,7 @@ public partial class App
         "gpt5"   => _config.Gpt5Model   ?? "default",
         "claude" => _config.ClaudeModel  ?? "default",
         "ollama" => _config.OllamaModel  ?? AppConfig.DefaultOllamaModel,
+        "openrouter" => string.IsNullOrWhiteSpace(_config.OpenRouterModel) ? "default" : _config.OpenRouterModel,
         _        => "default"
     };
 
@@ -381,6 +382,7 @@ public partial class App
         _lastAcceptanceStatus = result.Outcome switch
         {
             TextInjectionOutcome.Injected => "Delivered",
+            TextInjectionOutcome.ClipboardRestoreSkipped => "Delivered, clipboard left unchanged",
             TextInjectionOutcome.ClipboardRestoreFailed => "Delivered, but clipboard restore failed",
             TextInjectionOutcome.ClipboardChangedExternally => "Delivered, clipboard changed before restore",
             TextInjectionOutcome.FallbackInjected => intentionalSendInput
@@ -412,6 +414,7 @@ public partial class App
         var title = isFailure ? "Keystroke accept failed" : "Keystroke accept warning";
         var message = result.Outcome switch
         {
+            TextInjectionOutcome.ClipboardRestoreSkipped => "Accepted text reached the app, but Keystroke could not safely snapshot the previous clipboard contents, so it left the clipboard alone.",
             TextInjectionOutcome.ClipboardRestoreFailed => "Accepted text reached the app, but Keystroke could not restore your previous clipboard contents.",
             TextInjectionOutcome.ClipboardChangedExternally => "Accepted text reached the app. Keystroke left the clipboard alone because something else changed it first.",
             TextInjectionOutcome.FallbackInjected => "Accepted text reached the app through the SendInput fallback. Local buffer tracking may lag until you type again.",
