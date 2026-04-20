@@ -54,11 +54,7 @@ public partial class SuggestionPanel : Window
     private readonly List<string> _suggestions = new();
     private int _currentIndex;
 
-    private bool _isDragging;
     private bool _isDragged;
-    private Point _dragStartMouse;
-    private double _dragStartLeft;
-    private double _dragStartTop;
 
     private bool _isAnimatingHide;
     private bool _isUsingWordAnimation;
@@ -79,6 +75,8 @@ public partial class SuggestionPanel : Window
 
     public void ShowSuggestion(string prefix, string completion)
     {
+        Logger.Debug($"SuggestionPanel.Show prefixLen={prefix.Length} completionLen={completion.Length}");
+
         if (!string.IsNullOrEmpty(completion) && !prefix.EndsWith(" ") && !completion.StartsWith(" "))
             completion = " " + completion;
 
@@ -129,6 +127,7 @@ public partial class SuggestionPanel : Window
 
     public void BeginStreamingSuggestion(string prefix)
     {
+        Logger.Debug($"SuggestionPanel.BeginStreaming prefixLen={prefix.Length}");
         _currentPrefix = prefix;
         _currentSuggestion = "";
         _suggestions.Clear();
@@ -202,6 +201,7 @@ public partial class SuggestionPanel : Window
 
     public void HideSuggestion()
     {
+        Logger.Debug($"SuggestionPanel.Hide (visible={IsVisible}, hiding={_isAnimatingHide})");
         _currentPrefix = "";
         _currentSuggestion = "";
         _suggestions.Clear();
@@ -635,32 +635,34 @@ public partial class SuggestionPanel : Window
 
     private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        _isDragging = true;
-        _dragStartMouse = PointToScreen(e.GetPosition(this));
-        _dragStartLeft = Left;
-        _dragStartTop = Top;
-        SuggestionBorder.CaptureMouse();
-        e.Handled = true;
-    }
+        // Refuse drags mid-hide or on a detached visual — state is shifting underneath us.
+        if (!IsVisible || _isAnimatingHide)
+        {
+            Logger.Debug($"SuggestionPanel drag ignored (visible={IsVisible}, hiding={_isAnimatingHide})");
+            return;
+        }
 
-    private void Border_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (!_isDragging) return;
-
-        var currentMouse = PointToScreen(e.GetPosition(this));
-        Left = _dragStartLeft + (currentMouse.X - _dragStartMouse.X);
-        Top = _dragStartTop + (currentMouse.Y - _dragStartMouse.Y);
-        e.Handled = true;
-    }
-
-    private void Border_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_isDragging) return;
-
-        _isDragging = false;
-        _isDragged = true;
-        SuggestionBorder.ReleaseMouseCapture();
-        e.Handled = true;
+        // Use WPF's DragMove() instead of manual CaptureMouse + PointToScreen.
+        // DragMove delegates to Win32's SC_MOVE modal loop, which doesn't rely on
+        // WPF's input-capture machinery — the latter crashes natively on some
+        // WS_EX_NOACTIVATE + AllowsTransparency + Topmost configurations.
+        try
+        {
+            Logger.Debug($"SuggestionPanel DragMove start at ({Left:0},{Top:0})");
+            DragMove();
+            _isDragged = true;
+            e.Handled = true;
+            Logger.Debug($"SuggestionPanel DragMove done at ({Left:0},{Top:0})");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Thrown if the left button is not pressed at entry (race with release).
+            Logger.Warn($"SuggestionPanel DragMove skipped: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"SuggestionPanel DragMove failed: {ex}");
+        }
     }
 
     #endregion
@@ -715,9 +717,6 @@ public partial class SuggestionPanel : Window
         ScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
         SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
         SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
-
-        if (_isDragging)
-            SuggestionBorder.ReleaseMouseCapture();
 
         base.OnClosed(e);
     }

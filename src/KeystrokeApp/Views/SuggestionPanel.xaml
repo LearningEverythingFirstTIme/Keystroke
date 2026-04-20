@@ -22,8 +22,6 @@
             BorderThickness="1"
             Cursor="SizeAll"
             MouseLeftButtonDown="Border_MouseLeftButtonDown"
-            MouseMove="Border_MouseMove"
-            MouseLeftButtonUp="Border_MouseLeftButtonUp"
             MouseEnter="Border_MouseEnter"
             MouseLeave="Border_MouseLeave">
 
