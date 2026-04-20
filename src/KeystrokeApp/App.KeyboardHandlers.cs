@@ -92,7 +92,7 @@ public partial class App
             case InputListenerService.SpecialKey.Backspace:
                 _postEditDetector.OnBackspace();
                 _typingBuffer.RemoveLastChar();
-                LogToDebug($"Backspace -> Buffer: \"{_typingBuffer.CurrentText}\"");
+                LogToDebug($"Backspace -> Buffer length={_typingBuffer.CurrentText.Length}");
                 break;
 
             case InputListenerService.SpecialKey.Enter:
@@ -137,7 +137,7 @@ public partial class App
                     panel?.HideSuggestion();
                     ClearActiveSuggestion();
                     CancelPendingPrediction();
-                    LogToDebug($"{key} -> Buffer cleared (was: \"{oldBuffer}\")");
+                    LogToDebug($"{key} -> Buffer cleared (was {oldBuffer.Length} chars)");
                     break;
                 }
 
@@ -168,7 +168,7 @@ public partial class App
                     panel?.HideSuggestion();
                     ClearActiveSuggestion();
                     CancelPendingPrediction();
-                    LogToDebug($"{key} -> Buffer cleared (cursor moved, was: \"{oldBuffer}\")");
+                    LogToDebug($"{key} -> Buffer cleared, cursor moved (was {oldBuffer.Length} chars)");
                 }
                 break;
 

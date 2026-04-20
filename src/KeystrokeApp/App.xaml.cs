@@ -124,11 +124,7 @@ public partial class App : Application
     private bool _isProTier;
     private string _setupIncompleteReason = "Finish onboarding to start completions.";
 
-    private string _logPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Keystroke",
-        "debug.log"
-    );
+    private string _logPath = Logger.LogPath;
 
     public App()
     {
@@ -172,23 +168,39 @@ public partial class App : Application
         // Global exception handlers to prevent silent crashes
         DispatcherUnhandledException += (_, args) =>
         {
-            Log($"UNHANDLED UI EXCEPTION: {args.Exception}");
+            LogError($"UNHANDLED UI EXCEPTION: {args.Exception}");
             args.Handled = true;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
             if (args.ExceptionObject is Exception ex)
-                Log($"UNHANDLED DOMAIN EXCEPTION: {ex}");
+                LogError($"UNHANDLED DOMAIN EXCEPTION (terminating={args.IsTerminating}): {ex}");
         };
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
-            Log($"UNOBSERVED TASK EXCEPTION: {args.Exception}");
+            LogError($"UNOBSERVED TASK EXCEPTION: {args.Exception}");
             args.SetObserved();
+        };
+
+        // First-chance handler fires BEFORE any catch block — surfaces exceptions
+        // that get silently swallowed elsewhere (or that precede a native crash).
+        // Filter to our own assembly to avoid framework/third-party noise.
+        AppDomain.CurrentDomain.FirstChanceException += (_, args) =>
+        {
+            try
+            {
+                var ex = args.Exception;
+                if (ex.StackTrace is { } st && st.Contains("KeystrokeApp"))
+                    Logger.Debug($"FIRST-CHANCE {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { /* logging must never itself throw */ }
         };
 
         // Ensure directories and config exist
         Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
         AppConfig.EnsureExists();
+
+        LogSystemContext();
 
         try
         {
@@ -1023,17 +1035,49 @@ public partial class App : Application
         return state.CycleDepth;
     }
 
-    private static readonly object _logLock = new();
-    private void Log(string message)
+    private void Log(string message)      => Logger.Info(message);
+    private void LogWarn(string message)  => Logger.Warn(message);
+    private void LogError(string message) => Logger.Error(message);
+
+    /// <summary>
+    /// Dump a one-time snapshot of host environment — OS, runtime, hardware,
+    /// display, culture, app version. Lets us debug hardware/driver-specific
+    /// issues from a user's log without needing their machine.
+    /// </summary>
+    private void LogSystemContext()
     {
         try
         {
-            lock (_logLock)
-            {
-                File.AppendAllText(_logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
-            }
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var asmVersion = asm.GetName().Version?.ToString() ?? "unknown";
+            var infoVersion = System.Reflection.CustomAttributeExtensions
+                .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(asm)?
+                .InformationalVersion ?? asmVersion;
+
+            Log($"=== System Context ===");
+            Log($"App:       Keystroke {infoVersion} (assembly {asmVersion})");
+            Log($"OS:        {Environment.OSVersion.VersionString}");
+            Log($"Runtime:   .NET {Environment.Version} ({System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription})");
+            Log($"Process:   {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}, {(Environment.Is64BitProcess ? "64-bit" : "32-bit")}, PID={Environment.ProcessId}");
+            Log($"CPU:       {Environment.ProcessorCount} logical cores");
+            Log($"Memory:    {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024)} MB available to process");
+            Log($"Culture:   {System.Globalization.CultureInfo.CurrentCulture.Name} UI={System.Globalization.CultureInfo.CurrentUICulture.Name}");
+            Log($"Machine:   {Environment.MachineName} user={Environment.UserName}");
+            Log($"Debugger:  {(System.Diagnostics.Debugger.IsAttached ? "attached" : "none")}");
+
+            // Display info via WPF's SystemParameters — physical vs DPI-scaled ratio
+            // gives us the effective scale factor without needing a live Visual.
+            Log($"Primary:   {SystemParameters.PrimaryScreenWidth:0}x{SystemParameters.PrimaryScreenHeight:0} " +
+                $"work={SystemParameters.WorkArea.Width:0}x{SystemParameters.WorkArea.Height:0}");
+            Log($"Virtual:   {SystemParameters.VirtualScreenWidth:0}x{SystemParameters.VirtualScreenHeight:0} " +
+                $"origin=({SystemParameters.VirtualScreenLeft:0},{SystemParameters.VirtualScreenTop:0})");
+
+            Log($"======================");
         }
-        catch (IOException) { }
+        catch (Exception ex)
+        {
+            LogWarn($"Could not dump full system context: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -1063,9 +1107,11 @@ public partial class App : Application
         }
     }
 
-    // Verbose per-keystroke diagnostics — no-op in production builds.
-    // Restore the debug window (ShowDebugWindow + _debugWindow field) to re-enable.
-    private void LogToDebug(string message) { }
+    // Verbose per-keystroke diagnostics — routed to debug.log at DBG level.
+    // Helpful for reconstructing what the pipeline was doing right before a bug.
+    // Buffer-content call sites have been redacted to length-only to avoid
+    // leaking user text to disk.
+    private void LogToDebug(string message) => Logger.Debug(message);
 
     private long NextPredictionRequestId() => Interlocked.Increment(ref _predictionRequestCounter);
 
