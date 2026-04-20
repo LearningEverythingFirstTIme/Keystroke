@@ -41,7 +41,7 @@ dotnet run --project src/KeystrokeApp/KeystrokeApp.csproj
 Build a portable single-file exe:
 
 ```bash
-dotnet publish src/KeystrokeApp/KeystrokeApp.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish src/KeystrokeApp/KeystrokeApp.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
 
 Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build; the runtime is not required for self-contained builds. You'll also need an API key for at least one cloud engine *or* a local [Ollama](https://ollama.com) install.
