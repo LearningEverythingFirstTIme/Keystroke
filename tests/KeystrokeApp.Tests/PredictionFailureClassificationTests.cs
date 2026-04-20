@@ -56,6 +56,40 @@ public class PredictionFailureClassificationTests
         Assert.True(failure.Retryable);
     }
 
+    [Fact]
+    public void ClassifyHttpResponse_GoogleApiKeyInvalid400_IsAuthFailure()
+    {
+        // Google's Generative Language API returns HTTP 400 (not 401) when the
+        // key is expired or revoked. The status is INVALID_ARGUMENT and the
+        // body carries reason "API_KEY_INVALID". Classify this as AuthFailure
+        // so the user gets a "check your key" balloon instead of a generic
+        // Unknown failure.
+        var engine = new TestPredictionEngine();
+        using var response = new HttpResponseMessage(HttpStatusCode.BadRequest);
+
+        var failure = engine.InvokeClassifyHttpResponse(
+            response,
+            "{\"error\":{\"code\":400,\"message\":\"API key expired. Please renew the API key.\",\"status\":\"INVALID_ARGUMENT\",\"details\":[{\"reason\":\"API_KEY_INVALID\"}]}}");
+
+        Assert.Equal(PredictionFailureKind.AuthFailure, failure.Kind);
+        Assert.False(failure.Retryable);
+        Assert.Equal(400, failure.HttpStatusCode);
+    }
+
+    [Fact]
+    public void ClassifyHttpResponse_Plain400_StillUnknown()
+    {
+        // A plain 400 without auth or rate-limit markers should still fall through
+        // to Unknown — we only want the API-key shortcut to trigger on the exact
+        // Google markers, not on every 400.
+        var engine = new TestPredictionEngine();
+        using var response = new HttpResponseMessage(HttpStatusCode.BadRequest);
+
+        var failure = engine.InvokeClassifyHttpResponse(response, "bad request");
+
+        Assert.Equal(PredictionFailureKind.Unknown, failure.Kind);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.BadGateway)]

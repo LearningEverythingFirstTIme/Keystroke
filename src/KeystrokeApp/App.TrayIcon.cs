@@ -423,6 +423,46 @@ public partial class App
         LogToDebug($"{title}: {message}");
     }
 
+    /// <summary>
+    /// Surface a prediction-engine failure as a tray balloon. Called at most once
+    /// per kind per session (throttling lives at the call site in App.xaml.cs).
+    /// The intent is to tell the user WHY a completion went blank — otherwise
+    /// auth/rate/transport failures look indistinguishable from "the AI had no
+    /// suggestion," which is confusing and erodes trust.
+    /// </summary>
+    private void ReportPredictionFailure(PredictionFailure failure)
+    {
+        if (_trayIcon == null)
+            return;
+
+        var (title, message, icon) = failure.Kind switch
+        {
+            PredictionFailureKind.AuthFailure => (
+                "Keystroke API key needs attention",
+                $"{failure.ProviderName} rejected the API key. Open Settings → Advanced to paste a fresh key — completions will resume immediately.",
+                BalloonIcon.Warning),
+            PredictionFailureKind.RateLimit => (
+                "Keystroke hit a rate limit",
+                $"Too many requests too fast. Free {failure.ProviderName} keys allow only 15 requests per minute — completions will pause briefly and resume automatically.",
+                BalloonIcon.Info),
+            PredictionFailureKind.Transient => (
+                "Keystroke prediction temporarily unavailable",
+                $"{failure.ProviderName} returned a service error ({failure.HttpStatusCode?.ToString() ?? "network"}). Completions will resume on the next keystroke.",
+                BalloonIcon.Info),
+            PredictionFailureKind.MalformedResponse => (
+                "Keystroke got an unexpected response",
+                $"{failure.ProviderName} returned something Keystroke couldn't parse. If this keeps happening, open Settings → Advanced → Open log folder and send the log.",
+                BalloonIcon.Warning),
+            _ => (
+                "Keystroke prediction failed",
+                $"{failure.ProviderName} returned an unknown error. Open Settings → Advanced → Open log folder for details.",
+                BalloonIcon.Warning)
+        };
+
+        _trayIcon.ShowBalloonTip(title, message, icon);
+        LogToDebug($"{title}: {message} [kind={failure.Kind}, status={failure.HttpStatusCode}]");
+    }
+
     private string BuildProfileMenuHeader()
     {
         var profile = GetProfileStatusSummary();

@@ -113,6 +113,7 @@ public partial class App : Application
     private string _lastExternalWindowTitle = "";
     private string _lastAcceptanceStatus = "Ready";
     private readonly HashSet<TextInjectionOutcome> _acceptanceWarningsShown = new();
+    private readonly HashSet<PredictionFailureKind> _predictionWarningsShown = new();
     private bool _runtimeActivated;
     private bool _isSetupIncomplete;
     private bool _sessionFreeLimitWarningShown;
@@ -560,6 +561,14 @@ public partial class App : Application
                 if (_trayIcon != null)
                     _trayIcon.ToolTipText = BuildToolTip();
             });
+        }
+
+        // Surface a plain-English balloon so the user knows WHY a completion went
+        // blank. Throttled to once per kind per session — the first 503 teaches the
+        // pattern; repeating the same balloon on every subsequent 503 is just noise.
+        if (_predictionWarningsShown.Add(failure.Kind))
+        {
+            Dispatcher.BeginInvoke(() => ReportPredictionFailure(failure));
         }
     }
 

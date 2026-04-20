@@ -313,7 +313,14 @@ public abstract class PredictionEngineBase
         var code = (int)response.StatusCode;
         var trimmedBody = body.Length > 400 ? body[..400] + "…" : body;
 
-        if (code == 401 || code == 403)
+        // 401/403 are the standard auth failures. Google's Generative Language API
+        // also returns HTTP 400 with reason "API_KEY_INVALID" when the key is expired,
+        // revoked, or malformed — treat that the same way so the UI can surface a
+        // "key needs attention" hint instead of a generic Unknown failure.
+        var isGoogleKeyFailure = code == 400 && (
+            body.Contains("API_KEY_INVALID", StringComparison.Ordinal) ||
+            body.Contains("API key expired", StringComparison.OrdinalIgnoreCase));
+        if (code == 401 || code == 403 || isGoogleKeyFailure)
             return new PredictionFailure(
                 PredictionFailureKind.AuthFailure,
                 ProviderName,
