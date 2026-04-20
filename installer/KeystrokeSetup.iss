@@ -2,7 +2,7 @@
 ; Builds a per-user installer (no admin required)
 
 #define MyAppName "Keystroke"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.2"
 #define MyAppPublisher "Nick Kessler"
 #define MyAppExeName "KeystrokeApp.exe"
 #define MyAppURL "https://keystroke-app.com"
