@@ -376,14 +376,16 @@ public partial class App
         UpdateTrayCurrentAppActions();
     }
 
-    private void ReportAcceptanceStatus(TextInjectionResult result, string source)
+    private void ReportAcceptanceStatus(TextInjectionResult result, string source, bool intentionalSendInput = false)
     {
         _lastAcceptanceStatus = result.Outcome switch
         {
             TextInjectionOutcome.Injected => "Delivered",
             TextInjectionOutcome.ClipboardRestoreFailed => "Delivered, but clipboard restore failed",
             TextInjectionOutcome.ClipboardChangedExternally => "Delivered, clipboard changed before restore",
-            TextInjectionOutcome.FallbackInjected => "Delivered via SendInput fallback",
+            TextInjectionOutcome.FallbackInjected => intentionalSendInput
+                ? "Delivered via SendInput (clipboard-unsafe app)"
+                : "Delivered via SendInput fallback",
             TextInjectionOutcome.Cancelled => "Cancelled before delivery",
             _ => $"Failed: {result.FailureReason ?? "unknown error"}"
         };
@@ -397,9 +399,17 @@ public partial class App
         if (result.Outcome is TextInjectionOutcome.Injected)
             return;
 
-        var title = result.Outcome is TextInjectionOutcome.Failed or TextInjectionOutcome.Cancelled
-            ? "Keystroke accept failed"
-            : "Keystroke accept warning";
+        // Intentional SendInput in Office apps is the normal path, not a warning condition.
+        if (result.Outcome is TextInjectionOutcome.FallbackInjected && intentionalSendInput)
+            return;
+
+        // Failures and cancellations always surface; other warning outcomes throttle to
+        // at most once per session so we inform the user without nagging on every accept.
+        var isFailure = result.Outcome is TextInjectionOutcome.Failed or TextInjectionOutcome.Cancelled;
+        if (!isFailure && !_acceptanceWarningsShown.Add(result.Outcome))
+            return;
+
+        var title = isFailure ? "Keystroke accept failed" : "Keystroke accept warning";
         var message = result.Outcome switch
         {
             TextInjectionOutcome.ClipboardRestoreFailed => "Accepted text reached the app, but Keystroke could not restore your previous clipboard contents.",

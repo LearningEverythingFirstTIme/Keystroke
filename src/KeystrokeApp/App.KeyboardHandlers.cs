@@ -295,7 +295,7 @@ public partial class App
                     });
             }
 
-            ReportAcceptanceStatus(result, source);
+            ReportAcceptanceStatus(result, source, preferSendInput);
             return result;
         }
         catch (Exception ex)

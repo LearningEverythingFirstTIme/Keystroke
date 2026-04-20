@@ -112,6 +112,7 @@ public partial class App : Application
     private string _lastExternalProcessName = "";
     private string _lastExternalWindowTitle = "";
     private string _lastAcceptanceStatus = "Ready";
+    private readonly HashSet<TextInjectionOutcome> _acceptanceWarningsShown = new();
     private bool _runtimeActivated;
     private bool _isSetupIncomplete;
     private bool _sessionFreeLimitWarningShown;
