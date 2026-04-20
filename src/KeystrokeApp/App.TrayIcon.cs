@@ -442,8 +442,8 @@ public partial class App
                 $"{failure.ProviderName} rejected the API key. Open Settings → Advanced to paste a fresh key — completions will resume immediately.",
                 BalloonIcon.Warning),
             PredictionFailureKind.RateLimit => (
-                "Keystroke hit a rate limit",
-                $"Too many requests too fast. Free {failure.ProviderName} keys allow only 15 requests per minute — completions will pause briefly and resume automatically.",
+                "Keystroke paused briefly",
+                $"{failure.ProviderName} is rate-limiting requests. Completions will resume automatically in a minute. If this keeps happening, check your provider's quota dashboard.",
                 BalloonIcon.Info),
             PredictionFailureKind.Transient => (
                 "Keystroke prediction temporarily unavailable",

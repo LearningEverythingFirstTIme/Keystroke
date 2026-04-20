@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Drawing;
 using System.IO;
 using System.Windows;
@@ -113,7 +114,9 @@ public partial class App : Application
     private string _lastExternalWindowTitle = "";
     private string _lastAcceptanceStatus = "Ready";
     private readonly HashSet<TextInjectionOutcome> _acceptanceWarningsShown = new();
-    private readonly HashSet<PredictionFailureKind> _predictionWarningsShown = new();
+    // ConcurrentDictionary instead of HashSet because FailureOccurred can fire on arbitrary
+    // engine threads, and two in-flight stream failures could race on Add. TryAdd is atomic.
+    private readonly ConcurrentDictionary<PredictionFailureKind, byte> _predictionWarningsShown = new();
     private bool _runtimeActivated;
     private bool _isSetupIncomplete;
     private bool _sessionFreeLimitWarningShown;
@@ -422,6 +425,9 @@ public partial class App : Application
         // Clear any stale auth-failure indicator from a previous engine/key so the tooltip
         // reflects the new configuration until/unless the fresh engine reports a failure.
         _lastAuthFailure = null;
+        // Also reset one-time balloon throttling so the user sees a fresh balloon if the
+        // new key/engine hits the same failure kind (e.g. paste-in-a-still-bad key).
+        _predictionWarningsShown.Clear();
 
         _predictionEngine = CreatePredictionEngine();
         _styleProfileService.Engine = _predictionEngine;
@@ -566,7 +572,7 @@ public partial class App : Application
         // Surface a plain-English balloon so the user knows WHY a completion went
         // blank. Throttled to once per kind per session — the first 503 teaches the
         // pattern; repeating the same balloon on every subsequent 503 is just noise.
-        if (_predictionWarningsShown.Add(failure.Kind))
+        if (_predictionWarningsShown.TryAdd(failure.Kind, 0))
         {
             Dispatcher.BeginInvoke(() => ReportPredictionFailure(failure));
         }
